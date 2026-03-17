@@ -29,7 +29,7 @@ const argsTemplate={
 
 /*#{1IUIO756A0StartDoc*/
 const octokit = new Octokit({
-	auth: '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' // 替换为你的token
+	auth: 'github_pat_' // 替换为你的token
 });
 async function searchBugIssues(bugDescription, repo, issueCount = 5) {
 	try {
