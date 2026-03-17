@@ -1,0 +1,92 @@
+{
+  "id": "smoke_webchat_send_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/webchat/chatgpt-mock.html",
+        "waitBy": "css: [data-role='chat-input']",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "new_session", "failed": "abort" }
+    },
+    {
+      "id": "new_session",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "Send Smoke Session" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "newOut",
+      "next": { "done": "send_msg", "failed": "abort" }
+    },
+    {
+      "id": "send_msg",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "send",
+          "webChat.session": { "kind": "ai" },
+          "webChat.text": "你好，这是 WebChat send smoke。",
+          "webChat.sendMode": "button"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "sendOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(sendOut){ const o=(sendOut&&typeof sendOut==='object')?sendOut:{}; const action=String(o.action||''); const sent=!!o.sent; const items=Array.isArray(o.items)?o.items:[]; const first=items[0]&&typeof items[0]==='object'?items[0]:{}; const role=String(first.role||''); const text=String(first.text||''); const ok=action==='send' && sent && role==='user' && text.includes('WebChat send smoke'); return { ok, action, sent, role, textLen:text.length }; }",
+        "args": ["${{ vars.sendOut || {} }}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke webchat send local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut, send:vars.sendOut }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: action=${vars.verifyOut.action}, sent=${vars.verifyOut.sent}, role=${vars.verifyOut.role}, textLen=${vars.verifyOut.textLen}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke webchat send local failed"
+      }
+    }
+  ]
+}

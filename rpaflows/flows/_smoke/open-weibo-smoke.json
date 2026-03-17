@@ -1,0 +1,46 @@
+{
+  "id": "open_weibo_smoke",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "https://weibo.com",
+        "waitBy": "body",
+        "waitTimeoutMs": 20000,
+        "stableMs": 2000,
+        "settleTimeoutMs": 25000,
+        "postWaitMs": 5000
+      },
+      "next": "read_final_url"
+    },
+    {
+      "id": "read_final_url",
+      "action": {
+        "type": "readPage",
+        "field": "url"
+      },
+      "saveAs": "finalUrl",
+      "next": {
+        "done": "done",
+        "failed": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "weibo opened",
+        "conclusion": "${{ ({ opened: true, finalUrl: vars.finalUrl || '' }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "open weibo failed"
+      }
+    }
+  ]
+}

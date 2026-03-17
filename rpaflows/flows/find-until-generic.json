@@ -1,0 +1,400 @@
+{
+  "capabilities": {
+    "must": [
+      "find.until",
+      "find.goal"
+    ],
+    "prefer": [
+      "find.allowedActions",
+      "find.maxSteps",
+      "find.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 3,
+    "speed": 2
+  },
+  "flow": {
+    "id": "find_until_generic",
+    "start": "init_state",
+    "args": {
+      "find": {
+        "type": "object",
+        "required": false,
+        "desc": "find.* 参数对象（goal/allowedActions/maxSteps）"
+      },
+      "goal": {
+        "type": "string",
+        "required": false,
+        "desc": "兼容参数：等价 find.goal"
+      },
+      "allowedActions": {
+        "type": "array<string>",
+        "required": false,
+        "desc": "兼容参数：等价 find.allowedActions"
+      },
+      "maxSteps": {
+        "type": "number",
+        "required": false,
+        "desc": "兼容参数：等价 find.maxSteps"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_state",
+        "desc": "初始化 find.until 运行状态",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){\n\tfunction asText(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction asNum(v, d, min, max){\n\t\tlet n = Number(v);\n\t\tif(!Number.isFinite(n)) n = d;\n\t\tif(Number.isFinite(min)) n = Math.max(min, n);\n\t\tif(Number.isFinite(max)) n = Math.min(max, n);\n\t\treturn n;\n\t}\n\tfunction normalizeAllowed(raw){\n\t\tconst all = [\"click\",\"scroll\",\"goto\"];\n\t\tconst arr = Array.isArray(raw) ? raw : all;\n\t\tconst out = [];\n\t\tconst seen = new Set();\n\t\tfor(const x of arr){\n\t\t\tconst k = asText(x).toLowerCase();\n\t\t\tif(!all.includes(k) || seen.has(k)) continue;\n\t\t\tseen.add(k);\n\t\t\tout.push(k);\n\t\t}\n\t\treturn out.length ? out : all;\n\t}\n\tconst find = (input && typeof input.find === \"object\") ? input.find : {};\n\tconst goal = asText(find.goal || input.goal || input[\"find.goal\"] || \"\");\n\tif(!goal){\n\t\tthrow new Error(\"find.goal is required\");\n\t}\n\tconst allowedActions = normalizeAllowed(find.allowedActions || input.allowedActions || input[\"find.allowedActions\"]);\n\tconst maxSteps = asNum(find.maxSteps ?? input.maxSteps ?? input[\"find.maxSteps\"], 5, 1, 30);\n\treturn {\n\t\tgoal,\n\t\tallowedActions,\n\t\tmaxSteps,\n\t\tstepsUsed: 0,\n\t\tlimitReached: false,\n\t\tdecision: \"\",\n\t\tpendingAction: null,\n\t\tanswer: \"\",\n\t\tconfidence: 0,\n\t\tevidence: [],\n\t\tlastError: \"\",\n\t\tlastOutcome: null,\n\t\tlastActionType: \"\",\n\t\thistory: [],\n\t};\n}",
+          "args": [
+            "${{ ({ find: args.find || {}, goal: args.goal, allowedActions: args.allowedActions, maxSteps: args.maxSteps }) }}"
+          ]
+        },
+        "saveAs": "findState",
+        "next": {
+          "done": "clear_blockers",
+          "failed": "abort_bad_args"
+        }
+      },
+      {
+        "id": "clear_blockers",
+        "desc": "find 前先尝试清理 cookie/遮罩类 blocker（失败不阻断）",
+        "action": {
+          "type": "invoke",
+          "target": "blockers_check_clear",
+          "args": {
+            "blockers.clear": true
+          },
+          "onError": "return",
+          "returnTo": "caller"
+        },
+        "saveAs": "blockersOut",
+        "next": {
+          "done": "decide_next",
+          "failed": "decide_next"
+        }
+      },
+      {
+        "id": "decide_next",
+        "desc": "AI 决策：已找到/继续推进/失败（单轮只调一次 AI）",
+        "action": {
+          "type": "run_ai",
+          "model": "advanced",
+          "prompt": "Find-Until Decision (RPA, spec v0.55)\n\n你需要根据当前页面判断：\n- 是否已经找到目标信息；\n- 若未找到，下一步应该执行哪个“原子动作”。\n\n你只能输出 JSON envelope，不得输出任何额外文本。\n\n【goal】\n${vars.findState.goal}\n\n【notes】\n这是一个通用 find-until 决策任务。\n你必须严格遵守 input.allowedActions。\n如果上一轮动作失败，请根据 input.state.lastError 与 input.state.history 修正策略，避免重复失败动作。\n当 decision=continue 时，nextAction 必须可执行且参数完整；否则应返回 failed。\n\n────────────────────────────────────────────────────────\n【运行上下文（本次未提供）】\n- 可选对象：args / vars / opts / result\n- 这些对象均只读；持久化只能通过 saveAs 写入 vars\n\n────────────────────────────────────────────────────────\n【历史（本次未提供）】\n- 若宿主提供 history，请避免重复失败动作\n\n────────────────────────────────────────────────────────\n【可用 nextAction.type】\nclick | scroll | goto\n\n【nextAction 参数定义（严格）】\n- click:\n  { \"type\":\"click\", \"query\": string, \"by\"?: string, \"pick\"?: number|string, \"intent\"?: \"open\"|\"dismiss\"|\"submit\", \"expectInputFocus\"?: boolean, \"postWaitMs\"?: number }\n- scroll:\n  { \"type\":\"scroll\", \"x\"?: number, \"y\"?: number, \"query\"?: string, \"by\"?: string, \"postWaitMs\"?: number }\n- goto:\n  { \"type\":\"goto\", \"url\": string, \"postWaitMs\"?: number }\n\n────────────────────────────────────────────────────────\n【决策要求】\n1) 若已找到目标信息：\n   - decision = \"done\"\n   - nextAction = null\n   - answer/evidence 必须给出关键依据\n2) 若未找到但可继续：\n   - decision = \"continue\"\n   - nextAction 必须且只能是一个对象，type 必须来自可用列表\n3) 若无法继续：\n   - decision = \"failed\"\n   - nextAction = null\n4) 不得猜测不存在的参数，不得输出未定义字段。\n5) 若 nextAction.by 非空，必须为合法 selector 字符串，且以 \"css:\" 或 \"xpath:\" 开头；严禁输出 \"css\" / \"xpath\" / \"text\" 这类枚举词。\n\n────────────────────────────────────────────────────────\n【输出格式（严格 JSON envelope）】\n{\n  \"status\": \"ok\",\n  \"result\": {\n    \"decision\": \"done\" | \"continue\" | \"failed\",\n    \"answer\": string,\n    \"confidence\": number,\n    \"evidence\": string[],\n    \"nextAction\": object | null,\n    \"reason\": string\n  }\n}",
+          "input": "${{ ({ goal: vars.findState.goal, state: vars.findState, allowedActions: vars.findState.allowedActions, limits: { maxSteps: vars.findState.maxSteps, remaining: Math.max(0, Number(vars.findState.maxSteps || 0) - Number(vars.findState.stepsUsed || 0)) } }) }}",
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true
+          },
+          "schema": {
+            "type": "object",
+            "required": [
+              "decision",
+              "answer",
+              "confidence",
+              "evidence",
+              "nextAction",
+              "reason"
+            ],
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "done",
+                  "continue",
+                  "failed"
+                ]
+              },
+              "answer": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "nextAction": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "saveAs": "aiDecision",
+        "next": {
+          "done": "merge_decision",
+          "failed": "abort_ai_error"
+        }
+      },
+      {
+        "id": "merge_decision",
+        "desc": "校验并合并 AI 决策到状态机",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(state, rawDecision){\n\tfunction asText(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction asNum(v, d){\n\t\tconst n = Number(v);\n\t\treturn Number.isFinite(n) ? n : d;\n\t}\n\tfunction validBy(v){\n\t\tconst s = asText(v);\n\t\tif(!s) return true;\n\t\tif(/^css\\s*:/i.test(s)) return true;\n\t\tif(/^xpath\\s*:/i.test(s)) return true;\n\t\treturn false;\n\t}\n\tfunction normDecision(v){\n\t\tconst d = asText(v).toLowerCase();\n\t\tif(d === \"done\" || d === \"continue\" || d === \"failed\") return d;\n\t\treturn \"failed\";\n\t}\n\tfunction cloneAction(a){\n\t\tif(!a || typeof a !== \"object\") return null;\n\t\treturn {\n\t\t\ttype: asText(a.type).toLowerCase(),\n\t\t\tquery: asText(a.query),\n\t\t\tby: asText(a.by),\n\t\t\tpick: a.pick,\n\t\t\tintent: asText(a.intent),\n\t\t\tpostWaitMs: asNum(a.postWaitMs, 0),\n\t\t\tx: a.x,\n\t\t\ty: a.y,\n\t\t\turl: asText(a.url),\n\t\t};\n\t}\n\tconst s = (state && typeof state === \"object\") ? state : {};\n\tconst d = (rawDecision && typeof rawDecision === \"object\") ? rawDecision : {};\n\tconst allowed = Array.isArray(s.allowedActions) ? s.allowedActions : [\"click\",\"scroll\",\"goto\"];\n\tconst decision = normDecision(d.decision);\n\tconst nextAction = cloneAction(d.nextAction);\n\tconst out = {\n\t\t...s,\n\t\tdecision,\n\t\tanswer: asText(d.answer),\n\t\tconfidence: Math.max(0, Math.min(1, asNum(d.confidence, 0))),\n\t\tevidence: Array.isArray(d.evidence) ? d.evidence.map((x)=>asText(x)).filter(Boolean).slice(0, 8) : [],\n\t\tpendingAction: null,\n\t};\n\n\tif(decision === \"continue\"){\n\t\tif(!nextAction || !nextAction.type){\n\t\t\tout.decision = \"failed\";\n\t\t\tout.lastError = \"decision=continue but nextAction is missing\";\n\t\t\treturn out;\n\t\t}\n\t\tif(!allowed.includes(nextAction.type)){\n\t\t\tout.decision = \"failed\";\n\t\t\tout.lastError = \"nextAction.type is not allowed: \" + nextAction.type;\n\t\t\treturn out;\n\t\t}\n\t\tif(nextAction.type === \"click\"){\n\t\t\tif(nextAction.by && !validBy(nextAction.by)){\n\t\t\t\tnextAction.by = \"\";\n\t\t\t}\n\t\t\tif(!nextAction.query){\n\t\t\t\tout.decision = \"failed\";\n\t\t\t\tout.lastError = \"click nextAction requires query\";\n\t\t\t\treturn out;\n\t\t\t}\n\t\t}\n\t\tif(nextAction.type === \"scroll\"){\n\t\t\tif(nextAction.by && !validBy(nextAction.by)){\n\t\t\t\tnextAction.by = \"\";\n\t\t\t}\n\t\t}\n\t\tif(nextAction.type === \"goto\"){\n\t\t\tif(!nextAction.url){\n\t\t\t\tout.decision = \"failed\";\n\t\t\t\tout.lastError = \"goto nextAction requires url\";\n\t\t\t\treturn out;\n\t\t\t}\n\t\t}\n\t\tout.pendingAction = nextAction;\n\t\tout.lastActionType = nextAction.type;\n\t}\n\tif(decision === \"failed\" && !out.lastError){\n\t\tout.lastError = asText(d.reason || \"ai reported failed\");\n\t}\n\treturn out;\n}",
+          "args": [
+            "${vars.findState}",
+            "${vars.aiDecision}"
+          ]
+        },
+        "saveAs": "findState",
+        "next": {
+          "done": "route_decision",
+          "failed": "abort_ai_error"
+        }
+      },
+      {
+        "id": "route_decision",
+        "desc": "按 decision 路由",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "findState.decision",
+                "value": "done"
+              },
+              "to": "done_conclusion"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "findState.decision",
+                "value": "failed"
+              },
+              "to": "abort_failed"
+            }
+          ],
+          "default": "route_action_type"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_action_type",
+        "desc": "按 nextAction.type 执行原子动作",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "findState.pendingAction.type",
+                "value": "click"
+              },
+              "to": "do_click"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "findState.pendingAction.type",
+                "value": "scroll"
+              },
+              "to": "do_scroll"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "findState.pendingAction.type",
+                "value": "goto"
+              },
+              "to": "do_goto"
+            }
+          ],
+          "default": "abort_failed"
+        },
+        "next": {}
+      },
+      {
+        "id": "do_click",
+        "desc": "执行 AI 建议的 click",
+        "action": {
+          "type": "click",
+          "query": "${vars.findState.pendingAction.query}",
+          "by": "${vars.findState.pendingAction.by}",
+          "pick": "${vars.findState.pendingAction.pick}",
+          "intent": "${vars.findState.pendingAction.intent}",
+          "postWaitMs": "${vars.findState.pendingAction.postWaitMs}"
+        },
+        "next": {
+          "done": "record_action_outcome",
+          "failed": "record_action_outcome",
+          "timeout": "record_action_outcome"
+        }
+      },
+      {
+        "id": "do_scroll",
+        "desc": "执行 AI 建议的 scroll",
+        "action": {
+          "type": "scroll",
+          "x": "${vars.findState.pendingAction.x}",
+          "y": "${vars.findState.pendingAction.y}",
+          "query": "${vars.findState.pendingAction.query}",
+          "by": "${vars.findState.pendingAction.by}",
+          "postWaitMs": "${vars.findState.pendingAction.postWaitMs}"
+        },
+        "next": {
+          "done": "record_action_outcome",
+          "failed": "record_action_outcome",
+          "timeout": "record_action_outcome"
+        }
+      },
+      {
+        "id": "do_goto",
+        "desc": "执行 AI 建议的 goto",
+        "action": {
+          "type": "goto",
+          "url": "${vars.findState.pendingAction.url}",
+          "postWaitMs": "${vars.findState.pendingAction.postWaitMs}"
+        },
+        "next": {
+          "done": "record_action_outcome",
+          "failed": "record_action_outcome",
+          "timeout": "record_action_outcome"
+        }
+      },
+      {
+        "id": "record_action_outcome",
+        "desc": "记录本轮动作结果（含失败原因），供下一轮 AI 修正策略",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(state, outcome){\n\tfunction asText(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction pickSummary(v){\n\t\tif(v == null) return null;\n\t\tif(typeof v === \"string\" || typeof v === \"number\" || typeof v === \"boolean\") return v;\n\t\ttry {\n\t\t\treturn JSON.parse(JSON.stringify(v));\n\t\t} catch (_) {\n\t\t\treturn asText(v).slice(0, 500);\n\t\t}\n\t}\n\tconst s = (state && typeof state === \"object\") ? state : {};\n\tconst o = (outcome && typeof outcome === \"object\") ? outcome : {};\n\tconst status = asText(o.status || \"failed\").toLowerCase();\n\tconst reason = asText(o.reason || \"\");\n\tconst nextStepsUsed = Math.max(0, Number(s.stepsUsed || 0)) + 1;\n\tconst maxSteps = Math.max(1, Number(s.maxSteps || 5));\n\tconst hist = Array.isArray(s.history) ? s.history.slice(-11) : [];\n\thist.push({\n\t\tstep: nextStepsUsed,\n\t\tactionType: asText(s.lastActionType || (s.pendingAction && s.pendingAction.type) || \"\"),\n\t\taction: s.pendingAction || null,\n\t\tstatus,\n\t\treason,\n\t\tvalue: pickSummary(o.value),\n\t});\n\treturn {\n\t\t...s,\n\t\tstepsUsed: nextStepsUsed,\n\t\tlimitReached: nextStepsUsed >= maxSteps,\n\t\tlastOutcome: { status, reason, value: pickSummary(o.value) },\n\t\tlastError: status === \"done\" ? \"\" : (reason || (\"action failed: \" + asText(s.lastActionType))),\n\t\thistory: hist,\n\t\tpendingAction: null,\n\t};\n}",
+          "args": [
+            "${vars.findState}",
+            "${result}"
+          ]
+        },
+        "saveAs": "findState",
+        "next": {
+          "done": "route_limit",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "route_limit",
+        "desc": "检查是否达到最大轮数",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "findState.limitReached"
+              },
+              "to": "abort_limit"
+            }
+          ],
+          "default": "decide_next"
+        },
+        "next": {}
+      },
+      {
+        "id": "done_conclusion",
+        "desc": "成功返回结果",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(state){\n\tconst s = (state && typeof state === \"object\") ? state : {};\n\treturn {\n\t\tfound: true,\n\t\tanswer: String(s.answer || \"\"),\n\t\tconfidence: Number.isFinite(Number(s.confidence)) ? Number(s.confidence) : 0,\n\t\tevidence: Array.isArray(s.evidence) ? s.evidence : [],\n\t\tstepsUsed: Number(s.stepsUsed || 0),\n\t\thistory: Array.isArray(s.history) ? s.history : [],\n\t};\n}",
+          "args": [
+            "${vars.findState}"
+          ]
+        },
+        "saveAs": "findResult",
+        "next": {
+          "done": "done",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "find.until done",
+          "conclusion": "${vars.findResult}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_bad_args",
+        "action": {
+          "type": "abort",
+          "reason": "find.until invalid args: find.goal is required"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_ai_error",
+        "action": {
+          "type": "abort",
+          "reason": "find.until ai decision failed"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_limit",
+        "action": {
+          "type": "abort",
+          "reason": "find.until reached maxSteps without finding goal"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_failed",
+        "action": {
+          "type": "abort",
+          "reason": "find.until failed: ${vars.findState.lastError}"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "findState": {
+        "type": "object",
+        "desc": "find.until 状态机",
+        "from": "init_state.saveAs"
+      },
+      "blockersOut": {
+        "type": "object",
+        "desc": "find 前 blocker 清理结果（best-effort）",
+        "from": "clear_blockers.saveAs"
+      },
+      "aiDecision": {
+        "type": "object",
+        "desc": "单轮 AI 决策输出",
+        "from": "decide_next.saveAs"
+      },
+      "findResult": {
+        "type": "object",
+        "desc": "最终成功结果",
+        "from": "done_conclusion.saveAs"
+      }
+    }
+  }
+}

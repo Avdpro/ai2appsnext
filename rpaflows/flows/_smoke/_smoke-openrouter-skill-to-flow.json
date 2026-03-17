@@ -1,0 +1,179 @@
+{
+  "capabilities": {
+    "must": [
+      "blockers.clear",
+      "read.action",
+      "read.article",
+      "read.fields",
+      "read.requireFields",
+      "timeout",
+      "url",
+      "waitFor"
+    ],
+    "prefer": []
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    }
+  ],
+  "flow": {
+    "id": "open_page_read_title",
+    "start": "check_query",
+    "args": {
+      "query": {
+        "type": "string",
+        "required": true,
+        "desc": "目标页面 URL"
+      }
+    },
+    "steps": [
+      {
+        "id": "check_query",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "args",
+                "path": "query"
+              },
+              "to": "precheck_blockers"
+            }
+          ],
+          "default": "ask_for_url"
+        }
+      },
+      {
+        "id": "ask_for_url",
+        "action": {
+          "type": "ask_assist",
+          "reason": "请提供要打开的页面 URL，并在运行参数 query 中填写后继续。",
+          "waitUserAction": true
+        },
+        "next": {
+          "done": "precheck_blockers",
+          "failed": "precheck_blockers",
+          "timeout": "precheck_blockers",
+          "default": "precheck_blockers"
+        }
+      },
+      {
+        "id": "precheck_blockers",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "blockers.check"
+            ]
+          },
+          "args": {
+            "url": "${args.query}"
+          },
+          "onError": "return"
+        },
+        "next": {
+          "done": "read_title",
+          "failed": "read_title",
+          "timeout": "read_title",
+          "default": "read_title"
+        }
+      },
+      {
+        "id": "read_title",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "read.article"
+            ]
+          },
+          "args": {
+            "read.action": "article",
+            "read.fields": [
+              "title"
+            ],
+            "read.requireFields": [
+              "title"
+            ],
+            "url": "${args.query}",
+            "blockers.clear": true,
+            "waitFor": "domcontentloaded",
+            "timeout": 20000
+          },
+          "onError": "fail"
+        },
+        "next": {
+          "done": "done_success",
+          "failed": "recover_if_missing",
+          "timeout": "recover_if_missing"
+        }
+      },
+      {
+        "id": "recover_if_missing",
+        "action": {
+          "type": "ask_assist",
+          "reason": "未能获取到标题。可提供备用选择器或允许增加等待再试；将尝试调整等待策略并重试。",
+          "waitUserAction": true
+        },
+        "next": {
+          "done": "retry_read",
+          "failed": "retry_read",
+          "timeout": "retry_read",
+          "default": "retry_read"
+        }
+      },
+      {
+        "id": "retry_read",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "read.article"
+            ]
+          },
+          "args": {
+            "read.action": "article",
+            "read.fields": [
+              "title"
+            ],
+            "read.requireFields": [
+              "title"
+            ],
+            "url": "${args.query}",
+            "blockers.clear": true,
+            "waitFor": "network-idle",
+            "timeout": 45000
+          },
+          "onError": "fail"
+        },
+        "next": {
+          "done": "done_success",
+          "failed": "abort_no_title",
+          "timeout": "abort_no_title",
+          "default": "abort_no_title"
+        }
+      },
+      {
+        "id": "done_success",
+        "action": {
+          "type": "done",
+          "reason": "已读取页面主标题",
+          "conclusion": "success"
+        }
+      },
+      {
+        "id": "abort_no_title",
+        "action": {
+          "type": "abort",
+          "reason": "读取失败：未能从页面获取标题。"
+        }
+      }
+    ]
+  }
+}

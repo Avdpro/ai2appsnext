@@ -1,0 +1,72 @@
+{
+  "id": "smoke_showmore_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8796/showmore/collapsed.html",
+        "waitBy": "css: #expand-btn",
+        "waitTimeoutMs": 10000
+      },
+      "next": { "done": "invoke_showmore", "failed": "abort" }
+    },
+    {
+      "id": "invoke_showmore",
+      "action": {
+        "type": "invoke",
+        "target": "show_more_generic",
+        "args": {
+          "showMore.expand": true,
+          "showMore.checkOnly": false,
+          "showMore.target": {
+            "by": "selector",
+            "selector": "#article"
+          }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "smOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; return { ok: !!o.expanded && !o.blocked, expanded: !!o.expanded, blocked: !!o.blocked, reason: String(o.reason||'') }; }",
+        "args": ["${vars.smOut}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke showMore local passed",
+        "conclusion": "${{ ({ ok:true, showMore: vars.smOut || null, verify: vars.verifyOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke showMore local failed"
+      }
+    }
+  ]
+}
+

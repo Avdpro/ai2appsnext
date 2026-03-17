@@ -1,0 +1,216 @@
+{
+  "id": "compose_post_once",
+  "start": "init_post",
+  "args": {
+    "compose": { "type": "object", "required": false }
+  },
+  "steps": [
+    {
+      "id": "init_post",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(input){ function t(v){ return String(v == null ? '' : v).trim(); } const compose=(input&&input.compose&&typeof input.compose==='object')?input.compose:{}; const post=(compose.post&&typeof compose.post==='object')?compose.post:{}; const content=t(post.content); const title=t(post.title); const subtitle=t(post.subtitle); const type=t(post.type || compose.type || 'post').toLowerCase() || 'post'; const visibility=t(post.visibility || compose.visibility || ''); const strictVisibility=!!(post.strictVisibility === true || compose.strictVisibility === true); const resetDraftOnStart=(post.resetDraftOnStart === false || compose.resetDraftOnStart === false) ? false : true; const fieldPolicy=t(post.fieldPolicy || compose.fieldPolicy || 'strict').toLowerCase() || 'strict'; const tags=Array.isArray(post.tags) ? post.tags.map(t).filter(Boolean) : []; const files=Array.isArray(post.files) ? post.files.map(t).filter(Boolean) : []; return { content, title, subtitle, type, visibility, strictVisibility, resetDraftOnStart, fieldPolicy, tags, files, hasContent: !!content }; }",
+        "args": ["${{ ({ compose: args.compose || {} }) }}"]
+      },
+      "saveAs": "postCtx",
+      "next": { "done": "route_has_content", "failed": "abort" }
+    },
+    {
+      "id": "route_has_content",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "postCtx.hasContent", "value": true }, "to": "start_compose" }
+        ],
+        "default": "abort_missing_content"
+      },
+      "next": {}
+    },
+    {
+      "id": "start_compose",
+      "action": {
+        "type": "invoke",
+        "target": "compose_start",
+        "args": {
+          "compose.action": "start",
+          "compose.type": "${vars.postCtx.type}",
+          "compose.visibility": "${vars.postCtx.visibility}",
+          "compose.resetDraftOnStart": "${vars.postCtx.resetDraftOnStart}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "route_title", "failed": "abort" }
+    },
+    {
+      "id": "route_title",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "truthy", "source": "vars", "path": "postCtx.title" }, "to": "input_title" }
+        ],
+        "default": "route_subtitle"
+      },
+      "next": {}
+    },
+    {
+      "id": "input_title",
+      "action": {
+        "type": "invoke",
+        "target": "compose_input",
+        "args": {
+          "compose.action": "input",
+          "compose.type": "${vars.postCtx.type}",
+          "compose.field": "title",
+          "compose.fieldPolicy": "${vars.postCtx.fieldPolicy}",
+          "compose.text": "${vars.postCtx.title}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "route_subtitle", "failed": "abort" }
+    },
+    {
+      "id": "route_subtitle",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "truthy", "source": "vars", "path": "postCtx.subtitle" }, "to": "input_subtitle" }
+        ],
+        "default": "input_content"
+      },
+      "next": {}
+    },
+    {
+      "id": "input_subtitle",
+      "action": {
+        "type": "invoke",
+        "target": "compose_input",
+        "args": {
+          "compose.action": "input",
+          "compose.type": "${vars.postCtx.type}",
+          "compose.field": "subtitle",
+          "compose.fieldPolicy": "${vars.postCtx.fieldPolicy}",
+          "compose.text": "${vars.postCtx.subtitle}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "input_content", "failed": "abort" }
+    },
+    {
+      "id": "input_content",
+      "action": {
+        "type": "invoke",
+        "target": "compose_input",
+        "args": {
+          "compose.action": "input",
+          "compose.type": "${vars.postCtx.type}",
+          "compose.field": "content",
+          "compose.fieldPolicy": "${vars.postCtx.fieldPolicy}",
+          "compose.text": "${vars.postCtx.content}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "route_tags", "failed": "abort" }
+    },
+    {
+      "id": "route_tags",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "gt", "source": "vars", "path": "postCtx.tags.length", "value": 0 }, "to": "build_tags_text" }
+        ],
+        "default": "route_files"
+      },
+      "next": {}
+    },
+    {
+      "id": "build_tags_text",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(tags){ const arr=Array.isArray(tags)?tags:[]; const out=arr.map((x)=>String(x||'').trim()).filter(Boolean).map((x)=>x.startsWith('#')?x:('#'+x)); return out.join(' '); }",
+        "args": ["${{ vars.postCtx.tags || [] }}"]
+      },
+      "saveAs": "tagsText",
+      "next": { "done": "input_tags", "failed": "route_files" }
+    },
+    {
+      "id": "input_tags",
+      "action": {
+        "type": "invoke",
+        "target": "compose_input",
+        "args": {
+          "compose.action": "input",
+          "compose.type": "${vars.postCtx.type}",
+          "compose.field": "tag",
+          "compose.fieldPolicy": "${vars.postCtx.fieldPolicy}",
+          "compose.text": "${vars.tagsText}"
+        },
+        "onError": "return",
+        "returnTo": "caller"
+      },
+      "next": { "done": "route_files", "failed": "route_files" }
+    },
+    {
+      "id": "route_files",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "gt", "source": "vars", "path": "postCtx.files.length", "value": 0 }, "to": "upload_files" }
+        ],
+        "default": "publish"
+      },
+      "next": {}
+    },
+    {
+      "id": "upload_files",
+      "action": {
+        "type": "invoke",
+        "target": "compose_file",
+        "args": {
+          "compose.action": "file",
+          "compose.files": "${{ vars.postCtx.files || [] }}",
+          "compose.field": "content"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "publish", "failed": "abort" }
+    },
+    {
+      "id": "publish",
+      "action": {
+        "type": "invoke",
+        "target": "compose_publish",
+        "args": {
+          "compose.action": "publish",
+          "compose.visibility": "${vars.postCtx.visibility}",
+          "compose.strictVisibility": "${vars.postCtx.strictVisibility}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "publishOut",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "conclusion": "${{ ({ ok:true, action:'postOnce', post:{ type: vars.postCtx?.type || 'post', visibility: vars.postCtx?.visibility || '' }, publish: vars.publishOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort_missing_content",
+      "action": { "type": "abort", "reason": "compose.post.content is required for postOnce" }
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "compose post once failed" }
+    }
+  ]
+}

@@ -1,0 +1,810 @@
+{
+  "capabilities": {
+    "must": [
+      "nav"
+    ],
+    "prefer": [
+      "nav.dest",
+      "nav.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 1,
+    "quality": 2,
+    "speed": 3
+  },
+  "flow": {
+    "id": "nav_generic",
+    "start": "init_ctx",
+    "args": {
+      "nav": {
+        "type": "object",
+        "required": false,
+        "desc": "nav args, supports nav.dest/nav.target"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tfunction norm(s){ return t(s).toLowerCase().replace(/[\\s_\\-]+/g, \"\"); }\n\t\t\t\t\tfunction pickDest(raw){\n\t\t\t\t\t\tconst x = norm(raw);\n\t\t\t\t\t\tif(!x) return \"\";\n\t\t\t\t\t\tif([\"home\",\"homepage\",\"index\",\"main\",\"feed\",\"timeline\",\"shouye\",\"zhuye\",\"首页\",\"主页\"].some(k => x.includes(norm(k)))) return \"home\";\n\t\t\t\t\t\tif([\"inbox\",\"message\",\"messages\",\"chat\",\"dm\",\"xiaoxi\",\"youxiang\",\"消息\",\"私信\",\"收件箱\"].some(k => x.includes(norm(k)))) return \"inbox\";\n\t\t\t\t\t\tif([\"setting\",\"settings\",\"config\",\"preference\",\"preferences\",\"shezhi\",\"设置\",\"偏好\"].some(k => x.includes(norm(k)))) return \"settings\";\n\t\t\t\t\t\tif([\"profile\",\"account\",\"me\",\"my\",\"wo\",\"zhanghao\",\"个人\",\"账号\",\"我的\"].some(k => x.includes(norm(k)))) return \"profile\";\n\t\t\t\t\t\treturn x;\n\t\t\t\t\t}\n\t\t\t\t\tfunction labels(key){\n\t\t\t\t\t\tif(key === \"home\") return [\"首页\", \"主页\", \"Home\", \"Home Page\", \"Main\", \"Feed\"];\n\t\t\t\t\t\tif(key === \"inbox\") return [\"消息\", \"私信\", \"收件箱\", \"Inbox\", \"Messages\", \"Chat\", \"DM\"];\n\t\t\t\t\t\tif(key === \"settings\") return [\"设置\", \"偏好\", \"Settings\", \"Preferences\", \"Config\"];\n\t\t\t\t\t\tif(key === \"profile\") return [\"我的\", \"个人主页\", \"账号\", \"Profile\", \"Account\", \"Me\"];\n\t\t\t\t\t\treturn [key];\n\t\t\t\t\t}\n\t\t\t\t\tconst nav = (input && input.nav) || {};\n\t\t\t\t\tconst destRaw = t((input && input[\"nav.dest\"]) || nav.dest || input.dest || \"\");\n\t\t\t\t\tconst destKey = pickDest(destRaw);\n\t\t\t\t\tconst destLabels = labels(destKey);\n\t\t\t\t\tconst target = nav && typeof nav.target === \"object\" ? nav.target : {};\n\t\t\t\t\tconst by = t(target.selector || target.bySelector || \"\");\n\t\t\t\t\tconst query = t(target.query || \"\");\n\t\t\t\t\tconst targetMode = by ? \"selector\" : (query ? \"query\" : \"autoQuery\");\n\t\t\t\t\tconst autoQuery = \"导航到「\" + (destLabels[0] || destRaw || \"\") + \"」的入口（链接/按钮/菜单项）\";\n\t\t\t\t\tconst profileQueries = [\n\t\t\t\t\t\t\"打开“我的/Me/My/Profile/Account”入口（通常在页面顶栏、侧边栏、头像菜单）。不要点击内容卡片里作者/用户主页链接\",\n\t\t\t\t\t\t\"在当前页面继续定位“我的主页/账号中心/Profile/Account/Me”入口。避免任何帖子卡片、作者名、作者头像区域的链接\",\n\t\t\t\t\t\t\"若仍未到达“我的主页”，优先在个人菜单、设置菜单、账号菜单中查找并点击“我的主页/Profile/Account center/Me”\",\n\t\t\t\t\t];\n\t\t\t\t\treturn {\n\t\t\t\t\t\tdestRaw,\n\t\t\t\t\t\tdestKey,\n\t\t\t\t\t\tdestLabels,\n\t\t\t\t\t\ttargetMode,\n\t\t\t\t\t\tby,\n\t\t\t\t\t\tquery,\n\t\t\t\t\t\tautoQuery,\n\t\t\t\t\t\tprofileQueries,\n\t\t\t\t\t\tcacheKeySuffix: ((destKey || destRaw || \"unknown\") + \"_v2_self\"),\n\t\t\t\t\t\tassistReason: \"请手动导航到「\" + (destLabels[0] || destRaw || \"目标页面\") + \"」，完成后点击“已处理，继续”。\",\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${{ ({ nav: args.nav || {}, dest: args.dest || '', 'nav.dest': args['nav.dest'] || '' }) }}"
+          ]
+        },
+        "saveAs": "navCtx",
+        "next": {
+          "done": "check_dest",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "check_dest",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "navCtx.destKey"
+              },
+              "to": "snapshot_before"
+            }
+          ],
+          "default": "abort_missing_dest"
+        },
+        "next": {}
+      },
+      {
+        "id": "snapshot_before",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(){ return { url: String(location.href||''), title: String(document.title||''), ts: Date.now() }; }"
+        },
+        "saveAs": "before",
+        "next": {
+          "done": "route_dest_kind",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_dest_kind",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "navCtx.destKey",
+                "value": "profile"
+              },
+              "to": "verify_profile_pre"
+            }
+          ],
+          "default": "route_resolve"
+        },
+        "next": {}
+      },
+      {
+        "id": "verify_profile_pre",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(before, ctx){\n\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction low(v){ return t(v).toLowerCase(); }\n\tfunction hasAny(text, list){\n\t\tconst hay = low(text);\n\t\tfor(const x of (Array.isArray(list) ? list : [])){\n\t\t\tconst k = low(x);\n\t\t\tif(k && hay.includes(k)) return true;\n\t\t}\n\t\treturn false;\n\t}\n\tfunction isProfileDestination(destKey){\n\t\treturn low(destKey) === \"profile\";\n\t}\n\tfunction scoreProfile(url, title, bodyText){\n\t\tlet score = 0;\n\t\tconst u = low(url);\n\t\tconst ttl = low(title);\n\t\tconst body = low(bodyText);\n\t\tif(/\\/(?:u|user|users|me|account|people)(?:\\/|$|[?#])/.test(u) || /\\/profile(?:\\/|$|[?#])/.test(u) || /(?:^|[?#&])tab=profile\\b/.test(u)) score += 2;\n\t\tif(/(?:个人主页|我的主页|我的账号|账号中心|profile\\s*page|account\\s*center)/.test(ttl)) score += 1;\n\t\tif(/(?:个人简介|简介|about\\s+me|bio|followers?|following|粉丝|关注|获赞)/.test(body)) score += 1;\n\t\tconst hasAvatar = !!document.querySelector(\"img[alt*='avatar' i], img[class*='avatar' i], [class*='avatar' i] img\");\n\t\tconst hasNameLike = !!document.querySelector(\"h1, h2, [class*='name' i], [data-testid*='name' i]\");\n\t\tif(hasAvatar && hasNameLike) score += 1;\n\t\tconst hasProfileMeta = !!document.querySelector(\"meta[property='og:type'][content*='profile' i], [itemtype*='Person']\");\n\t\tif(hasProfileMeta) score += 1;\n\t\treturn score;\n\t}\n\tconst b = before && typeof before === \"object\" ? before : {};\n\tconst c = ctx && typeof ctx === \"object\" ? ctx : {};\n\tconst labels = Array.isArray(c.destLabels) ? c.destLabels : [];\n\tconst destKey = t(c.destKey);\n\tconst url = t(location.href);\n\tconst title = t(document.title);\n\tconst bodyText = t((document.body && document.body.innerText) || \"\").slice(0, 3000);\n\tconst changedUrl = !!t(b.url) && t(b.url) !== url;\n\tconst titleHit = hasAny(title, labels);\n\tconst urlHit = hasAny(url, labels);\n\tconst bodyHit = hasAny(bodyText, labels);\n\tif(!isProfileDestination(destKey)){\n\t\tconst ok = !!(changedUrl || titleHit || urlHit || bodyHit);\n\t\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore: 0 };\n\t}\n\tconst profileScore = scoreProfile(url, title, bodyText);\n\tconst ok = profileScore >= 1;\n\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore };\n}",
+          "args": [
+            "${vars.before}",
+            "${vars.navCtx}"
+          ]
+        },
+        "saveAs": "verifyOut",
+        "next": {
+          "done": "route_verify_profile_pre",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_verify_profile_pre",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "verifyOut.ok",
+                "value": true
+              },
+              "to": "ai_review_profile_pre"
+            }
+          ],
+          "default": "resolve_profile_query_1"
+        },
+        "next": {}
+      },
+      {
+        "id": "ai_review_profile_pre",
+        "action": {
+          "type": "run_ai",
+          "model": "advanced",
+          "prompt": "判断当前页面是否已经是“当前登录用户自己的个人主页/Profile页（my profile）”，不是首页/发现页，也不是他人的主页。只返回结构化结果。",
+          "input": {
+            "dest": "${{ vars.navCtx?.destKey || '' }}",
+            "verify": "${{ vars.verifyOut || {} }}",
+            "stage": "profile_pre"
+          },
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "isOwnProfile": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "isOwnProfile",
+              "confidence",
+              "reason"
+            ]
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "saveAs": "profileReviewOut",
+        "next": {
+          "done": "route_ai_review_profile_pre",
+          "failed": "resolve_profile_query_1"
+        }
+      },
+      {
+        "id": "route_ai_review_profile_pre",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "profileReviewOut.isOwnProfile",
+                "value": true
+              },
+              "to": "done"
+            }
+          ],
+          "default": "resolve_profile_query_1"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_profile_query_1",
+        "action": {
+          "type": "selector",
+          "query": "${{ vars.navCtx.profileQueries?.[0] || vars.navCtx.autoQuery }}",
+          "cacheKeySuffix": "${{ (vars.navCtx.cacheKeySuffix || 'nav') + '_profile_s1' }}"
+        },
+        "saveAs": "navSel",
+        "next": {
+          "done": "click_profile_query_1",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "click_profile_query_1",
+        "action": {
+          "type": "click",
+          "by": "${vars.navSel.by}",
+          "postWaitMs": 700
+        },
+        "next": {
+          "done": "verify_profile_query_1",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "verify_profile_query_1",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(before, ctx){\n\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction low(v){ return t(v).toLowerCase(); }\n\tfunction hasAny(text, list){\n\t\tconst hay = low(text);\n\t\tfor(const x of (Array.isArray(list) ? list : [])){\n\t\t\tconst k = low(x);\n\t\t\tif(k && hay.includes(k)) return true;\n\t\t}\n\t\treturn false;\n\t}\n\tfunction isProfileDestination(destKey){\n\t\treturn low(destKey) === \"profile\";\n\t}\n\tfunction scoreProfile(url, title, bodyText){\n\t\tlet score = 0;\n\t\tconst u = low(url);\n\t\tconst ttl = low(title);\n\t\tconst body = low(bodyText);\n\t\tif(/\\/(?:u|user|users|me|account|people)(?:\\/|$|[?#])/.test(u) || /\\/profile(?:\\/|$|[?#])/.test(u) || /(?:^|[?#&])tab=profile\\b/.test(u)) score += 2;\n\t\tif(/(?:个人主页|我的主页|我的账号|账号中心|profile\\s*page|account\\s*center)/.test(ttl)) score += 1;\n\t\tif(/(?:个人简介|简介|about\\s+me|bio|followers?|following|粉丝|关注|获赞)/.test(body)) score += 1;\n\t\tconst hasAvatar = !!document.querySelector(\"img[alt*='avatar' i], img[class*='avatar' i], [class*='avatar' i] img\");\n\t\tconst hasNameLike = !!document.querySelector(\"h1, h2, [class*='name' i], [data-testid*='name' i]\");\n\t\tif(hasAvatar && hasNameLike) score += 1;\n\t\tconst hasProfileMeta = !!document.querySelector(\"meta[property='og:type'][content*='profile' i], [itemtype*='Person']\");\n\t\tif(hasProfileMeta) score += 1;\n\t\treturn score;\n\t}\n\tconst b = before && typeof before === \"object\" ? before : {};\n\tconst c = ctx && typeof ctx === \"object\" ? ctx : {};\n\tconst labels = Array.isArray(c.destLabels) ? c.destLabels : [];\n\tconst destKey = t(c.destKey);\n\tconst url = t(location.href);\n\tconst title = t(document.title);\n\tconst bodyText = t((document.body && document.body.innerText) || \"\").slice(0, 3000);\n\tconst changedUrl = !!t(b.url) && t(b.url) !== url;\n\tconst titleHit = hasAny(title, labels);\n\tconst urlHit = hasAny(url, labels);\n\tconst bodyHit = hasAny(bodyText, labels);\n\tif(!isProfileDestination(destKey)){\n\t\tconst ok = !!(changedUrl || titleHit || urlHit || bodyHit);\n\t\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore: 0 };\n\t}\n\tconst profileScore = scoreProfile(url, title, bodyText);\n\tconst ok = profileScore >= 1;\n\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore };\n}",
+          "args": [
+            "${vars.before}",
+            "${vars.navCtx}"
+          ]
+        },
+        "saveAs": "verifyOut",
+        "next": {
+          "done": "route_verify_profile_query_1",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "route_verify_profile_query_1",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "verifyOut.ok",
+                "value": true
+              },
+              "to": "ai_review_profile_q1"
+            }
+          ],
+          "default": "resolve_profile_query_2"
+        },
+        "next": {}
+      },
+      {
+        "id": "ai_review_profile_q1",
+        "action": {
+          "type": "run_ai",
+          "model": "advanced",
+          "prompt": "判断当前页面是否已经是“当前登录用户自己的个人主页/Profile页（my profile）”，不是首页/发现页，也不是他人的主页。只返回结构化结果。",
+          "input": {
+            "dest": "${{ vars.navCtx?.destKey || '' }}",
+            "verify": "${{ vars.verifyOut || {} }}",
+            "stage": "profile_q1"
+          },
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "isOwnProfile": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "isOwnProfile",
+              "confidence",
+              "reason"
+            ]
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "saveAs": "profileReviewOut",
+        "next": {
+          "done": "route_ai_review_profile_q1",
+          "failed": "resolve_profile_query_2"
+        }
+      },
+      {
+        "id": "route_ai_review_profile_q1",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "profileReviewOut.isOwnProfile",
+                "value": true
+              },
+              "to": "done"
+            }
+          ],
+          "default": "resolve_profile_query_2"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_profile_query_2",
+        "action": {
+          "type": "selector",
+          "query": "${{ vars.navCtx.profileQueries?.[1] || vars.navCtx.autoQuery }}",
+          "cacheKeySuffix": "${{ (vars.navCtx.cacheKeySuffix || 'nav') + '_profile_s2' }}"
+        },
+        "saveAs": "navSel",
+        "next": {
+          "done": "click_profile_query_2",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "click_profile_query_2",
+        "action": {
+          "type": "click",
+          "by": "${vars.navSel.by}",
+          "postWaitMs": 900
+        },
+        "next": {
+          "done": "verify_profile_query_2",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "verify_profile_query_2",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(before, ctx){\n\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction low(v){ return t(v).toLowerCase(); }\n\tfunction hasAny(text, list){\n\t\tconst hay = low(text);\n\t\tfor(const x of (Array.isArray(list) ? list : [])){\n\t\t\tconst k = low(x);\n\t\t\tif(k && hay.includes(k)) return true;\n\t\t}\n\t\treturn false;\n\t}\n\tfunction isProfileDestination(destKey){\n\t\treturn low(destKey) === \"profile\";\n\t}\n\tfunction scoreProfile(url, title, bodyText){\n\t\tlet score = 0;\n\t\tconst u = low(url);\n\t\tconst ttl = low(title);\n\t\tconst body = low(bodyText);\n\t\tif(/\\/(?:u|user|users|me|account|people)(?:\\/|$|[?#])/.test(u) || /\\/profile(?:\\/|$|[?#])/.test(u) || /(?:^|[?#&])tab=profile\\b/.test(u)) score += 2;\n\t\tif(/(?:个人主页|我的主页|我的账号|账号中心|profile\\s*page|account\\s*center)/.test(ttl)) score += 1;\n\t\tif(/(?:个人简介|简介|about\\s+me|bio|followers?|following|粉丝|关注|获赞)/.test(body)) score += 1;\n\t\tconst hasAvatar = !!document.querySelector(\"img[alt*='avatar' i], img[class*='avatar' i], [class*='avatar' i] img\");\n\t\tconst hasNameLike = !!document.querySelector(\"h1, h2, [class*='name' i], [data-testid*='name' i]\");\n\t\tif(hasAvatar && hasNameLike) score += 1;\n\t\tconst hasProfileMeta = !!document.querySelector(\"meta[property='og:type'][content*='profile' i], [itemtype*='Person']\");\n\t\tif(hasProfileMeta) score += 1;\n\t\treturn score;\n\t}\n\tconst b = before && typeof before === \"object\" ? before : {};\n\tconst c = ctx && typeof ctx === \"object\" ? ctx : {};\n\tconst labels = Array.isArray(c.destLabels) ? c.destLabels : [];\n\tconst destKey = t(c.destKey);\n\tconst url = t(location.href);\n\tconst title = t(document.title);\n\tconst bodyText = t((document.body && document.body.innerText) || \"\").slice(0, 3000);\n\tconst changedUrl = !!t(b.url) && t(b.url) !== url;\n\tconst titleHit = hasAny(title, labels);\n\tconst urlHit = hasAny(url, labels);\n\tconst bodyHit = hasAny(bodyText, labels);\n\tif(!isProfileDestination(destKey)){\n\t\tconst ok = !!(changedUrl || titleHit || urlHit || bodyHit);\n\t\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore: 0 };\n\t}\n\tconst profileScore = scoreProfile(url, title, bodyText);\n\tconst ok = profileScore >= 1;\n\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore };\n}",
+          "args": [
+            "${vars.before}",
+            "${vars.navCtx}"
+          ]
+        },
+        "saveAs": "verifyOut",
+        "next": {
+          "done": "route_verify_profile_query_2",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "route_verify_profile_query_2",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "verifyOut.ok",
+                "value": true
+              },
+              "to": "ai_review_profile_q2"
+            }
+          ],
+          "default": "resolve_profile_query_3"
+        },
+        "next": {}
+      },
+      {
+        "id": "ai_review_profile_q2",
+        "action": {
+          "type": "run_ai",
+          "model": "advanced",
+          "prompt": "判断当前页面是否已经是“当前登录用户自己的个人主页/Profile页（my profile）”，不是首页/发现页，也不是他人的主页。只返回结构化结果。",
+          "input": {
+            "dest": "${{ vars.navCtx?.destKey || '' }}",
+            "verify": "${{ vars.verifyOut || {} }}",
+            "stage": "profile_q2"
+          },
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "isOwnProfile": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "isOwnProfile",
+              "confidence",
+              "reason"
+            ]
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "saveAs": "profileReviewOut",
+        "next": {
+          "done": "route_ai_review_profile_q2",
+          "failed": "resolve_profile_query_3"
+        }
+      },
+      {
+        "id": "route_ai_review_profile_q2",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "profileReviewOut.isOwnProfile",
+                "value": true
+              },
+              "to": "done"
+            }
+          ],
+          "default": "resolve_profile_query_3"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_profile_query_3",
+        "action": {
+          "type": "selector",
+          "query": "${{ vars.navCtx.profileQueries?.[2] || vars.navCtx.autoQuery }}",
+          "cacheKeySuffix": "${{ (vars.navCtx.cacheKeySuffix || 'nav') + '_profile_s3' }}"
+        },
+        "saveAs": "navSel",
+        "next": {
+          "done": "click_profile_query_3",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "click_profile_query_3",
+        "action": {
+          "type": "click",
+          "by": "${vars.navSel.by}",
+          "postWaitMs": 1000
+        },
+        "next": {
+          "done": "verify_profile_query_3",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "verify_profile_query_3",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(before, ctx){\n\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction low(v){ return t(v).toLowerCase(); }\n\tfunction hasAny(text, list){\n\t\tconst hay = low(text);\n\t\tfor(const x of (Array.isArray(list) ? list : [])){\n\t\t\tconst k = low(x);\n\t\t\tif(k && hay.includes(k)) return true;\n\t\t}\n\t\treturn false;\n\t}\n\tfunction isProfileDestination(destKey){\n\t\treturn low(destKey) === \"profile\";\n\t}\n\tfunction scoreProfile(url, title, bodyText){\n\t\tlet score = 0;\n\t\tconst u = low(url);\n\t\tconst ttl = low(title);\n\t\tconst body = low(bodyText);\n\t\tif(/\\/(?:u|user|users|me|account|people)(?:\\/|$|[?#])/.test(u) || /\\/profile(?:\\/|$|[?#])/.test(u) || /(?:^|[?#&])tab=profile\\b/.test(u)) score += 2;\n\t\tif(/(?:个人主页|我的主页|我的账号|账号中心|profile\\s*page|account\\s*center)/.test(ttl)) score += 1;\n\t\tif(/(?:个人简介|简介|about\\s+me|bio|followers?|following|粉丝|关注|获赞)/.test(body)) score += 1;\n\t\tconst hasAvatar = !!document.querySelector(\"img[alt*='avatar' i], img[class*='avatar' i], [class*='avatar' i] img\");\n\t\tconst hasNameLike = !!document.querySelector(\"h1, h2, [class*='name' i], [data-testid*='name' i]\");\n\t\tif(hasAvatar && hasNameLike) score += 1;\n\t\tconst hasProfileMeta = !!document.querySelector(\"meta[property='og:type'][content*='profile' i], [itemtype*='Person']\");\n\t\tif(hasProfileMeta) score += 1;\n\t\treturn score;\n\t}\n\tconst b = before && typeof before === \"object\" ? before : {};\n\tconst c = ctx && typeof ctx === \"object\" ? ctx : {};\n\tconst labels = Array.isArray(c.destLabels) ? c.destLabels : [];\n\tconst destKey = t(c.destKey);\n\tconst url = t(location.href);\n\tconst title = t(document.title);\n\tconst bodyText = t((document.body && document.body.innerText) || \"\").slice(0, 3000);\n\tconst changedUrl = !!t(b.url) && t(b.url) !== url;\n\tconst titleHit = hasAny(title, labels);\n\tconst urlHit = hasAny(url, labels);\n\tconst bodyHit = hasAny(bodyText, labels);\n\tif(!isProfileDestination(destKey)){\n\t\tconst ok = !!(changedUrl || titleHit || urlHit || bodyHit);\n\t\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore: 0 };\n\t}\n\tconst profileScore = scoreProfile(url, title, bodyText);\n\tconst ok = profileScore >= 1;\n\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore };\n}",
+          "args": [
+            "${vars.before}",
+            "${vars.navCtx}"
+          ]
+        },
+        "saveAs": "verifyOut",
+        "next": {
+          "done": "route_verify_profile_query_3",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "route_verify_profile_query_3",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "verifyOut.ok",
+                "value": true
+              },
+              "to": "ai_review_profile_q3"
+            }
+          ],
+          "default": "assist_nav"
+        },
+        "next": {}
+      },
+      {
+        "id": "ai_review_profile_q3",
+        "action": {
+          "type": "run_ai",
+          "model": "advanced",
+          "prompt": "判断当前页面是否已经是“当前登录用户自己的个人主页/Profile页（my profile）”，不是首页/发现页，也不是他人的主页。只返回结构化结果。",
+          "input": {
+            "dest": "${{ vars.navCtx?.destKey || '' }}",
+            "verify": "${{ vars.verifyOut || {} }}",
+            "stage": "profile_q3"
+          },
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "isOwnProfile": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "isOwnProfile",
+              "confidence",
+              "reason"
+            ]
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "saveAs": "profileReviewOut",
+        "next": {
+          "done": "route_ai_review_profile_q3",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "route_ai_review_profile_q3",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "profileReviewOut.isOwnProfile",
+                "value": true
+              },
+              "to": "done"
+            }
+          ],
+          "default": "assist_nav"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_resolve",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "navCtx.targetMode",
+                "value": "selector"
+              },
+              "to": "resolve_by"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "navCtx.targetMode",
+                "value": "query"
+              },
+              "to": "resolve_query"
+            }
+          ],
+          "default": "resolve_auto_query"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_by",
+        "action": {
+          "type": "selector",
+          "by": "${vars.navCtx.by}"
+        },
+        "saveAs": "navSel",
+        "next": {
+          "done": "click_nav",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "resolve_query",
+        "action": {
+          "type": "selector",
+          "query": "${vars.navCtx.query}",
+          "cacheKeySuffix": "${vars.navCtx.cacheKeySuffix}"
+        },
+        "saveAs": "navSel",
+        "next": {
+          "done": "click_nav",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "resolve_auto_query",
+        "action": {
+          "type": "selector",
+          "query": "${vars.navCtx.autoQuery}",
+          "cacheKeySuffix": "${vars.navCtx.cacheKeySuffix}"
+        },
+        "saveAs": "navSel",
+        "next": {
+          "done": "click_nav",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "click_nav",
+        "action": {
+          "type": "click",
+          "by": "${vars.navSel.by}",
+          "postWaitMs": 900
+        },
+        "next": {
+          "done": "verify_nav",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "verify_nav",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(before, ctx){\n\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction low(v){ return t(v).toLowerCase(); }\n\tfunction hasAny(text, list){\n\t\tconst hay = low(text);\n\t\tfor(const x of (Array.isArray(list) ? list : [])){\n\t\t\tconst k = low(x);\n\t\t\tif(k && hay.includes(k)) return true;\n\t\t}\n\t\treturn false;\n\t}\n\tfunction isProfileDestination(destKey){\n\t\treturn low(destKey) === \"profile\";\n\t}\n\tfunction scoreProfile(url, title, bodyText){\n\t\tlet score = 0;\n\t\tconst u = low(url);\n\t\tconst ttl = low(title);\n\t\tconst body = low(bodyText);\n\t\tif(/\\/(?:u|user|users|me|account|people)(?:\\/|$|[?#])/.test(u) || /\\/profile(?:\\/|$|[?#])/.test(u) || /(?:^|[?#&])tab=profile\\b/.test(u)) score += 2;\n\t\tif(/(?:个人主页|我的主页|我的账号|账号中心|profile\\s*page|account\\s*center)/.test(ttl)) score += 1;\n\t\tif(/(?:个人简介|简介|about\\s+me|bio|followers?|following|粉丝|关注|获赞)/.test(body)) score += 1;\n\t\tconst hasAvatar = !!document.querySelector(\"img[alt*='avatar' i], img[class*='avatar' i], [class*='avatar' i] img\");\n\t\tconst hasNameLike = !!document.querySelector(\"h1, h2, [class*='name' i], [data-testid*='name' i]\");\n\t\tif(hasAvatar && hasNameLike) score += 1;\n\t\tconst hasProfileMeta = !!document.querySelector(\"meta[property='og:type'][content*='profile' i], [itemtype*='Person']\");\n\t\tif(hasProfileMeta) score += 1;\n\t\treturn score;\n\t}\n\tconst b = before && typeof before === \"object\" ? before : {};\n\tconst c = ctx && typeof ctx === \"object\" ? ctx : {};\n\tconst labels = Array.isArray(c.destLabels) ? c.destLabels : [];\n\tconst destKey = t(c.destKey);\n\tconst url = t(location.href);\n\tconst title = t(document.title);\n\tconst bodyText = t((document.body && document.body.innerText) || \"\").slice(0, 3000);\n\tconst changedUrl = !!t(b.url) && t(b.url) !== url;\n\tconst titleHit = hasAny(title, labels);\n\tconst urlHit = hasAny(url, labels);\n\tconst bodyHit = hasAny(bodyText, labels);\n\tif(!isProfileDestination(destKey)){\n\t\tconst ok = !!(changedUrl || titleHit || urlHit || bodyHit);\n\t\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore: 0 };\n\t}\n\tconst profileScore = scoreProfile(url, title, bodyText);\n\tconst ok = profileScore >= 1;\n\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore };\n}",
+          "args": [
+            "${vars.before}",
+            "${vars.navCtx}"
+          ]
+        },
+        "saveAs": "verifyOut",
+        "next": {
+          "done": "route_verify",
+          "failed": "assist_nav"
+        }
+      },
+      {
+        "id": "route_verify",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "verifyOut.ok",
+                "value": true
+              },
+              "to": "done"
+            }
+          ],
+          "default": "assist_nav"
+        },
+        "next": {}
+      },
+      {
+        "id": "assist_nav",
+        "action": {
+          "type": "ask_assist",
+          "reason": "${vars.navCtx.assistReason}",
+          "waitUserAction": true,
+          "modal": false,
+          "mask": false
+        },
+        "next": {
+          "done": "verify_after_assist",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "verify_after_assist",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(before, ctx){\n\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction low(v){ return t(v).toLowerCase(); }\n\tfunction hasAny(text, list){\n\t\tconst hay = low(text);\n\t\tfor(const x of (Array.isArray(list) ? list : [])){\n\t\t\tconst k = low(x);\n\t\t\tif(k && hay.includes(k)) return true;\n\t\t}\n\t\treturn false;\n\t}\n\tfunction isProfileDestination(destKey){\n\t\treturn low(destKey) === \"profile\";\n\t}\n\tfunction scoreProfile(url, title, bodyText){\n\t\tlet score = 0;\n\t\tconst u = low(url);\n\t\tconst ttl = low(title);\n\t\tconst body = low(bodyText);\n\t\tif(/\\/(?:u|user|users|me|account|people)(?:\\/|$|[?#])/.test(u) || /\\/profile(?:\\/|$|[?#])/.test(u) || /(?:^|[?#&])tab=profile\\b/.test(u)) score += 2;\n\t\tif(/(?:个人主页|我的主页|我的账号|账号中心|profile\\s*page|account\\s*center)/.test(ttl)) score += 1;\n\t\tif(/(?:个人简介|简介|about\\s+me|bio|followers?|following|粉丝|关注|获赞)/.test(body)) score += 1;\n\t\tconst hasAvatar = !!document.querySelector(\"img[alt*='avatar' i], img[class*='avatar' i], [class*='avatar' i] img\");\n\t\tconst hasNameLike = !!document.querySelector(\"h1, h2, [class*='name' i], [data-testid*='name' i]\");\n\t\tif(hasAvatar && hasNameLike) score += 1;\n\t\tconst hasProfileMeta = !!document.querySelector(\"meta[property='og:type'][content*='profile' i], [itemtype*='Person']\");\n\t\tif(hasProfileMeta) score += 1;\n\t\treturn score;\n\t}\n\tconst b = before && typeof before === \"object\" ? before : {};\n\tconst c = ctx && typeof ctx === \"object\" ? ctx : {};\n\tconst labels = Array.isArray(c.destLabels) ? c.destLabels : [];\n\tconst destKey = t(c.destKey);\n\tconst url = t(location.href);\n\tconst title = t(document.title);\n\tconst bodyText = t((document.body && document.body.innerText) || \"\").slice(0, 3000);\n\tconst changedUrl = !!t(b.url) && t(b.url) !== url;\n\tconst titleHit = hasAny(title, labels);\n\tconst urlHit = hasAny(url, labels);\n\tconst bodyHit = hasAny(bodyText, labels);\n\tif(!isProfileDestination(destKey)){\n\t\tconst ok = !!(changedUrl || titleHit || urlHit || bodyHit);\n\t\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore: 0 };\n\t}\n\tconst profileScore = scoreProfile(url, title, bodyText);\n\tconst ok = profileScore >= 1;\n\treturn { ok, url, title, changedUrl, titleHit, urlHit, bodyHit, labels, destKey, profileScore };\n}",
+          "args": [
+            "${vars.before}",
+            "${vars.navCtx}"
+          ]
+        },
+        "saveAs": "verifyAfterAssistOut",
+        "next": {
+          "done": "route_verify_after_assist",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_verify_after_assist",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "verifyAfterAssistOut.ok",
+                "value": true
+              },
+              "to": "done_assist"
+            }
+          ],
+          "default": "abort"
+        },
+        "next": {}
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "nav ok",
+          "conclusion": "${{ ({ dest: vars.navCtx?.destKey || '', url: vars.verifyOut?.url || '', title: vars.verifyOut?.title || '', via: vars.navSel?.by || null, assisted: false }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "done_assist",
+        "action": {
+          "type": "done",
+          "reason": "nav ok by assist",
+          "conclusion": "${{ ({ dest: vars.navCtx?.destKey || '', url: vars.verifyAfterAssistOut?.url || '', title: vars.verifyAfterAssistOut?.title || '', via: vars.navSel?.by || null, assisted: true }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_missing_dest",
+        "action": {
+          "type": "abort",
+          "reason": "nav requires nav.dest"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort",
+        "action": {
+          "type": "abort",
+          "reason": "nav failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "navCtx": {
+        "type": "object",
+        "desc": "normalized nav args",
+        "from": "init_ctx.saveAs"
+      },
+      "before": {
+        "type": "object",
+        "desc": "before snapshot",
+        "from": "snapshot_before.saveAs"
+      },
+      "navSel": {
+        "type": "object",
+        "desc": "resolved nav selector",
+        "from": "resolve_by.saveAs/resolve_query.saveAs/resolve_auto_query.saveAs"
+      },
+      "verifyOut": {
+        "type": "object",
+        "desc": "post click verify result",
+        "from": "verify_nav.saveAs"
+      },
+      "profileReviewOut": {
+        "type": "object",
+        "desc": "AI review for profile landing",
+        "from": "ai_review_profile_*.saveAs"
+      },
+      "verifyAfterAssistOut": {
+        "type": "object",
+        "desc": "post assist verify result",
+        "from": "verify_after_assist.saveAs"
+      }
+    }
+  }
+}

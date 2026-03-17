@@ -1,0 +1,248 @@
+{
+  "capabilities": {
+    "must": [
+      "login.check",
+      "read.action",
+      "read.list",
+      "read.fields",
+      "read.requireFields",
+      "read.minItems",
+      "read.output"
+    ],
+    "prefer": [
+      "login.ensure",
+      "read.result"
+    ]
+  },
+  "filters": [
+    { "key": "domain", "value": "s.weibo.com" }
+  ],
+  "flow": {
+    "id": "weibo_search_midbox_login_checked",
+    "start": "open_search_page",
+    "args": {
+      "query": { "type": "string", "required": true, "desc": "搜索关键词" },
+      "minResults": { "type": "number", "required": false, "desc": "至少返回条数（best-effort）" }
+    },
+    "steps": [
+      {
+        "id": "open_search_page",
+        "action": { "type": "goto", "url": "https://s.weibo.com", "postWaitMs": 800 },
+        "next": { "done": "check_login", "failed": "abort_failed" }
+      },
+      {
+        "id": "check_login",
+        "action": {
+          "type": "invoke",
+          "target": "login_check_current",
+          "args": { "login.ensure": false },
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "saveAs": "loginState",
+        "next": { "done": "route_login_status", "failed": "abort_failed" }
+      },
+      {
+        "id": "route_login_status",
+        "action": {
+          "type": "branch",
+          "cases": [
+            { "when": { "op": "truthy", "source": "vars", "path": "loginState.loggedIn" }, "to": "focus_middle_search_input" },
+            { "when": { "op": "truthy", "source": "vars", "path": "loginState.value.loggedIn" }, "to": "focus_middle_search_input" }
+          ],
+          "default": "ask_login_then_retry"
+        },
+        "next": {}
+      },
+      {
+        "id": "ask_login_then_retry",
+        "action": {
+          "type": "ask_assist",
+          "reason": "当前未确认登录。请先在页面完成登录，再点击继续。",
+          "waitUserAction": true
+        },
+        "next": { "done": "recheck_login", "failed": "abort_failed" }
+      },
+      {
+        "id": "recheck_login",
+        "action": {
+          "type": "invoke",
+          "target": "login_check_current",
+          "args": { "login.ensure": false },
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "saveAs": "loginState",
+        "next": { "done": "route_login_status_2", "failed": "abort_failed" }
+      },
+      {
+        "id": "route_login_status_2",
+        "action": {
+          "type": "branch",
+          "cases": [
+            { "when": { "op": "truthy", "source": "vars", "path": "loginState.loggedIn" }, "to": "focus_middle_search_input" },
+            { "when": { "op": "truthy", "source": "vars", "path": "loginState.value.loggedIn" }, "to": "focus_middle_search_input" }
+          ],
+          "default": "abort_not_logged_in"
+        },
+        "next": {}
+      },
+      {
+        "id": "focus_middle_search_input",
+        "action": {
+          "type": "click",
+          "query": "页面中部更大的搜索文本框（不是顶部导航条的搜索输入框）",
+          "postWaitMs": 200
+        },
+        "next": { "done": "input_query", "failed": "ask_assist_focus" }
+      },
+      {
+        "id": "ask_assist_focus",
+        "action": {
+          "type": "ask_assist",
+          "reason": "请手动点击页面中部更大的搜索输入框（不要点顶部导航栏搜索框），然后继续。",
+          "waitUserAction": true
+        },
+        "next": { "done": "input_query", "failed": "abort_failed" }
+      },
+      {
+        "id": "input_query",
+        "action": {
+          "type": "input",
+          "text": "${query}",
+          "mode": "paste",
+          "clear": true,
+          "pressEnter": true,
+          "postWaitMs": 1500
+        },
+        "next": { "done": "wait_results_ready", "failed": "abort_failed" }
+      },
+      {
+        "id": "wait_results_ready",
+        "action": {
+          "type": "wait",
+          "query": "微博搜索结果列表（帖子卡片）",
+          "state": "present",
+          "scope": "current",
+          "timeoutMs": 12000,
+          "pollMs": 300
+        },
+        "next": { "done": "read_results", "timeout": "read_results", "failed": "read_results" }
+      },
+      {
+        "id": "read_results",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": ["read.list", "read.action"],
+            "prefer": ["read.fields", "read.requireFields", "read.minItems", "read.output"],
+            "filter": [
+              { "key": "domain", "value": "s.weibo.com" },
+              { "key": "domain", "value": "*" }
+            ]
+          },
+          "args": {
+            "read.action": "list",
+            "read.minItems": "${minResults}",
+            "read.fields": ["postId", "url", "text", "authorId", "authorName", "publishTime", "likeCount", "commentCount", "repostCount", "media"],
+            "read.requireFields": ["url", "text"],
+            "read.output": "json"
+          },
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "saveAs": "searchResult",
+        "next": { "done": "ensure_results", "failed": "abort_failed" }
+      },
+      {
+        "id": "ensure_results",
+        "action": {
+          "type": "branch",
+          "cases": [
+            { "when": { "op": "truthy", "source": "vars", "path": "searchResult.items" }, "to": "done" },
+            { "when": { "op": "truthy", "source": "vars", "path": "searchResult.urls" }, "to": "done" }
+          ],
+          "default": "scroll_then_retry"
+        },
+        "next": {}
+      },
+      {
+        "id": "scroll_then_retry",
+        "action": { "type": "scroll", "y": 1200, "postWaitMs": 1200 },
+        "next": { "done": "read_results_retry", "failed": "abort_failed" }
+      },
+      {
+        "id": "read_results_retry",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": ["read.list", "read.action"],
+            "prefer": ["read.fields", "read.requireFields", "read.minItems", "read.output"],
+            "filter": [
+              { "key": "domain", "value": "s.weibo.com" },
+              { "key": "domain", "value": "*" }
+            ]
+          },
+          "args": {
+            "read.action": "list",
+            "read.minItems": "${minResults}",
+            "read.fields": ["postId", "url", "text", "authorId", "authorName", "publishTime", "likeCount", "commentCount", "repostCount", "media"],
+            "read.requireFields": ["url", "text"],
+            "read.output": "json"
+          },
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "saveAs": "searchResult",
+        "next": { "done": "ensure_results_retry", "failed": "abort_failed" }
+      },
+      {
+        "id": "ensure_results_retry",
+        "action": {
+          "type": "branch",
+          "cases": [
+            { "when": { "op": "truthy", "source": "vars", "path": "searchResult.items" }, "to": "done" },
+            { "when": { "op": "truthy", "source": "vars", "path": "searchResult.urls" }, "to": "done" }
+          ],
+          "default": "abort_no_results"
+        },
+        "next": {}
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "weibo search completed with list results",
+          "conclusion": "${vars.searchResult}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_not_logged_in",
+        "action": {
+          "type": "abort",
+          "reason": "not logged in after interactive assist"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_no_results",
+        "action": {
+          "type": "abort",
+          "reason": "weibo list still empty after retry"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_failed",
+        "action": {
+          "type": "abort",
+          "reason": "search flow failed"
+        },
+        "next": {}
+      }
+    ]
+  }
+}

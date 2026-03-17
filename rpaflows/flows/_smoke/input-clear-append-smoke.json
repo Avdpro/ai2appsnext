@@ -1,0 +1,115 @@
+{
+  "id": "input_clear_append_smoke",
+  "start": "wait_editor",
+  "steps": [
+    {
+      "id": "wait_editor",
+      "action": {
+        "type": "wait",
+        "query": "id 为 editor 的 textarea 输入框"
+      },
+      "next": { "done": "seed_clear", "failed": "abort", "timeout": "abort" }
+    },
+    {
+      "id": "seed_clear",
+      "action": {
+        "type": "input",
+        "query": "id 为 editor 的 textarea 输入框",
+        "text": "BASE",
+        "mode": "type",
+        "clear": true
+      },
+      "next": { "done": "append_a", "failed": "abort" }
+    },
+    {
+      "id": "append_a",
+      "action": {
+        "type": "input",
+        "query": "id 为 editor 的 textarea 输入框",
+        "text": "-A",
+        "mode": "type",
+        "clear": false,
+        "caret": "end"
+      },
+      "next": { "done": "append_b", "failed": "abort" }
+    },
+    {
+      "id": "append_b",
+      "action": {
+        "type": "input",
+        "query": "id 为 editor 的 textarea 输入框",
+        "text": "-B",
+        "mode": "type",
+        "clear": false,
+        "caret": "end"
+      },
+      "next": { "done": "overwrite", "failed": "abort" }
+    },
+    {
+      "id": "overwrite",
+      "action": {
+        "type": "input",
+        "query": "id 为 editor 的 textarea 输入框",
+        "text": "RESET",
+        "mode": "type",
+        "clear": true
+      },
+      "next": { "done": "append_c", "failed": "abort" }
+    },
+    {
+      "id": "append_c",
+      "action": {
+        "type": "input",
+        "query": "id 为 editor 的 textarea 输入框",
+        "text": "+C",
+        "mode": "type",
+        "clear": false,
+        "caret": "end"
+      },
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(){ const editor = document.querySelector('#editor'); const other = document.querySelector('#other'); const text = String(editor && editor.value || ''); const otherText = String(other && other.value || ''); return { ok: text === 'RESET+C' && otherText === '', text, otherText }; }"
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "input clear/append smoke passed",
+        "conclusion": "${{ ({ ok: true, text: vars.verifyOut.text, otherText: vars.verifyOut.otherText }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: editor=${vars.verifyOut.text}; other=${vars.verifyOut.otherText}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "input clear/append smoke failed"
+      }
+    }
+  ]
+}

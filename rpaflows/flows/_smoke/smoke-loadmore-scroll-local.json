@@ -1,0 +1,79 @@
+{
+  "id": "smoke_loadmore_scroll_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/loadmore/infinite-scroll-load.html",
+        "waitBy": "css: #feed",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "invoke", "failed": "abort" }
+    },
+    {
+      "id": "invoke",
+      "action": {
+        "type": "invoke",
+        "find": {
+          "kind": "rpa",
+          "must": ["loadMore"],
+          "prefer": ["loadMore.result"]
+        },
+        "args": {
+          "loadMore.target.selector": "#feed",
+          "loadMore.minNewItems": 6,
+          "loadMore.maxTries": 4
+        },
+        "returnTo": "caller",
+        "onError": "fail"
+      },
+      "saveAs": "invokeOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(){ const count=document.querySelectorAll('#feed .item').length; return { ok: count>=21, count }; }"
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke loadmore scroll local passed",
+        "conclusion": "${{ ({ ok:true, count:vars.verifyOut.count, invoke:vars.invokeOut||null }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: count=${vars.verifyOut.count}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke loadmore scroll local failed"
+      }
+    }
+  ]
+}

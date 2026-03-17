@@ -1,0 +1,120 @@
+{
+  "id": "smoke_input_clear_append_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/input/clear-append.html",
+        "waitBy": "css: #editor",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "focus", "failed": "abort" }
+    },
+    {
+      "id": "focus",
+      "action": {
+        "type": "click",
+        "by": "css: #editor"
+      },
+      "next": { "done": "seed_clear", "failed": "abort" }
+    },
+    {
+      "id": "seed_clear",
+      "action": {
+        "type": "input",
+        "text": "BASE",
+        "mode": "type",
+        "clear": true
+      },
+      "next": { "done": "append_a", "failed": "abort" }
+    },
+    {
+      "id": "append_a",
+      "action": {
+        "type": "input",
+        "text": "-A",
+        "mode": "type",
+        "clear": false,
+        "caret": "end"
+      },
+      "next": { "done": "append_b", "failed": "abort" }
+    },
+    {
+      "id": "append_b",
+      "action": {
+        "type": "input",
+        "text": "-B",
+        "mode": "type",
+        "clear": false,
+        "caret": "end"
+      },
+      "next": { "done": "overwrite", "failed": "abort" }
+    },
+    {
+      "id": "overwrite",
+      "action": {
+        "type": "input",
+        "text": "RESET",
+        "mode": "type",
+        "clear": true
+      },
+      "next": { "done": "append_c", "failed": "abort" }
+    },
+    {
+      "id": "append_c",
+      "action": {
+        "type": "input",
+        "text": "+C",
+        "mode": "type",
+        "clear": false,
+        "caret": "end"
+      },
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(){ const editor=document.querySelector('#editor'); const other=document.querySelector('#other'); const text=String(editor&&editor.value||''); const otherText=String(other&&other.value||''); return { ok:text==='RESET+C'&&otherText==='', text, otherText }; }"
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke input clear/append local passed",
+        "conclusion": "${{ ({ ok:true, text:vars.verifyOut.text, otherText:vars.verifyOut.otherText }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: editor=${vars.verifyOut.text}; other=${vars.verifyOut.otherText}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke input clear/append local failed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "id": "smoke_read_profile_xhs",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "https://www.xiaohongshu.com/",
+        "waitTimeoutMs": 20000
+      },
+      "next": { "done": "ensure_login", "failed": "ensure_login" }
+    },
+    {
+      "id": "ensure_login",
+      "action": {
+        "type": "invoke",
+        "target": "login_check_ensure",
+        "args": {
+          "login.ensure": true
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "loginOut",
+      "next": { "done": "invoke_nav_profile", "failed": "abort_login" }
+    },
+    {
+      "id": "invoke_nav_profile",
+      "action": {
+        "type": "invoke",
+        "target": "nav_generic",
+        "args": {
+          "nav.dest": "profile"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "navOut",
+      "next": { "done": "invoke_read_profile", "failed": "assist_to_profile" }
+    },
+    {
+      "id": "assist_to_profile",
+      "action": {
+        "type": "ask_assist",
+        "reason": "请手动进入你的小红书个人主页（我的主页），完成后点击“已处理，继续”。",
+        "waitUserAction": true,
+        "modal": false,
+        "mask": false
+      },
+      "next": { "done": "invoke_read_profile", "failed": "abort" }
+    },
+    {
+      "id": "invoke_read_profile",
+      "action": {
+        "type": "invoke",
+        "target": "read_profile_generic",
+        "args": {
+          "read.action": "profile",
+          "read.fields": ["name", "bio", "followers", "following", "verified", "profileUrl", "avatarUrl"],
+          "read.requireFields": ["name", "profileUrl"]
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "profileOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; const d=(o.data&&typeof o.data==='object')?o.data:{}; const name=String(d.name||'').trim(); const url=String(d.profileUrl||'').trim(); const missing=Array.isArray(o.missingFields)?o.missingFields:[]; const ok=!!name && !!url && missing.length===0; return { ok, name, url, missing, data:d }; }",
+        "args": ["${vars.profileOut}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke read profile xhs passed",
+        "conclusion": "${{ ({ ok:true, nav: vars.navOut || null, profile: vars.profileOut || null, verify: vars.verifyOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort_login",
+      "action": {
+        "type": "abort",
+        "reason": "smoke read profile xhs failed: login.ensure failed"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke read profile xhs failed"
+      }
+    }
+  ]
+}

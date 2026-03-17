@@ -1,0 +1,56 @@
+{
+  "id": "mini_search_input_only",
+  "start": "focus_search_input",
+  "args": {
+    "query": {
+      "type": "string",
+      "required": true,
+      "desc": "搜索关键词或查询语句"
+    }
+  },
+  "steps": [
+    {
+      "id": "focus_search_input",
+      "desc": "定位并点击页面上的搜索输入框",
+      "action": {
+        "type": "click",
+        "query": "search input box"
+      },
+      "next": {
+        "done": "input_query",
+        "failed": "abort"
+      }
+    },
+    {
+      "id": "input_query",
+      "desc": "输入关键词并回车提交",
+      "action": {
+        "type": "input",
+        "text": "${query}",
+        "mode": "paste",
+        "clear": true,
+        "pressEnter": true,
+        "postWaitMs": 500
+      },
+      "next": {
+        "done": "done",
+        "failed": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "mini search flow completed",
+        "conclusion": "已完成点击搜索框并输入查询"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "mini search flow failed"
+      }
+    }
+  ]
+}

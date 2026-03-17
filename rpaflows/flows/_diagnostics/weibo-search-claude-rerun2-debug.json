@@ -1,0 +1,438 @@
+{
+  "capabilities": {
+    "must": [
+      "blockers.clear",
+      "loadMore",
+      "loadMore.maxTries",
+      "loadMore.minNewItems",
+      "loadMore.target",
+      "login.check",
+      "login.ensure",
+      "login.interactive",
+      "read.action",
+      "read.fields",
+      "read.list",
+      "read.minItems",
+      "read.output",
+      "read.requireFields",
+      "read.target",
+      "url"
+    ],
+    "prefer": []
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "s.weibo.com"
+    }
+  ],
+  "flow": {
+    "id": "weibo_search_and_read",
+    "start": "open_weibo_search",
+    "args": {
+      "query": {
+        "type": "string",
+        "required": true,
+        "desc": "搜索关键词"
+      },
+      "minItems": {
+        "type": "number",
+        "required": false,
+        "desc": "最少获取微博条数，默认10"
+      },
+      "scrollRounds": {
+        "type": "number",
+        "required": false,
+        "desc": "最大滚动加载轮数，默认5"
+      },
+      "timeout": {
+        "type": "number",
+        "required": false,
+        "desc": "整体超时毫秒数，默认60000"
+      }
+    },
+    "steps": [
+      {
+        "id": "open_weibo_search",
+        "action": {
+          "type": "goto",
+          "url": "https://s.weibo.com",
+          "postWaitMs": 2000
+        },
+        "next": {
+          "done": "check_login",
+          "failed": "abort_open_failed"
+        }
+      },
+      {
+        "id": "abort_open_failed",
+        "action": {
+          "type": "abort",
+          "reason": "无法打开微博搜索页面 s.weibo.com"
+        }
+      },
+      {
+        "id": "check_login",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "login.check"
+            ],
+            "prefer": [
+              "domain"
+            ]
+          },
+          "args": {
+            "login.check": true,
+            "login.ensure": true,
+            "url": "https://s.weibo.com"
+          },
+          "onError": "return",
+          "timeoutMs": 15000
+        },
+        "saveAs": "login_result",
+        "next": {
+          "done": "branch_login",
+          "failed": "branch_login"
+        }
+      },
+      {
+        "id": "branch_login",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "login_result.login.check.result",
+                "value": "logged_in"
+              },
+              "to": "click_main_search_box"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "login_result.login.check.result",
+                "value": "login_required"
+              },
+              "to": "do_interactive_login"
+            }
+          ],
+          "default": "click_main_search_box"
+        }
+      },
+      {
+        "id": "do_interactive_login",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "login.interactive"
+            ],
+            "prefer": [
+              "domain"
+            ]
+          },
+          "args": {
+            "login.interactive": true,
+            "login.ensure": true,
+            "url": "https://s.weibo.com"
+          },
+          "onError": "return",
+          "timeoutMs": 120000
+        },
+        "saveAs": "interactive_login_result",
+        "next": {
+          "done": "branch_after_login",
+          "failed": "ask_login_help"
+        }
+      },
+      {
+        "id": "branch_after_login",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "interactive_login_result.login.ensure.result",
+                "value": "logged_in"
+              },
+              "to": "click_main_search_box"
+            }
+          ],
+          "default": "ask_login_help"
+        }
+      },
+      {
+        "id": "ask_login_help",
+        "action": {
+          "type": "ask_assist",
+          "reason": "无法自动完成登录，请手动登录微博后继续",
+          "waitUserAction": true,
+          "persistAcrossNav": true,
+          "persistTtlMs": 120000
+        },
+        "next": {
+          "done": "click_main_search_box",
+          "failed": "abort_login_failed"
+        }
+      },
+      {
+        "id": "abort_login_failed",
+        "action": {
+          "type": "abort",
+          "reason": "未能完成微博登录，流程终止"
+        }
+      },
+      {
+        "id": "click_main_search_box",
+        "action": {
+          "type": "click",
+          "query": "页面中部居中的大搜索输入框，不是顶部导航栏的小搜索框",
+          "expectInputFocus": true,
+          "postWaitMs": 500
+        },
+        "next": {
+          "done": "input_search_query",
+          "failed": "ask_assist_search_box"
+        }
+      },
+      {
+        "id": "ask_assist_search_box",
+        "action": {
+          "type": "ask_assist",
+          "reason": "无法定位页面中部的主搜索框，请点击页面中部较大的搜索输入框",
+          "waitUserAction": true,
+          "persistAcrossNav": false,
+          "persistTtlMs": 30000
+        },
+        "next": {
+          "done": "input_search_query",
+          "failed": "abort_no_search_box"
+        }
+      },
+      {
+        "id": "abort_no_search_box",
+        "action": {
+          "type": "abort",
+          "reason": "无法定位微博搜索框，流程终止"
+        }
+      },
+      {
+        "id": "input_search_query",
+        "action": {
+          "type": "input",
+          "text": "${args.query}",
+          "clear": true,
+          "pressEnter": true,
+          "postWaitMs": 2000
+        },
+        "next": {
+          "done": "wait_for_results",
+          "failed": "fallback_click_search_btn"
+        }
+      },
+      {
+        "id": "fallback_click_search_btn",
+        "action": {
+          "type": "click",
+          "query": "搜索按钮",
+          "intent": "submit",
+          "postWaitMs": 2000
+        },
+        "next": {
+          "done": "wait_for_results",
+          "failed": "abort_search_submit_failed"
+        }
+      },
+      {
+        "id": "abort_search_submit_failed",
+        "action": {
+          "type": "abort",
+          "reason": "搜索提交失败，无法触发搜索"
+        }
+      },
+      {
+        "id": "wait_for_results",
+        "action": {
+          "type": "wait",
+          "query": "微博搜索结果列表容器",
+          "state": "visible",
+          "timeoutMs": 10000,
+          "pollMs": 500
+        },
+        "next": {
+          "done": "clear_blockers",
+          "failed": "clear_blockers"
+        }
+      },
+      {
+        "id": "clear_blockers",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "blockers.clear"
+            ],
+            "prefer": [
+              "domain"
+            ]
+          },
+          "args": {
+            "blockers.clear": true
+          },
+          "onError": "return",
+          "timeoutMs": 10000
+        },
+        "saveAs": "blocker_result",
+        "next": {
+          "done": "read_weibo_list",
+          "failed": "read_weibo_list"
+        }
+      },
+      {
+        "id": "read_weibo_list",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "read.list"
+            ],
+            "prefer": [
+              "loadMore"
+            ]
+          },
+          "args": {
+            "read.action": "list",
+            "read.target": "微博搜索结果列表",
+            "read.fields": [
+              "postId",
+              "url",
+              "text",
+              "authorName",
+              "authorId",
+              "publishTime",
+              "likeCount",
+              "commentCount",
+              "repostCount",
+              "media"
+            ],
+            "read.requireFields": [
+              "text",
+              "authorName"
+            ],
+            "read.minItems": "${{ args.minItems || 10 }}",
+            "read.output": "json",
+            "loadMore.target": "微博搜索结果页面",
+            "loadMore.maxTries": "${{ args.scrollRounds || 5 }}",
+            "loadMore.minNewItems": 3
+          },
+          "onError": "fail",
+          "timeoutMs": "${{ args.timeout || 60000 }}"
+        },
+        "saveAs": "weibo_list_result",
+        "next": {
+          "done": "finish_done",
+          "failed": "fallback_read_ai"
+        }
+      },
+      {
+        "id": "fallback_read_ai",
+        "action": {
+          "type": "readPage",
+          "field": {
+            "html": true,
+            "url": true
+          }
+        },
+        "saveAs": "page_snapshot",
+        "next": {
+          "done": "ai_extract_fallback",
+          "failed": "abort_read_failed"
+        }
+      },
+      {
+        "id": "ai_extract_fallback",
+        "action": {
+          "type": "run_ai",
+          "prompt": "从以下微博搜索结果页面HTML中提取微博帖子列表。每条微博提取：postId, url, text(正文), authorName, authorId, publishTime, likeCount, commentCount, repostCount, media(图片/视频链接数组)。返回JSON数组。",
+          "input": "${vars.page_snapshot}",
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "postId": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "authorName": {
+                  "type": "string"
+                },
+                "authorId": {
+                  "type": "string"
+                },
+                "publishTime": {
+                  "type": "string"
+                },
+                "likeCount": {
+                  "type": "number"
+                },
+                "commentCount": {
+                  "type": "number"
+                },
+                "repostCount": {
+                  "type": "number"
+                },
+                "media": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "page": {
+            "html": true
+          },
+          "model": "balanced"
+        },
+        "saveAs": "weibo_list_result",
+        "next": {
+          "done": "finish_done",
+          "failed": "abort_read_failed"
+        }
+      },
+      {
+        "id": "abort_read_failed",
+        "action": {
+          "type": "abort",
+          "reason": "无法读取微博搜索结果列表"
+        }
+      },
+      {
+        "id": "finish_done",
+        "action": {
+          "type": "done",
+          "reason": "微博搜索完成，已获取搜索结果列表",
+          "conclusion": "${vars.weibo_list_result}"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "blockers_check_current",
+  "start": "invoke",
+  "steps": [
+    {
+      "id": "invoke",
+      "action": {
+        "type": "invoke",
+        "find": {
+          "kind": "rpa",
+          "must": ["blockers.check"],
+          "prefer": ["blockers.clear", "blockers.check.result"],
+          "filter": [
+            { "key": "domain", "value": "*" },
+            { "key": "locale", "value": "zh-CN" }
+          ],
+          "rank": "quality,speed"
+        },
+        "args": {
+          "blockers.clear": "${blockers.clear}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "blockerOut",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "blockers check done",
+        "conclusion": "${vars.blockerOut}"
+      },
+      "next": {}
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "blockers check failed" },
+      "next": {}
+    }
+  ]
+}

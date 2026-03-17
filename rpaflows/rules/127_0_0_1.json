@@ -1,0 +1,179 @@
+{
+	"zh-CN": {
+		"elements": {
+			"sig:a0662158e4a41959": {
+				"value": [
+					"css: a.open-link"
+				],
+				"pending": false,
+				"time": 1771418255705,
+				"queries": [
+					"scope:http://127.0.0.1:8787|q:打开详情链接"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"keys": [
+					"interact_open_resolve_control_query__67e757fd3f33"
+				]
+			},
+			"sig:bb615ea63deb5574": {
+				"value": [
+					"css: .wrap .item"
+				],
+				"pending": false,
+				"time": 1771418332524,
+				"queries": [
+					"scope:http://127.0.0.1:8787|q:列表中的帖子/条目容器"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"keys": [
+					"interact_open_resolve_target_query__6642077962a1"
+				]
+			},
+			"sig:9fea1ed5907c6de7": {
+				"value": [
+					"css: nav a[href='/nav/inbox.html']"
+				],
+				"pending": false,
+				"time": 1771420184151,
+				"queries": [
+					"scope:http://127.0.0.1:8787|q:导航到「消息」的入口（链接/按钮/菜单项）"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=消息 Inbox|anchor:c=main|chain=none",
+				"keys": [
+					"nav_generic_resolve_auto_query__08a5564a79b3"
+				]
+			},
+			"sig:357f14986f989dee": {
+				"value": [
+					"css: #avatarBtn"
+				],
+				"pending": false,
+				"time": 1771430977976,
+				"queries": [
+					"scope:http://127.0.0.1:8787|q:若仍未到达个人主页，继续查找“查看个人主页/我的主页/Profile page/Account center”等入口并点击",
+					"scope:http://127.0.0.1:8787|q:在当前页面继续定位可进入“个人主页/Profile/Account”页面的按钮或菜单项；优先含“主页/个人/Profile/Account/Me”文本",
+					"scope:http://127.0.0.1:8787|q:打开“个人主页/我的主页/Profile/Account/Me”入口（可能在头像、用户名、侧边栏菜单或下拉菜单中）"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:id=avatarBtn|a11y:aria=用户头像菜单;txt=用户头像菜单|anchor:c=main|chain=none",
+				"keys": [
+					"nav_generic_resolve_profile_query_3__d0929bfb9953",
+					"nav_generic_resolve_profile_query_1__a5de68f3b6d2"
+				]
+			},
+			"sig:e6ad23b41893735e": {
+				"value": [
+					"css: a.profile-link[href='/nav/profile-page.html']"
+				],
+				"pending": false,
+				"time": 1771431155190,
+				"queries": [
+					"scope:http://127.0.0.1:8787|q:在当前页面继续定位可进入“个人主页/Profile/Account”页面的按钮或菜单项；优先含“主页/个人/Profile/Account/Me”文本"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=查看个人主页|anchor:c=main|chain=none",
+				"keys": [
+					"nav_generic_resolve_profile_query_2__16165c7b3881"
+				]
+			},
+			"sig:7c74a650cf8c01af": {
+				"value": [
+					"css: a#open-profile"
+				],
+				"pending": false,
+				"time": 1771431466285,
+				"queries": [
+					"scope:http://127.0.0.1:8787|q:打开个人主页链接"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:id=open-profile|a11y:txt=打开个人主页|anchor:c=none|chain=none",
+				"keys": [
+					"read_profile_generic_resolve_target_query__72815b4a4e82"
+				]
+			}
+		},
+		"ruleMap": {
+			"read_list_generic_ai_extract_list_run_js": {
+				"code": {
+					"text": "function(config){\n  const cfg=config&&typeof config==='object'?config:{};\n  const pageUrl=(typeof location!=='undefined'&&location.href)?location.href:(cfg.page&&cfg.page.url)||'';\n  const q=String(cfg.query||cfg.searchQuery||'').trim().toLowerCase();\n  const minItems=Math.max(1,Math.min(50,Number(cfg.minItems||1)));\n  const requireFields=Array.isArray(cfg.requireFields)?cfg.requireFields:[];\n  const target=cfg.target&&typeof cfg.target==='object'?cfg.target:{};\n\n  const normSpace=s=>String(s||'').replace(/\\s+/g,' ').trim();\n  const textOf=el=>{ if(!el) return ''; const t=normSpace(el.innerText||el.textContent||''); return t; };\n  const toAbs=u=>{ u=String(u||'').trim(); if(!u) return ''; try{ return new URL(u,pageUrl).href; }catch(e){ return ''; } };\n  const isBadText=t=>{ t=(t||'').toLowerCase(); return /\\b(login|sign\\s?in|sign\\s?up|register|privacy|terms|cookie|help|feedback|about|advert|sponsor)\\b/.test(t)||/登录|注册|隐私|条款|帮助|反馈|广告|推荐/.test(t); };\n  const isInBadRegion=el=>{ for(let n=el;n&&n.nodeType===1;n=n.parentElement){ const tag=(n.tagName||'').toLowerCase(); if(['header','nav','footer','aside'].includes(tag)) return true; const id=(n.id||'').toLowerCase(); const cls=(n.className||'').toString().toLowerCase(); if(/\\b(sidebar|sidenav|nav|footer|header|masthead|menu|breadcrumb|cookie|consent|modal|dialog|login|signup|register|help|policy|privacy|terms|advert|ads|sponsor|recommend|related)\\b/.test(id+' '+cls)) return true; }\n    return false;\n  };\n\n  const pickItems=(items,pick)=>{\n    if(pick===undefined||pick===null||pick==='') return items;\n    if(typeof pick==='number'&&isFinite(pick)){\n      if(pick===-1) return items.length?[items[items.length-1]]:[];\n      const idx=Math.max(1,Math.floor(pick))-1;\n      return items[idx]?[items[idx]]:[];\n    }\n    if(typeof pick==='string'){\n      const s=pick.toLowerCase();\n      for(const it of items){ const t=(it&&it.__text||'').toLowerCase(); if(t.includes(s)) return [it]; }\n      return [];\n    }\n    return items;\n  };\n\n  const extractFromItemEl=el=>{\n    const a=el.querySelector('a[href]');\n    let url=a?toAbs(a.getAttribute('href')):'';\n    let title='';\n    if(a) title=normSpace(a.getAttribute('title')||textOf(a));\n    if(!title){\n      const h=el.querySelector('h1,h2,h3,h4,strong,b,[role=\"heading\"]');\n      title=normSpace(textOf(h)||'');\n    }\n    if(!title) title=normSpace(textOf(el).split('\\n')[0]||'');\n    let summary='';\n    const ps=Array.from(el.querySelectorAll('p,div,span')).filter(x=>x&&x!==a);\n    for(const n of ps){\n      const t=normSpace(textOf(n));\n      if(!t||t===title) continue;\n      if(t.length>=6){ summary=t; break; }\n    }\n    if(!summary){\n      const t=normSpace(textOf(el));\n      summary=t&&t!==title?t.slice(0,240):'';\n    }\n    if(isBadText(title+' '+summary)) return null;\n    return {url:url||'',title:title||'',summary:summary||''};\n  };\n\n  const findNextCursor=(root)=>{\n    const scope=root||document;\n    const links=Array.from(scope.querySelectorAll('a[href]')).filter(a=>!isInBadRegion(a));\n    const cur=pageUrl||'';\n    const cand=[];\n    for(const a of links){\n      const t=normSpace((a.getAttribute('aria-label')||'')+' '+textOf(a)).toLowerCase();\n      if(!t) continue;\n      if(/\\b(next|older|more)\\b/.test(t)||/下一页|下页|更多|下一章|后页/.test(t)||/\\bpage\\s*\\d+\\b/.test(t)){\n        const href=toAbs(a.getAttribute('href'));\n        if(href&&href!==cur) cand.push({href,score:(/next|下一页/.test(t)?3:1)+(a.closest('[aria-label*=\"pagination\"],[class*=\"pag\"],[id*=\"pag\"],nav')?1:0)});\n      }\n    }\n    cand.sort((x,y)=>y.score-x.score);\n    return cand[0]?cand[0].href:null;\n  };\n\n  const resolveTargetRoot=()=>{\n    let root=null;\n    const by=String(target.by||'').toLowerCase();\n    const sel=String(target.selector||'').trim();\n    const query=String(target.query||'').trim();\n    if(sel){ try{ root=document.querySelector(sel); }catch(e){} }\n    if(!root&&query){ try{ root=document.querySelector(query); }catch(e){} }\n    if(!root&&by==='query'&&query){ try{ root=document.querySelector(query); }catch(e){} }\n    if(!root&&by==='selector'&&sel){ try{ root=document.querySelector(sel); }catch(e){} }\n    return root;\n  };\n\n  const scoreContainer=(c)=>{\n    if(!c||isInBadRegion(c)) return -1;\n    const items=Array.from(c.children||[]).filter(x=>x&&x.nodeType===1);\n    if(items.length<2) return -1;\n    const tag=(c.tagName||'').toLowerCase();\n    let s=0;\n    if(tag==='ul'||tag==='ol') s+=2;\n    const cls=(c.className||'').toString().toLowerCase();\n    const id=(c.id||'').toLowerCase();\n    if(/\\b(result|results|list|items|feed|content|main)\\b/.test(cls+' '+id)) s+=2;\n    const sameClass=items.filter(it=>it.className&&it.className===items[0].className).length;\n    s+=Math.min(6,items.length);\n    s+=sameClass>=Math.max(2,Math.floor(items.length*0.6))?2:0;\n    const linkCount=items.reduce((acc,it)=>acc+(it.querySelector('a[href]')?1:0),0);\n    s+=linkCount>=Math.max(1,Math.floor(items.length*0.4))?2:0;\n    if(q){\n      const t=textOf(c).toLowerCase();\n      if(t.includes(q)) s+=1;\n    }\n    return s;\n  };\n\n  const collectItemsFromContainer=(container)=>{\n    if(!container) return [];\n    let itemEls=[];\n    const tag=(container.tagName||'').toLowerCase();\n    if(tag==='ul'||tag==='ol') itemEls=Array.from(container.querySelectorAll(':scope > li'));\n    if(!itemEls.length) itemEls=Array.from(container.children||[]).filter(n=>n&&n.nodeType===1);\n    if(itemEls.length>80) itemEls=itemEls.slice(0,80);\n    const out=[];\n    for(const el of itemEls){\n      if(!el||isInBadRegion(el)) continue;\n      const t=textOf(el);\n      const rec=extractFromItemEl(el);\n      if(!rec) continue;\n      const obj={url:rec.url,title:rec.title,summary:rec.summary,__text:t};\n      out.push(obj);\n      if(out.length>=50) break;\n    }\n    return out;\n  };\n\n  const applyOutputRules=(items)=>{\n    let arr=items.map(it=>({url:String(it.url||''),title:String(it.title||''),summary:String(it.summary||''),__text:it.__text||''}));\n    if(q) arr=arr.filter(it=>(it.title+' '+it.summary+' '+it.url).toLowerCase().includes(q));\n    if(cfg.filter&&typeof cfg.filter==='object'){\n      const f=cfg.filter;\n      if(typeof f.include==='string'&&f.include.trim()){\n        const inc=f.include.toLowerCase();\n        arr=arr.filter(it=>(it.title+' '+it.summary+' '+it.url).toLowerCase().includes(inc));\n      }\n      if(typeof f.exclude==='string'&&f.exclude.trim()){\n        const exc=f.exclude.toLowerCase();\n        arr=arr.filter(it=>!(it.title+' '+it.summary+' '+it.url).toLowerCase().includes(exc));\n      }\n    }\n    if(cfg.sort&&typeof cfg.sort==='object'){\n      const s=cfg.sort;\n      const by=String(s.by||'').toLowerCase();\n      const dir=String(s.dir||'asc').toLowerCase()==='desc'?-1:1;\n      if(by==='title'||by==='url'||by==='summary') arr.sort((a,b)=>a[by].localeCompare(b[by])*dir);\n    }\n    arr=pickItems(arr,target.pick);\n    arr=arr.map(it=>({url:it.url||'',title:it.title||'',summary:it.summary||''}));\n    if(requireFields.length){\n      arr=arr.filter(it=>requireFields.every(k=>typeof it[k]==='string'&&it[k].trim()!==''));\n    }\n    return arr.slice(0,50);\n  };\n\n  const attempt=(root)=>{\n    const scope=root||document;\n    const containers=[];\n    const main=scope.querySelector('main')||scope.querySelector('[role=\"main\"]')||scope.querySelector('#content')||scope.querySelector('.content')||scope.body||document.body;\n    const base=main||scope;\n    const cand=Array.from(base.querySelectorAll('ul,ol,[role=\"list\"],section,div'));\n    for(const c of cand){\n      if(!c||isInBadRegion(c)) continue;\n      const sc=scoreContainer(c);\n      if(sc>=4) containers.push({c,sc});\n    }\n    containers.sort((a,b)=>b.sc-a.sc);\n    const top=containers.slice(0,6);\n    for(const {c} of top){\n      const items=collectItemsFromContainer(c);\n      const out=applyOutputRules(items);\n      if(out.length>=Math.min(minItems,3)) return {items:out,root:c};\n    }\n    return {items:[],root:base};\n  };\n\n  const targetRoot=resolveTargetRoot();\n  let r=attempt(targetRoot);\n  if(r.items.length<minItems){\n    const fallbackRoot=(document.querySelector('main')||document.querySelector('[role=\"main\"]')||document.body);\n    r=attempt(fallbackRoot);\n  }\n\n  const nextCursor=findNextCursor(r.root||targetRoot||document);\n  return {action:'list',items:r.items,nextCursor:nextCursor,pageUrl:pageUrl||''};\n}",
+					"time": 1771392402767
+				},
+				"query": "{\"pageScope\":\"http://127.0.0.1:8787\",\"profile\":\"list\",\"scope\":\"page\",\"model\":\"gpt-5.2\",\"fallbackModel\":\"gpt-5-mini\",\"promptVersion\":4,\"temperature\":0,\"htmlMaxLen\":80000,\"retryMax\":2,\"codeMaxChars\":12000,\"codeMaxLines\":260,\"repeatPatternLimit\":12,\"verifyEnabled\":true,\"verifyMaxCycles\":3,\"verifyModel\":\"gpt-5-mini\",\"verifyFallbackModel\":\"gpt-4.1\",\"verifyPromptVersion\":1,\"query\":\"编写一个只读函数，从当前网页提取通用 list（搜索结果/文章列表/消息列表/用户列表）。函数签名 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先识别主内容区域中“重复出现的条目容器”作为候选列表，再逐条抽取。强制排除：header/nav/footer/sidebar、登录/注册、隐私条款、帮助反馈、广告推荐位。返回对象必须是 {action:'list',items:Array,nextCursor:string|null,pageUrl:string}。items 每项至少提供 url/title/summary 三个字符串字段（缺失填空字符串，不要 null），url 优先绝对地址，最多 50 条。对 Google/Bing/百度/小红书等页面，优先真实结果卡片，避免站点导航链接。关键要求：必须理解并应用 config.target（{by,query,selector,pick}）语义；当给出 target.query/selector 时应优先在该目标范围提取列表；当给出 target.pick 时，按 pick 规则（number=第N个，-1最后一个，string=文本包含）选择条目。若 config.query/searchQuery 存在，也需结合其语义缩小目标。config 还包括 minItems/fields/requireFields/filter/sort/output。\"}",
+				"time": 1771392402767
+			},
+			"interact_open_resolve_control_query__67e757fd3f33": {
+				"eid": "sig:a0662158e4a41959",
+				"query": "scope:http://127.0.0.1:8787|q:打开详情链接",
+				"time": 1771418255705
+			},
+			"interact_open_resolve_target_query__6642077962a1": {
+				"eid": "sig:bb615ea63deb5574",
+				"query": "scope:http://127.0.0.1:8787|q:列表中的帖子/条目容器",
+				"time": 1771418332524
+			},
+			"nav_generic_resolve_auto_query__08a5564a79b3": {
+				"eid": "sig:9fea1ed5907c6de7",
+				"query": "scope:http://127.0.0.1:8787|q:导航到「消息」的入口（链接/按钮/菜单项）",
+				"time": 1771420184151
+			},
+			"nav_generic_resolve_profile_query_1__a5de68f3b6d2": {
+				"eid": "sig:357f14986f989dee",
+				"query": "scope:http://127.0.0.1:8787|q:打开“个人主页/我的主页/Profile/Account/Me”入口（可能在头像、用户名、侧边栏菜单或下拉菜单中）",
+				"time": 1771430908782
+			},
+			"nav_generic_resolve_profile_query_2__16165c7b3881": {
+				"eid": "sig:e6ad23b41893735e",
+				"query": "scope:http://127.0.0.1:8787|q:在当前页面继续定位可进入“个人主页/Profile/Account”页面的按钮或菜单项；优先含“主页/个人/Profile/Account/Me”文本",
+				"time": 1771431155190
+			},
+			"nav_generic_resolve_profile_query_3__d0929bfb9953": {
+				"eid": "sig:357f14986f989dee",
+				"query": "scope:http://127.0.0.1:8787|q:若仍未到达个人主页，继续查找“查看个人主页/我的主页/Profile page/Account center”等入口并点击",
+				"time": 1771430977976
+			},
+			"read_profile_generic_resolve_target_query__72815b4a4e82": {
+				"eid": "sig:7c74a650cf8c01af",
+				"query": "scope:http://127.0.0.1:8787|q:打开个人主页链接",
+				"time": 1771431466285
+			},
+			"read_reactions_generic_extract_codegen_run_js": {
+				"code": {
+					"text": "function(config){\n  function txt(el){return (el&&el.textContent?el.textContent:\" \").replace(/\\s+/g,\" \").trim();}\n  function attr(el,n){return el&&el.getAttribute?((el.getAttribute(n)||\"\").trim()):\"\";}\n  function pickRoot(){\n    var t=config&&config.target;\n    if(t){\n      if(typeof t===\"string\"){\n        var r=document.querySelector(t);\n        if(r) return r;\n      }else if(t&&t.nodeType===1){\n        return t;\n      }else if(t&&typeof t===\"object\"){\n        var sel=t.selector||t.query||t.css;\n        if(sel&&typeof sel===\"string\"){\n          var r2=document.querySelector(sel);\n          if(r2) return r2;\n        }\n      }\n    }\n    return document.querySelector('article, main, [role=\"main\"], #content, .content, .post, .article') || document.body;\n  }\n  function scorePanel(root){\n    var panels=Array.from(root.querySelectorAll('#reaction-panel, .reaction, .reactions, .toolbar, .tool-bar, [aria-label*=\"点赞\"], [aria-label*=\"评论\"], [data-testid*=\"favorite\"], [data-testid*=\"like\"], [data-testid*=\"comment\"], [data-testid*=\"share\"], [class*=\"reaction\"], [class*=\"toolbar\"]'));\n    var best=null,bestScore=-1;\n    for(var i=0;i<panels.length;i++){\n      var p=panels[i];\n      var t=txt(p);\n      if(!t) continue;\n      var s=0;\n      if(/点赞|like/i.test(t)) s+=3;\n      if(/评论|comment/i.test(t)) s+=3;\n      if(/转发|分享|share|repost/i.test(t)) s+=2;\n      if(/收藏|favorite|bookmark/i.test(t)) s+=2;\n      if(/浏览|阅读|view/i.test(t)) s+=2;\n      if(p.id===\"reaction-panel\") s+=4;\n      if(s>bestScore){bestScore=s;best=p;}\n    }\n    return best||root;\n  }\n  function parseCounts(root){\n    var data={likes:\"\",comments:\"\",shares:\"\",favorites:\"\",views:\"\",upvotes:\"\",downvotes:\"\",pageUrl:(location&&location.href)||\"\"};\n    var panel=scorePanel(root);\n    var nodes=Array.from(panel.querySelectorAll('button, a, span, div, li'));\n    if(nodes.length<3) nodes=Array.from(root.querySelectorAll('#reaction-panel button, #reaction-panel span, .toolbar button, .toolbar span, [aria-label], [title], [data-testid]'));\n\n    function consider(label,val){\n      if(!val) return;\n      if(label===\"likes\" && !data.likes) data.likes=val;\n      else if(label===\"comments\" && !data.comments) data.comments=val;\n      else if(label===\"shares\" && !data.shares) data.shares=val;\n      else if(label===\"favorites\" && !data.favorites) data.favorites=val;\n      else if(label===\"views\" && !data.views) data.views=val;\n      else if(label===\"upvotes\" && !data.upvotes) data.upvotes=val;\n      else if(label===\"downvotes\" && !data.downvotes) data.downvotes=val;\n    }\n\n    function extractVal(s){\n      s=(s||\"\").replace(/\\s+/g,\" \").trim();\n      var m=s.match(/(?:^|\\b)(\\d+(?:[\\.,]\\d+)?\\s*(?:k|K|m|M|万|亿)?)(?=\\b|$)/);\n      if(m) return m[1].replace(/\\s+/g,\"\");\n      var m2=s.match(/(\\d+(?:[\\.,]\\d+)?\\s*(?:k|K|m|M|万|亿))/);\n      return m2?m2[1].replace(/\\s+/g,\"\"):\"\";\n    }\n\n    for(var i=0;i<nodes.length;i++){\n      var el=nodes[i];\n      var s=[attr(el,\"aria-label\"),attr(el,\"title\"),attr(el,\"data-label\"),txt(el)].filter(Boolean).join(\" \");\n      if(!s) continue;\n      var v=extractVal(s);\n      if(!v) continue;\n      if(/点赞|喜欢|like/i.test(s)) consider(\"likes\",v);\n      if(/评论|comment/i.test(s)) consider(\"comments\",v);\n      if(/转发|分享|share|repost/i.test(s)) consider(\"shares\",v);\n      if(/收藏|favorite|bookmark/i.test(s)) consider(\"favorites\",v);\n      if(/浏览|阅读|view/i.test(s)) consider(\"views\",v);\n      if(/顶|upvote|赞同/i.test(s)) consider(\"upvotes\",v);\n      if(/踩|downvote|反对/i.test(s)) consider(\"downvotes\",v);\n    }\n\n    if(!data.likes||!data.comments||!data.shares||!data.favorites||!data.views){\n      var all=txt(panel);\n      var parts=all.split(/\\s*[|·•]\\s*|\\s{2,}/).filter(Boolean);\n      for(var j=0;j<parts.length;j++){\n        var p=parts[j];\n        var vv=extractVal(p);\n        if(!vv) continue;\n        if(/点赞|喜欢|like/i.test(p)) consider(\"likes\",vv);\n        else if(/评论|comment/i.test(p)) consider(\"comments\",vv);\n        else if(/转发|分享|share|repost/i.test(p)) consider(\"shares\",vv);\n        else if(/收藏|favorite|bookmark/i.test(p)) consider(\"favorites\",vv);\n        else if(/浏览|阅读|view/i.test(p)) consider(\"views\",vv);\n      }\n    }\n\n    return data;\n  }\n\n  var root=pickRoot();\n  var data=parseCounts(root);\n  var filled=(data.likes||data.comments||data.shares||data.favorites||data.views||data.upvotes||data.downvotes);\n  if(!filled){\n    var root2=document.querySelector('#reaction-panel, article, main, [role=\"main\"], body')||document.body;\n    data=parseCounts(root2);\n  }\n  return {action:\"reactions\",data:data};\n}",
+					"time": 1771434203120
+				},
+				"query": "{\"pageScope\":\"http://127.0.0.1:8787\",\"profile\":\"comments\",\"scope\":\"page\",\"model\":\"gpt-5.2\",\"fallbackModel\":\"gpt-5-mini\",\"promptVersion\":4,\"temperature\":0,\"htmlMaxLen\":80000,\"retryMax\":2,\"codeMaxChars\":12000,\"codeMaxLines\":260,\"repeatPatternLimit\":12,\"verifyEnabled\":true,\"verifyMaxCycles\":3,\"verifyModel\":\"gpt-5-mini\",\"verifyFallbackModel\":\"gpt-4.1\",\"verifyPromptVersion\":1,\"query\":\"编写一个只读函数，从当前网页提取单个对象的互动数据。函数签名必须是 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先使用 config.target（selector/query）限定提取范围；未提供时在页面主内容区域提取。返回对象必须是 {action:'reactions',data:{likes:string,comments:string,shares:string,favorites:string,views:string,upvotes:string,downvotes:string,pageUrl:string}}。缺失字段填空字符串，不要 null。若遇到 1.2k/9.8万 等格式，保留原始字符串。\"}",
+				"time": 1771434203120
+			}
+		},
+		"_gcTime": 1771434179082,
+		"_gcRemoved": 0
+	},
+	"en": {
+		"elements": {},
+		"ruleMap": {
+			"webchat_core_get_messages_extract_run_js": {
+				"code": {
+					"text": "function(config){\n  config = config || {};\n  var limit = typeof config.limit === 'number' && isFinite(config.limit) ? Math.max(0, Math.floor(config.limit)) : 50;\n\n  function normRole(raw){\n    raw = (raw || '').toLowerCase().trim();\n    if (raw === 'user' || raw === 'assistant' || raw === 'system' || raw === 'tool') return raw;\n    return 'unknown';\n  }\n\n  function textOf(el){\n    if (!el) return '';\n    var t = '';\n    var tEl = el.querySelector('.text,[data-role=\"text\"],[data-message-role-text]');\n    if (tEl) t = (tEl.innerText || tEl.textContent || '');\n    else t = (el.innerText || el.textContent || '');\n    t = (t || '').replace(/\\r\\n/g,'\\n').replace(/\\u00a0/g,' ').trim();\n    return t;\n  }\n\n  function metaFrom(el){\n    var time = '';\n    var status = '';\n    var meta = el.querySelector('.meta,[data-role=\"meta\"],[data-message-meta]');\n    if (meta){\n      var spans = Array.from(meta.querySelectorAll('span, time'));\n      var parts = spans.map(function(s){ return (s.innerText || s.textContent || '').trim(); }).filter(Boolean);\n      if (parts.length >= 2) time = parts[1] || '';\n      if (parts.length >= 3) status = parts[2] || '';\n      var timeEl = meta.querySelector('time');\n      if (timeEl){\n        var dt = (timeEl.getAttribute('datetime') || '').trim();\n        if (!time && dt) time = dt;\n      }\n    } else {\n      var timeEl2 = el.querySelector('time');\n      if (timeEl2){\n        time = ((timeEl2.getAttribute('datetime') || timeEl2.innerText || timeEl2.textContent || '') + '').trim();\n      }\n    }\n    return {time: time, status: status};\n  }\n\n  function stableId(el, role, index, text){\n    var id = (el.getAttribute('data-message-id') || el.id || el.getAttribute('data-id') || '').trim();\n    if (id) return id;\n    var prefix = (text || '').slice(0, 32);\n    return role + ':' + index + ':' + prefix;\n  }\n\n  function extract(root){\n    var nodes = Array.from(root.querySelectorAll('article[data-role=\"message\"], [data-role=\"message\"], [data-message-role], [role=\"listitem\"]'));\n    nodes = nodes.filter(function(n){\n      if (!n || n.nodeType !== 1) return false;\n      if (n.closest('aside, nav, header, footer')) return false;\n      if (n.closest('[data-role=\"session-list\"], .sidebar')) return false;\n      return true;\n    });\n\n    var items = [];\n    for (var i=0;i<nodes.length;i++){\n      var el = nodes[i];\n      var rawRole = (el.getAttribute('data-message-role') || (el.dataset && el.dataset.messageRole) || (el.dataset && el.dataset.role) || '').trim();\n      if (!rawRole){\n        var cls = (el.className || '').toLowerCase();\n        if (cls.indexOf('assistant') >= 0) rawRole = 'assistant';\n        else if (cls.indexOf('user') >= 0) rawRole = 'user';\n        else if (cls.indexOf('system') >= 0) rawRole = 'system';\n        else if (cls.indexOf('tool') >= 0) rawRole = 'tool';\n      }\n      var role = normRole(rawRole);\n      var text = textOf(el);\n      if (!text) continue;\n      var meta = metaFrom(el);\n      var id = stableId(el, role, items.length, text);\n      items.push({\n        id: String(id),\n        role: String(role),\n        text: String(text),\n        time: String(meta.time || ''),\n        status: String(meta.status || ''),\n        index: items.length\n      });\n    }\n    return items;\n  }\n\n  var root = document.querySelector('[data-role=\"chat-log\"], main [data-role=\"chat-log\"], .chat, #chat-log') || document.querySelector('main') || document.body || document.documentElement;\n  var items = extract(root);\n\n  if (!items.length){\n    var alt = document.querySelector('main') || document.body || document.documentElement;\n    items = extract(alt);\n  }\n\n  if (limit && items.length > limit) items = items.slice(items.length - limit);\n  for (var j=0;j<items.length;j++) items[j].index = j;\n\n  var cursor = items.length ? (items[items.length-1].id || '') : '';\n  return {action:'getMessages',items:items,cursor:String(cursor||'')};\n}",
+					"time": 1771487325309
+				},
+				"query": "{\"pageScope\":\"http://127.0.0.1:8787\",\"profile\":\"list\",\"scope\":\"page\",\"model\":\"gpt-5.2\",\"fallbackModel\":\"gpt-5-mini\",\"promptVersion\":4,\"temperature\":0,\"htmlMaxLen\":80000,\"retryMax\":2,\"codeMaxChars\":12000,\"codeMaxLines\":260,\"repeatPatternLimit\":12,\"verifyEnabled\":true,\"verifyMaxCycles\":3,\"verifyModel\":\"gpt-5-mini\",\"verifyFallbackModel\":\"gpt-4.1\",\"verifyPromptVersion\":1,\"query\":\"编写一个只读函数，签名必须是 function(config)。任务：从当前聊天页面提取消息列表，返回 {action:'getMessages',items:Array,cursor:string}. 绝对禁止：导航跳转、网络请求、DOM写入、事件触发。优先使用语义标记：data-role='message'、data-message-role、[role='listitem'] 等；每条消息输出对象字段 {id,role,text,time,status,index}，全部是字符串或数字（id/role/text/time/status 为字符串，index 为数字）。role 仅可为 user|assistant|system|tool|unknown。如果拿不到稳定 id，使用 role+index+text 前缀组合生成。去掉纯空白消息。按页面展示顺序输出（旧->新）。根据 config.limit 截断末尾 N 条（默认 50）。cursor 可用最后一条消息 id；没有则空字符串。config 包含 {limit,session}.\"}",
+				"time": 1771487325309
+			}
+		},
+		"_gcTime": 1771487268050,
+		"_gcRemoved": 0
+	}
+}

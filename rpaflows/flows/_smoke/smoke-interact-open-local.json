@@ -1,0 +1,77 @@
+{
+  "id": "smoke_interact_open_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/interact-open/index.html",
+        "waitBy": "css: .item",
+        "waitTimeoutMs": 10000
+      },
+      "next": { "done": "invoke_open", "failed": "abort" }
+    },
+    {
+      "id": "invoke_open",
+      "action": {
+        "type": "invoke",
+        "target": "interact_open",
+        "args": {
+          "interact.action": "open",
+          "interact.target": {
+            "by": "selector",
+            "selector": "css: .item:nth-of-type(1)"
+          },
+          "interact.control": {
+            "by": "query",
+            "query": "打开详情链接"
+          },
+          "interact.waitBy": "css: #detail-marker",
+          "interact.postWaitMs": 600
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "openOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; const url=String(o.url||''); const ok=!!o.opened && /\\/interact-open\\/detail\\.html/i.test(url); return { ok, url, opened: !!o.opened }; }",
+        "args": ["${vars.openOut}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke interact.open local passed",
+        "conclusion": "${{ ({ ok:true, openOut: vars.openOut || null, verify: vars.verifyOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke interact.open local failed"
+      }
+    }
+  ]
+}

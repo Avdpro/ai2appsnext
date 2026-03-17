@@ -1,0 +1,149 @@
+{
+  "capabilities": {
+    "must": [
+      "blockers.clear",
+      "read.action",
+      "read.fields",
+      "read.list",
+      "read.output",
+      "read.requireFields"
+    ],
+    "prefer": []
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    }
+  ],
+  "flow": {
+    "id": "open_page_and_read_title",
+    "start": "navigate_to_page",
+    "args": {
+      "query": {
+        "type": "string",
+        "required": true,
+        "desc": "目标页面URL"
+      }
+    },
+    "steps": [
+      {
+        "id": "navigate_to_page",
+        "action": {
+          "type": "goto",
+          "url": "${args.query}",
+          "postWaitMs": 2000
+        },
+        "next": {
+          "done": "wait_page_load",
+          "failed": "abort_nav_failed"
+        }
+      },
+      {
+        "id": "wait_page_load",
+        "action": {
+          "type": "wait",
+          "query": "title",
+          "state": "present",
+          "timeoutMs": 10000
+        },
+        "next": {
+          "done": "check_blockers",
+          "failed": "check_blockers",
+          "timeout": "check_blockers"
+        }
+      },
+      {
+        "id": "check_blockers",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "blockers.clear"
+            ]
+          },
+          "args": {
+            "blockers.clear": true
+          },
+          "onError": "return",
+          "timeoutMs": 8000
+        },
+        "next": {
+          "done": "read_page_title",
+          "failed": "read_page_title"
+        },
+        "saveAs": "blockers_result"
+      },
+      {
+        "id": "read_page_title",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "read.article"
+            ],
+            "prefer": [
+              "ai.extract"
+            ]
+          },
+          "args": {
+            "read.action": "list",
+            "read.fields": [
+              "title"
+            ],
+            "read.requireFields": [
+              "title"
+            ],
+            "read.output": "json"
+          },
+          "timeoutMs": 15000
+        },
+        "next": {
+          "done": "output_title",
+          "failed": "fallback_read_title"
+        },
+        "saveAs": "page_info"
+      },
+      {
+        "id": "fallback_read_title",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "() => { return { title: document.title || '' }; }"
+        },
+        "next": {
+          "done": "output_title",
+          "failed": "abort_read_failed"
+        },
+        "saveAs": "page_info"
+      },
+      {
+        "id": "output_title",
+        "action": {
+          "type": "done",
+          "reason": "Successfully read page title",
+          "conclusion": {
+            "status": "done",
+            "value": "${vars.page_info}"
+          }
+        }
+      },
+      {
+        "id": "abort_nav_failed",
+        "action": {
+          "type": "abort",
+          "reason": "Failed to navigate to the provided URL"
+        }
+      },
+      {
+        "id": "abort_read_failed",
+        "action": {
+          "type": "abort",
+          "reason": "Failed to read page title"
+        }
+      }
+    ]
+  }
+}

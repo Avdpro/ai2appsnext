@@ -1,0 +1,112 @@
+{
+  "id": "smoke_invoke_fork_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/read/batch/index.html",
+        "waitBy": "css: .item a",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "read_caller_before", "failed": "abort" }
+    },
+    {
+      "id": "read_caller_before",
+      "action": { "type": "readPage", "field": { "url": true, "title": true } },
+      "saveAs": "callerBefore",
+      "next": { "done": "invoke_fork_url", "failed": "abort" }
+    },
+    {
+      "id": "invoke_fork_url",
+      "action": {
+        "type": "invoke",
+        "target": "read_article_generic",
+        "fork": "http://127.0.0.1:8787/read/batch/detail-1.html",
+        "args": {
+          "read.action": "article",
+          "read.fields": ["url", "title", "content"]
+        }
+      },
+      "saveAs": "forkUrlOut",
+      "next": { "done": "read_caller_after_url", "failed": "abort" }
+    },
+    {
+      "id": "read_caller_after_url",
+      "action": { "type": "readPage", "field": { "url": true, "title": true } },
+      "saveAs": "callerAfterUrl",
+      "next": { "done": "invoke_fork_current", "failed": "abort" }
+    },
+    {
+      "id": "invoke_fork_current",
+      "action": {
+        "type": "invoke",
+        "target": "read_article_generic",
+        "fork": true,
+        "args": {
+          "read.action": "article",
+          "read.fields": ["url", "title", "content"]
+        }
+      },
+      "saveAs": "forkCurrentOut",
+      "next": { "done": "read_caller_after_current", "failed": "abort" }
+    },
+    {
+      "id": "read_caller_after_current",
+      "action": { "type": "readPage", "field": { "url": true, "title": true } },
+      "saveAs": "callerAfterCurrent",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(b, a1, a2, o1, o2){ const bu=String(b?.url||''); const au1=String(a1?.url||''); const au2=String(a2?.url||''); const t1=String(o1?.data?.title||''); const t2=String(o2?.data?.title||''); const ok = bu.includes('/read/batch/index.html') && au1===bu && au2===bu && t1.includes('BATCH-1') && t2.includes('Read Batch Test - Index'); return { ok, before:bu, afterUrl:au1, afterCurrent:au2, titleForkUrl:t1, titleForkCurrent:t2 }; }",
+        "args": [
+          "${{ vars.callerBefore || {} }}",
+          "${{ vars.callerAfterUrl || {} }}",
+          "${{ vars.callerAfterCurrent || {} }}",
+          "${{ vars.forkUrlOut || {} }}",
+          "${{ vars.forkCurrentOut || {} }}"
+        ]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke invoke fork local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: ${vars.verifyOut}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke invoke fork local failed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "id": "smoke_webchat_chatgpt_live_two_turns",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "https://chatgpt.com/",
+        "waitBy": "css: textarea, [contenteditable='true'][role='textbox']",
+        "waitTimeoutMs": 45000
+      },
+      "next": { "done": "new_session", "failed": "abort" }
+    },
+    {
+      "id": "new_session",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "Two Turns Test" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "send_q1", "failed": "abort" }
+    },
+    {
+      "id": "send_q1",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "send",
+          "webChat.text": "消耗1500大卡需要走多少步？",
+          "webChat.sendMode": "auto"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "wait_q1", "failed": "abort" }
+    },
+    {
+      "id": "wait_q1",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "waitReply",
+          "webChat.timeoutMs": 90000,
+          "webChat.pollMs": 1000,
+          "webChat.idleMs": 1800,
+          "webChat.minNew": 1
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "wait1",
+      "next": { "done": "send_q2", "failed": "abort" }
+    },
+    {
+      "id": "send_q2",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "send",
+          "webChat.text": "这些热量相当于多少瓶可乐？",
+          "webChat.sendMode": "auto"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "wait_q2", "failed": "abort" }
+    },
+    {
+      "id": "wait_q2",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "waitReply",
+          "webChat.timeoutMs": 90000,
+          "webChat.pollMs": 1000,
+          "webChat.idleMs": 1800,
+          "webChat.minNew": 1
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "wait2",
+      "next": { "done": "get_messages", "failed": "abort" }
+    },
+    {
+      "id": "get_messages",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "getMessages",
+          "webChat.limit": 20
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "msgs",
+      "next": { "done": "summarize", "failed": "abort" }
+    },
+    {
+      "id": "summarize",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ function asText(v){ return String(v==null?'':v).trim(); } const o=(out&&typeof out==='object')?out:{}; const items=Array.isArray(o.items)?o.items:[]; const users=items.filter((x)=>asText(x&&x.role)==='user').map((x)=>asText(x.text)); const ai=items.filter((x)=>asText(x&&x.role)==='assistant').map((x)=>asText(x.text)); const q1='消耗1500大卡需要走多少步？'; const q2='这些热量相当于多少瓶可乐？'; return { ok: users.includes(q1) && users.includes(q2) && ai.length>=2, userCount:users.length, aiCount:ai.length, q1, q2, a1: ai.length>=1 ? ai[ai.length-2] : '', a2: ai.length>=1 ? ai[ai.length-1] : '' }; }",
+        "args": ["${{ vars.msgs || {} }}"]
+      },
+      "saveAs": "summary",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "chatgpt live two turns finished",
+        "conclusion": "${{ ({ ok:true, summary:vars.summary, wait1:vars.wait1, wait2:vars.wait2 }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "chatgpt live two turns failed"
+      }
+    }
+  ]
+}

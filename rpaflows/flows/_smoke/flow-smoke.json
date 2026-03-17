@@ -1,0 +1,24 @@
+{
+  "id": "smoke_open_wait",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {"type": "goto", "url": "https://example.com"},
+      "next": "wait_h1"
+    },
+    {
+      "id": "wait_h1",
+      "action": {"type": "wait", "query": "h1", "timeoutMs": 8000},
+      "next": {"done": "finish", "failed": "fail"}
+    },
+    {
+      "id": "finish",
+      "action": {"type": "done", "reason": "smoke ok", "conclusion": "opened"}
+    },
+    {
+      "id": "fail",
+      "action": {"type": "abort", "reason": "smoke failed"}
+    }
+  ]
+}

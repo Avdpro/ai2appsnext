@@ -1,0 +1,69 @@
+{
+  "id": "smoke_read_profile_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/read/profile/index.html",
+        "waitBy": "css: #open-profile",
+        "waitTimeoutMs": 10000
+      },
+      "next": { "done": "invoke_read", "failed": "abort" }
+    },
+    {
+      "id": "invoke_read",
+      "action": {
+        "type": "invoke",
+        "target": "read_profile_generic",
+        "args": {
+          "read.action": "profile",
+          "read.fields": ["name", "bio", "followers", "following", "verified", "profileUrl", "avatarUrl"],
+          "read.requireFields": ["name", "followers", "profileUrl"],
+          "read.target": { "by": "query", "query": "打开个人主页链接" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "profileOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; const d=(o.data&&typeof o.data==='object')?o.data:{}; const missing=Array.isArray(o.missingFields)?o.missingFields:[]; const ok = String(d.name||'').includes('测试用户A') && String(d.followers||'').includes('345') && /\\/read\\/profile\\/profile\\.html/i.test(String(d.profileUrl||'')) && missing.length===0; return { ok, name:d.name||'', followers:d.followers||'', profileUrl:d.profileUrl||'', missing }; }",
+        "args": ["${vars.profileOut}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke read profile local passed",
+        "conclusion": "${{ ({ ok:true, profile: vars.profileOut || null, verify: vars.verifyOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke read profile local failed"
+      }
+    }
+  ]
+}

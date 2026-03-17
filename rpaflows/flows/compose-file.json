@@ -1,0 +1,323 @@
+{
+  "capabilities": {
+    "must": [
+      "compose",
+      "compose.file"
+    ],
+    "prefer": [
+      "compose.action",
+      "compose.files",
+      "compose.field",
+      "compose.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 3,
+    "speed": 2
+  },
+  "flow": {
+    "id": "compose_file",
+    "start": "init_ctx",
+    "args": {
+      "compose": {
+        "type": "object",
+        "required": false,
+        "desc": "compose 参数，支持 action/files/field/type/visibility"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "desc": "标准化 compose.file 参数",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tfunction normFiles(v){\n\t\t\t\t\t\tif(Array.isArray(v)) return v.map(t).filter(Boolean);\n\t\t\t\t\t\tconst s = t(v);\n\t\t\t\t\t\tif(!s) return [];\n\t\t\t\t\t\treturn s.split(/[\\n;,]/).map(t).filter(Boolean);\n\t\t\t\t\t}\n\t\t\t\t\tfunction uploadQuery(field){\n\t\t\t\t\t\tconst f = t(field).toLowerCase();\n\t\t\t\t\t\tif(f === \"image\"){\n\t\t\t\t\t\t\treturn \"可点击的图片上传入口（发布面板中的添加图片/上传图片按钮，或 input[type=file][accept*=image]）\";\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif(f === \"video\"){\n\t\t\t\t\t\t\treturn \"可点击的视频上传入口（发布面板中的添加视频/上传视频按钮，或 input[type=file][accept*=video]）\";\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn \"可点击的附件上传入口（发布面板中的添加附件/上传文件按钮，或 input[type=file]），避免匹配页面无关上传控件\";\n\t\t\t\t\t}\n\t\t\t\t\tfunction basename(p){\n\t\t\t\t\t\tconst s = t(p);\n\t\t\t\t\t\tif(!s) return \"\";\n\t\t\t\t\t\tconst m = s.split(/[\\\\/]/);\n\t\t\t\t\t\treturn t(m[m.length - 1] || s);\n\t\t\t\t\t}\n\t\t\t\t\tconst compose = (input && input.compose) || {};\n\t\t\t\t\tconst action = t(compose.action || \"file\").toLowerCase() || \"file\";\n\t\t\t\t\tconst type = t(compose.type || \"post\").toLowerCase() || \"post\";\n\t\t\t\t\tconst visibility = t(compose.visibility || \"\");\n\t\t\t\t\tconst field = t(compose.field || \"\").toLowerCase() || \"file\";\n\t\t\t\t\tconst targetQueryOverride = t(compose.targetQuery || \"\");\n\t\t\t\t\tconst files = normFiles(compose.files);\n\t\t\t\t\tconst uploadMode = t(compose.uploadMode || \"chooser\").toLowerCase() || \"chooser\";\n\t\t\t\t\tconst confirmAfterUpload = !!compose.confirmAfterUpload;\n\t\t\t\t\treturn {\n\t\t\t\t\t\taction,\n\t\t\t\t\t\tactionOk: action === \"file\",\n\t\t\t\t\t\ttype,\n\t\t\t\t\t\tvisibility,\n\t\t\t\t\t\tfield,\n\t\t\t\t\t\tfiles,\n\t\t\t\t\t\tfileNames: files.map(basename).filter(Boolean),\n\t\t\t\t\t\thasFiles: files.length > 0,\n\t\t\t\t\t\ttargetQuery: targetQueryOverride || uploadQuery(field),\n\t\t\t\t\t\tuploadMode,\n\t\t\t\t\t\tconfirmAfterUpload\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${{ ({ compose: args.compose || {} }) }}"
+          ]
+        },
+        "saveAs": "composeCtx",
+        "next": {
+          "done": "route_action",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_action",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.actionOk",
+                "value": true
+              },
+              "to": "route_has_files"
+            }
+          ],
+          "default": "abort_unsupported_action"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_has_files",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.hasFiles",
+                "value": true
+              },
+              "to": "check_upload_target_ready"
+            }
+          ],
+          "default": "abort_empty_files"
+        },
+        "next": {}
+      },
+      {
+        "id": "check_upload_target_ready",
+        "desc": "检查上传入口是否可用",
+        "action": {
+          "type": "selector",
+          "query": "${vars.composeCtx.targetQuery}"
+        },
+        "saveAs": "uploadTargetSel",
+        "next": {
+          "done": "upload_files",
+          "failed": "ensure_compose_started"
+        }
+      },
+      {
+        "id": "ensure_compose_started",
+        "desc": "若未处于撰写态，先启动 compose.start",
+        "action": {
+          "type": "invoke",
+          "target": "compose_start",
+          "args": {
+            "compose.action": "start",
+            "compose.type": "${vars.composeCtx.type}",
+            "compose.visibility": "${vars.composeCtx.visibility}"
+          },
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "saveAs": "composeStartOut",
+        "next": {
+          "done": "wait_upload_target_ready",
+          "failed": "ask_assist_upload"
+        }
+      },
+      {
+        "id": "wait_upload_target_ready",
+        "desc": "等待上传入口出现",
+        "action": {
+          "type": "wait",
+          "query": "${vars.composeCtx.targetQuery}",
+          "timeoutMs": 12000
+        },
+        "saveAs": "uploadTargetSelWait",
+        "next": {
+          "done": "upload_files",
+          "failed": "ask_assist_upload",
+          "timeout": "ask_assist_upload"
+        }
+      },
+      {
+        "id": "upload_files",
+        "desc": "通过 chooser 优先模式添加附件",
+        "action": {
+          "type": "uploadFile",
+          "query": "${vars.composeCtx.targetQuery}",
+          "files": "${vars.composeCtx.files}",
+          "uploadMode": "${vars.composeCtx.uploadMode}",
+          "timeoutMs": 20000
+        },
+        "saveAs": "uploadOut",
+        "next": {
+          "done": "wait_upload_settled",
+          "failed": "ask_assist_upload"
+        }
+      },
+      {
+        "id": "wait_upload_settled",
+        "desc": "等待上传稳定：10 秒内若出现强失败信号则失败，否则默认成功",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "async function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tfunction sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }\n\t\t\t\t\tconst timeoutMs = Number((input && input.timeoutMs) || 10000) || 10000;\n\t\t\t\t\tconst pollMs = Number((input && input.pollMs) || 400) || 400;\n\t\t\t\t\tconst start = Date.now();\n\t\t\t\t\tconst deadline = start + timeoutMs;\n\t\t\t\t\tconst failRe = /(上传失败|上传出错|重试|失败|网络错误|格式不支持|超出限制|too large|upload failed|retry|error)/i;\n\n\t\t\t\t\tfunction scan(){\n\t\t\t\t\t\tconst bodyText = t(document && document.body ? (document.body.innerText || \"\") : \"\");\n\t\t\t\t\t\tconst strongFail = failRe.test(bodyText);\n\t\t\t\t\t\tconst fileInputs = Array.from(document.querySelectorAll(\"input[type='file']\"));\n\t\t\t\t\t\tconst fileInputCount = fileInputs.reduce(function(n, el){\n\t\t\t\t\t\t\ttry { return n + ((el && el.files && el.files.length) ? 1 : 0); } catch (_) { return n; }\n\t\t\t\t\t\t}, 0);\n\t\t\t\t\t\tconst previewCount = document.querySelectorAll(\n\t\t\t\t\t\t\t\"#homeWrap ._publishCard_gykin_19 img, #homeWrap ._publishCard_gykin_19 [class*='preview'], #homeWrap ._publishCard_gykin_19 [class*='thumb']\"\n\t\t\t\t\t\t).length;\n\t\t\t\t\t\tconst progressCount = document.querySelectorAll(\n\t\t\t\t\t\t\t\"#homeWrap ._publishCard_gykin_19 [role='progressbar'], #homeWrap ._publishCard_gykin_19 progress, #homeWrap ._publishCard_gykin_19 [class*='progress'], #homeWrap ._publishCard_gykin_19 [class*='loading']\"\n\t\t\t\t\t\t).length;\n\t\t\t\t\t\tconst strongSuccess = fileInputCount > 0 || previewCount > 0;\n\t\t\t\t\t\treturn { strongFail, strongSuccess, fileInputCount, previewCount, progressCount };\n\t\t\t\t\t}\n\n\t\t\t\t\tlet last = { strongFail: false, strongSuccess: false, fileInputCount: 0, previewCount: 0, progressCount: 0 };\n\t\t\t\t\twhile(Date.now() < deadline){\n\t\t\t\t\t\tlast = scan();\n\t\t\t\t\t\tif(last.strongFail){\n\t\t\t\t\t\t\treturn {\n\t\t\t\t\t\t\t\tok: false,\n\t\t\t\t\t\t\t\tstatus: \"failed\",\n\t\t\t\t\t\t\t\treason: \"strong failure signal detected\",\n\t\t\t\t\t\t\t\telapsedMs: Date.now() - start,\n\t\t\t\t\t\t\t\tsignals: last\n\t\t\t\t\t\t\t};\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif(last.strongSuccess && last.progressCount === 0){\n\t\t\t\t\t\t\treturn {\n\t\t\t\t\t\t\t\tok: true,\n\t\t\t\t\t\t\t\tstatus: \"success\",\n\t\t\t\t\t\t\t\treason: \"strong success signal detected\",\n\t\t\t\t\t\t\t\telapsedMs: Date.now() - start,\n\t\t\t\t\t\t\t\tsignals: last\n\t\t\t\t\t\t\t};\n\t\t\t\t\t\t}\n\t\t\t\t\t\tawait sleep(pollMs);\n\t\t\t\t\t}\n\n\t\t\t\t\treturn {\n\t\t\t\t\t\tok: true,\n\t\t\t\t\t\tstatus: \"timeout_default_success\",\n\t\t\t\t\t\treason: \"no strong failure within timeout; default success\",\n\t\t\t\t\t\telapsedMs: Date.now() - start,\n\t\t\t\t\t\tsignals: last\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${{ ({ timeoutMs: 10000, pollMs: 400 }) }}"
+          ]
+        },
+        "saveAs": "uploadSettled",
+        "next": {
+          "done": "verify_upload_best_effort",
+          "failed": "ask_assist_upload"
+        }
+      },
+      {
+        "id": "verify_upload_best_effort",
+        "desc": "best-effort 检查页面是否出现文件名/附件提示",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tconst names = Array.isArray(input && input.fileNames) ? input.fileNames.map(t).filter(Boolean) : [];\n\t\t\t\t\tconst bodyText = t(document && document.body ? (document.body.innerText || \"\") : \"\").toLowerCase();\n\t\t\t\t\tlet matched = 0;\n\t\t\t\t\tconst hit = [];\n\t\t\t\t\tfor(const n of names){\n\t\t\t\t\t\tconst low = n.toLowerCase();\n\t\t\t\t\t\tif(!low) continue;\n\t\t\t\t\t\tif(bodyText.includes(low)){\n\t\t\t\t\t\t\tmatched++;\n\t\t\t\t\t\t\thit.push(n);\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\treturn { ok: true, names, matched, hit, total: names.length };\n\t\t\t\t}",
+          "args": [
+            "${{ ({ fileNames: vars.composeCtx.fileNames || [] }) }}"
+          ]
+        },
+        "saveAs": "verifyOut",
+        "next": {
+          "done": "route_confirm_after_upload",
+          "failed": "route_confirm_after_upload"
+        }
+      },
+      {
+        "id": "route_confirm_after_upload",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.confirmAfterUpload",
+                "value": true
+              },
+              "to": "confirm_after_upload"
+            }
+          ],
+          "default": "done"
+        },
+        "next": {}
+      },
+      {
+        "id": "confirm_after_upload",
+        "desc": "上传后等待人工确认",
+        "action": {
+          "type": "ask_assist",
+          "reason": "请确认附件已出现在发布面板中；确认无误后点击“已处理，继续”。",
+          "waitUserAction": true,
+          "modal": false,
+          "mask": false
+        },
+        "next": {
+          "done": "done",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "ask_assist_upload",
+        "desc": "自动上传失败时请用户手动添加附件",
+        "action": {
+          "type": "ask_assist",
+          "reason": "请在当前撰写界面手动添加附件（文件/图片/视频），完成后点击“已处理，继续”。",
+          "waitUserAction": true,
+          "modal": false,
+          "mask": false
+        },
+        "next": {
+          "done": "done_after_assist",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "compose.file done",
+          "conclusion": "${{ ({ action:'file', id:'', field: vars.composeCtx?.field || 'file', files: vars.composeCtx?.files || [], uploadedCount: Number(vars.uploadOut?.uploadedCount || 0), modeUsed: vars.uploadOut?.modeUsed || vars.composeCtx?.uploadMode || 'chooser', by: vars.uploadOut?.by || vars.uploadTargetSel?.by || vars.uploadTargetSelWait?.by || null, settledStatus: vars.uploadSettled?.status || 'unknown', settledReason: vars.uploadSettled?.reason || '', verifyMatched: Number(vars.verifyOut?.matched || 0), verifyTotal: Number(vars.verifyOut?.total || 0) }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "done_after_assist",
+        "action": {
+          "type": "done",
+          "reason": "compose.file done by assist",
+          "conclusion": "${{ ({ action:'file', id:'', field: vars.composeCtx?.field || 'file', files: vars.composeCtx?.files || [], uploadedCount: 0, assisted: true }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_unsupported_action",
+        "action": {
+          "type": "abort",
+          "reason": "compose_file only supports compose.action=file"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_empty_files",
+        "action": {
+          "type": "abort",
+          "reason": "compose.file requires compose.files"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort",
+        "action": {
+          "type": "abort",
+          "reason": "compose.file failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "composeCtx": {
+        "type": "object",
+        "desc": "标准化 compose.file 参数",
+        "from": "init_ctx.saveAs"
+      },
+      "uploadTargetSel": {
+        "type": "object",
+        "desc": "上传入口 selector 结果",
+        "from": "check_upload_target_ready.saveAs"
+      },
+      "uploadTargetSelWait": {
+        "type": "object",
+        "desc": "等待后的上传入口 selector 结果",
+        "from": "wait_upload_target_ready.saveAs"
+      },
+      "composeStartOut": {
+        "type": "object",
+        "desc": "compose.start 返回结果",
+        "from": "ensure_compose_started.saveAs"
+      },
+      "uploadOut": {
+        "type": "object",
+        "desc": "uploadFile 上传结果",
+        "from": "upload_files.saveAs"
+      },
+      "uploadSettled": {
+        "type": "object",
+        "desc": "上传稳定性检测结果",
+        "from": "wait_upload_settled.saveAs"
+      },
+      "verifyOut": {
+        "type": "object",
+        "desc": "上传后 best-effort 验证结果",
+        "from": "verify_upload_best_effort.saveAs"
+      }
+    }
+  }
+}

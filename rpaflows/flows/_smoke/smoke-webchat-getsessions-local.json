@@ -1,0 +1,104 @@
+{
+  "id": "smoke_webchat_getsessions_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/webchat/chatgpt-mock.html",
+        "waitBy": "css: [data-role='new-session']",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "new_session_1", "failed": "abort" }
+    },
+    {
+      "id": "new_session_1",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "Session A" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "new_session_2", "failed": "abort" }
+    },
+    {
+      "id": "new_session_2",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "Session B" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "get_sessions", "failed": "abort" }
+    },
+    {
+      "id": "get_sessions",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "getSessions",
+          "webChat.session": { "kind": "ai" },
+          "webChat.limit": 20
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "sessionsOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ function asText(v){ return String(v==null?'':v).trim(); } const o=(out&&typeof out==='object')?out:{}; const items=Array.isArray(o.items)?o.items:[]; const valid=items.filter((it)=>asText(it&&it.id)&&asText(it&&it.title)); const hasNewChat=valid.some((it)=>asText(it.title).toLowerCase().includes('new chat')); const ok=asText(o.action)==='getSessions' && valid.length>=2 && (hasNewChat || valid.length>=2); return { ok, action:asText(o.action), count:items.length, validCount:valid.length, cursor:asText(o.cursor||''), sample:valid.slice(0,3) }; }",
+        "args": ["${{ vars.sessionsOut || {} }}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke webchat getSessions local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut, out:vars.sessionsOut }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: action=${vars.verifyOut.action}, count=${vars.verifyOut.count}, validCount=${vars.verifyOut.validCount}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke webchat getSessions local failed"
+      }
+    }
+  ]
+}

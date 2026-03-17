@@ -1,0 +1,58 @@
+{
+  "flow": {
+    "id": "compose_start_weibo",
+    "start": "step_1",
+    "args": {},
+    "filters": [
+      {
+        "key": "domain",
+        "value": "weibo.com"
+      }
+    ],
+    "capabilities": [
+      "compose.start"
+    ],
+    "steps": [
+      {
+        "id": "step_1",
+        "action": {
+          "type": "goto",
+          "url": "https://www.weibo.com"
+        },
+        "next": {
+          "done": "step_2"
+        }
+      },
+      {
+        "id": "step_2",
+        "action": {
+          "type": "invoke",
+          "target": "login_check_ensure#login-check-ensure_1mqni4w",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "login.ensure"
+            ]
+          },
+          "args": {
+            "login": {
+              "ensure": true
+            }
+          },
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "next": {
+          "done": "step_3"
+        }
+      },
+      {
+        "id": "step_3",
+        "action": {
+          "type": "done"
+        },
+        "next": {}
+      }
+    ]
+  }
+}

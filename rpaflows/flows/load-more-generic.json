@@ -1,0 +1,233 @@
+{
+  "capabilities": {
+    "must": [
+      "loadMore"
+    ],
+    "prefer": [
+      "loadMore.target",
+      "loadMore.minNewItems",
+      "loadMore.maxTries",
+      "loadMore.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 3,
+    "speed": 3
+  },
+  "flow": {
+    "id": "load_more_generic",
+    "start": "init",
+    "args": {
+      "loadMore": {
+        "type": "object",
+        "required": false,
+        "desc": "loadMore 参数（target/minNewItems/maxTries）"
+      },
+      "read": {
+        "type": "object",
+        "required": false,
+        "desc": "兼容 read.target 透传"
+      }
+    },
+    "steps": [
+      {
+        "id": "init",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(input){\n\tfunction toNum(v, d, min, max){\n\t\tlet n = Number(v);\n\t\tif(!Number.isFinite(n)) n = d;\n\t\tif(Number.isFinite(min)) n = Math.max(min, n);\n\t\tif(Number.isFinite(max)) n = Math.min(max, n);\n\t\treturn n;\n\t}\n\tfunction text(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction visible(el){\n\t\tif(!el) return false;\n\t\tconst st = window.getComputedStyle(el);\n\t\tif(!st) return false;\n\t\tif(st.display === \"none\" || st.visibility === \"hidden\" || Number(st.opacity || \"1\") <= 0.02) return false;\n\t\tconst r = el.getBoundingClientRect();\n\t\treturn r.width > 2 && r.height > 2;\n\t}\n\tfunction pickItems(selector){\n\t\tif(selector){\n\t\t\tconst root = document.querySelector(selector);\n\t\t\tif(!root) return [];\n\t\t\tconst tries = [\":scope > li\", \":scope > article\", \":scope > .item\", \":scope > .card\", \":scope > *\"];\n\t\t\tfor(const q of tries){\n\t\t\t\tconst arr = Array.from(root.querySelectorAll(q)).filter(visible);\n\t\t\t\tif(arr.length >= 2) return arr;\n\t\t\t}\n\t\t\treturn Array.from(root.children || []).filter(visible);\n\t\t}\n\t\tconst scopes = [document.querySelector(\"main\"), document.body].filter(Boolean);\n\t\tconst sels = [\"article\", \"li\", \"[role='listitem']\", \".list-item\", \".item\", \".card\"];\n\t\tfor(const scope of scopes){\n\t\t\tlet best = [];\n\t\t\tfor(const s of sels){\n\t\t\t\tconst arr = Array.from(scope.querySelectorAll(s)).filter(visible);\n\t\t\t\tif(arr.length > best.length) best = arr;\n\t\t\t}\n\t\t\tif(best.length >= 2) return best;\n\t\t}\n\t\treturn [];\n\t}\n\tconst lm = (input && input.loadMore) || {};\n\tconst rd = (input && input.read) || {};\n\tconst target = lm.target || rd.target || {};\n\tconst selector = text(target.selector || \"\");\n\tconst items = pickItems(selector);\n\treturn {\n\t\ttries: 0,\n\t\tmaxTries: toNum(lm.maxTries, 3, 1, 10),\n\t\tminNewItems: toNum(lm.minNewItems, 1, 1, 200),\n\t\tselector,\n\t\taiTried: false,\n\t\taiSelector: \"\",\n\t\tpreferredAction: \"\",\n\t\tdecisionReason: \"\",\n\t\tcount: items.length,\n\t\ttotalNew: 0,\n\t\tnewItems: 0,\n\t\thasMore: true,\n\t\tdone: false,\n\t\tlastAction: \"init\",\n\t\treason: \"initialized\",\n\t\turl: String(location.href || \"\"),\n\t};\n}",
+          "args": [
+            "${{ ({ loadMore: args.loadMore || {}, read: args.read || {} }) }}"
+          ]
+        },
+        "saveAs": "lmState",
+        "next": "decide_strategy_ai"
+      },
+      {
+        "id": "decide_strategy_ai",
+        "action": {
+          "type": "run_ai",
+          "model": "advanced",
+          "cache": {
+            "enabled": true,
+            "key": "load_more_strategy"
+          },
+          "prompt": "你是网页自动化策略器。你只能输出一个 JSON result：{ action:'click'|'scroll'|'done', selector:'', reason:'' }。规则：1) 如果页面存在明显“加载更多/下一页/更多结果”按钮或链接，action=click，selector给稳定CSS（找不到可留空）；2) 如果更像无限滚动，action=scroll；3) 如果看不到可继续加载的线索，action=done。禁止选择站点导航、登录、设置、帮助、页脚。优先主内容区域。",
+          "input": "${{ ({ state: vars.lmState || {}, loadMore: args.loadMore || {}, read: args.read || {} }) }}",
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true
+          }
+        },
+        "saveAs": "aiPlan",
+        "next": {
+          "done": "merge_ai_plan",
+          "failed": "attempt"
+        }
+      },
+      {
+        "id": "merge_ai_plan",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(state, plan){ const s = (state && typeof state==='object') ? state : {}; const p = (plan && typeof plan==='object') ? plan : {}; const a = String(p.action || '').toLowerCase(); const act = (a==='click'||a==='scroll'||a==='done') ? a : ''; const sel = String(p.selector || '').trim(); const aiSelector = sel || String(s.aiSelector || ''); return { ...s, preferredAction: act, decisionReason: String(p.reason || ''), aiSelector, aiTried: !!(s.aiTried || sel) }; }",
+          "args": [
+            "${{ vars.lmState || {} }}",
+            "${{ vars.aiPlan || {} }}"
+          ]
+        },
+        "saveAs": "lmState",
+        "next": "route_ai"
+      },
+      {
+        "id": "attempt",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "async function(state){\n\tfunction sleep(ms){ return new Promise((r)=>setTimeout(r, ms)); }\n\tfunction text(v){ return String(v == null ? \"\" : v).trim(); }\n\tfunction visible(el){\n\t\tif(!el) return false;\n\t\tconst st = window.getComputedStyle(el);\n\t\tif(!st) return false;\n\t\tif(st.display === \"none\" || st.visibility === \"hidden\" || Number(st.opacity || \"1\") <= 0.02) return false;\n\t\tconst r = el.getBoundingClientRect();\n\t\treturn r.width > 2 && r.height > 2;\n\t}\n\tfunction pickItems(selector){\n\t\tif(selector){\n\t\t\tconst root = document.querySelector(selector);\n\t\t\tif(!root) return [];\n\t\t\tconst tries = [\":scope > li\", \":scope > article\", \":scope > .item\", \":scope > .card\", \":scope > *\"];\n\t\t\tfor(const q of tries){\n\t\t\t\tconst arr = Array.from(root.querySelectorAll(q)).filter(visible);\n\t\t\t\tif(arr.length >= 2) return arr;\n\t\t\t}\n\t\t\treturn Array.from(root.children || []).filter(visible);\n\t\t}\n\t\tconst scopes = [document.querySelector(\"main\"), document.body].filter(Boolean);\n\t\tconst sels = [\"article\", \"li\", \"[role='listitem']\", \".list-item\", \".item\", \".card\"];\n\t\tfor(const scope of scopes){\n\t\t\tlet best = [];\n\t\t\tfor(const s of sels){\n\t\t\t\tconst arr = Array.from(scope.querySelectorAll(s)).filter(visible);\n\t\t\t\tif(arr.length > best.length) best = arr;\n\t\t\t}\n\t\t\tif(best.length >= 2) return best;\n\t\t}\n\t\treturn [];\n\t}\n\tfunction findLoadMoreControl(){\n\t\tconst kws = [\n\t\t\t\"加载更多\",\"更多\",\"下一页\",\"下页\",\"下一\",\"后页\",\"翻页\",\n\t\t\t\"next\",\"more\",\"show more\",\"load more\",\"older\",\"older posts\",\"continue\",\n\t\t\t\"›\",\"»\",\"→\",\"⟩\",\"＞\"\n\t\t];\n\t\tconst cands = Array.from(document.querySelectorAll(\"button, a, [role='button'], input[type='button'], input[type='submit']\"));\n\t\tlet best = null;\n\t\tfor(const el of cands){\n\t\t\tif(!visible(el)) continue;\n\t\t\tconst st = window.getComputedStyle(el);\n\t\t\tif(st.pointerEvents === \"none\") continue;\n\t\t\tconst t = ((\n\t\t\t\tel.innerText || el.textContent || el.getAttribute(\"aria-label\") || el.getAttribute(\"title\") || el.value || \"\"\n\t\t\t) + \"\").toLowerCase();\n\t\t\tconst idc = ((el.id || \"\") + \" \" + (el.className || \"\")).toLowerCase();\n\t\t\tif(!t) continue;\n\t\t\tif(\n\t\t\t\tkws.some((k)=>t.includes(k.toLowerCase())) ||\n\t\t\t\t/(^|[^a-z])(next|more|pager?|pagination|load)([^a-z]|$)/.test(idc)\n\t\t\t){\n\t\t\t\tbest = el;\n\t\t\t\tbreak;\n\t\t\t}\n\t\t}\n\t\tif(best) return best;\n\t\tconst relNext = document.querySelector(\"a[rel='next'], link[rel='next']\");\n\t\tif(relNext && visible(relNext)) return relNext;\n\t\treturn null;\n\t}\n\tfunction scrollOneStep(selector){\n\t\tconst root = selector ? document.querySelector(selector) : null;\n\t\tif(root){\n\t\t\tconst canScroll = root.scrollHeight > root.clientHeight + 4;\n\t\t\tif(canScroll){\n\t\t\t\t// Go near-bottom directly to reliably trigger infinite-load hooks.\n\t\t\t\troot.scrollTop = Math.max(0, root.scrollHeight - root.clientHeight - 2);\n\t\t\t\treturn true;\n\t\t\t}\n\t\t}\n\t\tconst y = window.scrollY || window.pageYOffset || 0;\n\t\tconst step = Math.max(260, Math.floor((window.innerHeight || 800) * 0.9));\n\t\twindow.scrollTo(0, y + step);\n\t\treturn true;\n\t}\n\n\tconst s = state && typeof state === \"object\" ? state : {};\n\tconst tries = Number(s.tries || 0) + 1;\n\tconst maxTries = Math.max(1, Number(s.maxTries || 3));\n\tconst minNewItems = Math.max(1, Number(s.minNewItems || 1));\n\tconst selector = text(s.selector || \"\");\n\tconst aiTried = !!s.aiTried;\n\tconst aiSelector = text(s.aiSelector || \"\");\n\tconst preferredAction = text(s.preferredAction || \"\").toLowerCase();\n\tconst beforeItems = pickItems(selector);\n\tconst beforeCount = Number.isFinite(Number(s.count)) ? Number(s.count) : beforeItems.length;\n\tconst beforeUrl = String(location.href || \"\");\n\tlet action = \"none\";\n\tlet acted = false;\n\tif (preferredAction === \"done\") {\n\t\treturn {\n\t\t\t...s,\n\t\t\ttries,\n\t\t\tdone: true,\n\t\t\thasMore: false,\n\t\t\tlastAction: \"done_ai\",\n\t\t\treason: text(s.decisionReason || \"ai judged no more\"),\n\t\t\turl: beforeUrl,\n\t\t};\n\t}\n\n\tlet ctl = null;\n\tif (aiSelector) {\n\t\tconst aiEl = document.querySelector(aiSelector);\n\t\tif (aiEl && visible(aiEl)) {\n\t\t\tctl = aiEl;\n\t\t}\n\t}\n\tconst autoControl = !ctl && (preferredAction === \"\" || preferredAction === \"click\");\n\tif(autoControl) ctl = findLoadMoreControl();\n\tif(preferredAction === \"click\" || (preferredAction === \"\" && ctl)){\n\t\tif(ctl){\n\t\t\ttry {\n\t\t\t\tctl.scrollIntoView({ block: \"center\", inline: \"nearest\" });\n\t\t\t} catch(_) {}\n\t\t\ttry {\n\t\t\t\tctl.click();\n\t\t\t\tacted = true;\n\t\t\t\taction = aiSelector ? \"click_ai\" : (preferredAction === \"click\" ? \"click_pref\" : \"click\");\n\t\t\t} catch(_) {}\n\t\t}\n\t}\n\tif(!acted && (preferredAction === \"scroll\" || preferredAction === \"\")){\n\t\tscrollOneStep(selector);\n\t\tacted = true;\n\t\taction = preferredAction === \"scroll\" ? \"scroll_ai\" : \"scroll\";\n\t}\n\n\tawait sleep((action.indexOf(\"click\") >= 0) ? 1400 : 900);\n\tconst afterItems = pickItems(selector);\n\tconst afterCount = afterItems.length;\n\tconst afterUrl = String(location.href || \"\");\n\tconst urlChanged = afterUrl !== beforeUrl;\n\tlet newItems = Math.max(0, afterCount - beforeCount);\n\tif(urlChanged && afterCount > 0 && newItems === 0){\n\t\tnewItems = afterCount;\n\t}\n\n\tconst totalNew = Math.max(0, Number(s.totalNew || 0)) + newItems;\n\tconst hitGoal = newItems >= minNewItems || totalNew >= minNewItems;\n\tconst exhausted = tries >= maxTries;\n\tconst done = hitGoal || exhausted || (!acted && preferredAction === \"done\");\n\tconst hasMore = !done;\n\n\treturn {\n\t\ttries,\n\t\tmaxTries,\n\t\tminNewItems,\n\t\tselector,\n\t\taiTried,\n\t\taiSelector,\n\t\tpreferredAction,\n\t\tdecisionReason: text(s.decisionReason || \"\"),\n\t\tcount: afterCount,\n\t\tnewItems,\n\t\ttotalNew,\n\t\tdone,\n\t\thasMore,\n\t\tlastAction: action,\n\t\treason: hitGoal ? \"minNewItems reached\" : (exhausted ? \"maxTries reached\" : (!acted ? \"no actionable control\" : \"retry\")),\n\t\turl: afterUrl,\n\t\turlChanged\n\t};\n}",
+          "args": [
+            "${{ vars.lmState || {} }}"
+          ]
+        },
+        "saveAs": "lmState",
+        "next": "route_done"
+      },
+      {
+        "id": "route_done",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "lmState.done"
+              },
+              "to": "done"
+            }
+          ],
+          "default": "decide_strategy_ai"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_ai",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "lmState.preferredAction",
+                "value": "done"
+              },
+              "to": "attempt"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "lmState.preferredAction",
+                "value": "scroll"
+              },
+              "to": "attempt"
+            },
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "lmState.aiSelector"
+              },
+              "to": "attempt"
+            },
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "lmState.aiTried"
+              },
+              "to": "attempt"
+            },
+            {
+              "when": {
+                "op": "neq",
+                "source": "vars",
+                "path": "lmState.preferredAction",
+                "value": "click"
+              },
+              "to": "attempt"
+            }
+          ],
+          "default": "resolve_control_ai"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_control_ai",
+        "action": {
+          "type": "selector",
+          "query": {
+            "kind": "selector",
+            "mode": "instance",
+            "policy": "pool",
+            "text": "用于加载更多内容或下一页的可点击按钮/链接。必须是主内容区域，不要导航栏、登录、帮助、设置、页脚。"
+          }
+        },
+        "saveAs": "aiCtl",
+        "next": {
+          "done": "apply_ai_selector",
+          "failed": "mark_ai_tried"
+        }
+      },
+      {
+        "id": "apply_ai_selector",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(state, ai){ const s = (state && typeof state==='object') ? state : {}; const a = (ai && typeof ai==='object') ? ai : {}; return { ...s, aiTried:true, aiSelector:String(a.by || a.selector || '') }; }",
+          "args": [
+            "${{ vars.lmState || {} }}",
+            "${{ vars.aiCtl || {} }}"
+          ]
+        },
+        "saveAs": "lmState",
+        "next": "attempt"
+      },
+      {
+        "id": "mark_ai_tried",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(state){ const s = (state && typeof state==='object') ? state : {}; return { ...s, aiTried:true }; }",
+          "args": [
+            "${{ vars.lmState || {} }}"
+          ]
+        },
+        "saveAs": "lmState",
+        "next": "attempt"
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "loadMore done",
+          "conclusion": "${{ ({ newItems: Number(vars.lmState?.totalNew||0), hasMore: !!vars.lmState?.hasMore, tries: Number(vars.lmState?.tries||0), lastAction: vars.lmState?.lastAction||'', reason: vars.lmState?.reason||'', url: vars.lmState?.url||'' }) }}"
+        },
+        "next": {}
+      }
+    ]
+  }
+}

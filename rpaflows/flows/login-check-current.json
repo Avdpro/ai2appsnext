@@ -1,0 +1,45 @@
+{
+  "id": "login_check_current",
+  "start": "invoke",
+  "steps": [
+    {
+      "id": "invoke",
+      "action": {
+        "type": "invoke",
+        "find": {
+          "kind": "rpa",
+          "must": ["login.check"],
+          "prefer": ["login.ensure", "login.interactive", "login.check.result", "login.ensure.result"],
+          "filter": [
+            { "key": "domain", "value": "*" },
+            { "key": "locale", "value": "zh-CN" }
+          ],
+          "rank": "quality,speed"
+        },
+        "args": {
+          "login.ensure": "${login.ensure}",
+          "login.email": "${login.email}",
+          "login.password": "${login.password}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "loginOut",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "login check done",
+        "conclusion": "${vars.loginOut}"
+      },
+      "next": {}
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "login flow failed" },
+      "next": {}
+    }
+  ]
+}

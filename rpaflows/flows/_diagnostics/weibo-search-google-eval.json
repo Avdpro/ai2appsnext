@@ -1,0 +1,357 @@
+{
+  "ok": false,
+  "reason": "flow validation failed",
+  "errors": [
+    "step input_and_trigger_search action.query is not allowed for type=input"
+  ],
+  "repairs": 3,
+  "provider": "google",
+  "modelTier": "advanced",
+  "capabilities": null,
+  "filters": null,
+  "plan": {
+    "goal": "Perform a search on Weibo, verify user login, retrieve search results, and dynamically load more posts if necessary.",
+    "flowIdHint": "weibo_search_and_read_posts",
+    "steps": [
+      {
+        "idHint": "navigate_to_weibo_search_page",
+        "intent": "Open the Weibo search page at the specified URL.",
+        "actionTypeHint": "nav",
+        "why": "Initial instruction to access the platform."
+      },
+      {
+        "idHint": "check_weibo_login_status",
+        "intent": "Verify that the user is currently authenticated on Weibo.",
+        "actionTypeHint": "login.check",
+        "why": "User explicitly requested login confirmation before proceeding."
+      },
+      {
+        "idHint": "input_and_trigger_search",
+        "intent": "Locate the prominent search text box in the page's middle section (excluding the top navigation bar), input the search query, and trigger the search.",
+        "actionTypeHint": "search",
+        "why": "User specified a particular search box and the action of searching."
+      },
+      {
+        "idHint": "wait_for_search_results_load",
+        "intent": "Pause execution for 1 to 3 seconds to allow the search results to fully load and render on the page.",
+        "actionTypeHint": "wait",
+        "why": "User specified a waiting period for content loading."
+      },
+      {
+        "idHint": "read_initial_weibo_posts",
+        "intent": "Extract and collect the visible Weibo posts from the current search results page.",
+        "actionTypeHint": "read.list",
+        "why": "Primary goal of retrieving search results."
+      },
+      {
+        "idHint": "load_and_read_more_weibo_posts",
+        "intent": "If the collected posts are insufficient, scroll down the page to trigger loading of more content and then read the newly appeared Weibo posts.",
+        "actionTypeHint": "loadMore",
+        "why": "User requested to dynamically fetch more content if needed."
+      }
+    ],
+    "notes": [
+      "The 'search' actionTypeHint is assumed to handle both inputting the query and triggering the search (e.g., pressing Enter or clicking a search button).",
+      "The 'loadMore' actionTypeHint will handle scrolling and reading new items.",
+      "The 'bigger search text box' will require careful DOM targeting to distinguish it from other search inputs."
+    ],
+    "risks": [
+      "Identifying the exact DOM element for the 'bigger search text box' without specific selectors might be challenging.",
+      "The condition for 'if enough' for loading more content is not specified and will require a concrete parameter (e.g., minItems)."
+    ]
+  },
+  "flow": {
+    "id": "weibo_search_and_read_posts",
+    "start": "navigate_to_weibo_search_page",
+    "args": {
+      "query": {
+        "type": "string",
+        "required": true,
+        "desc": "要搜索的内容"
+      },
+      "ensure": {
+        "type": "boolean",
+        "required": false,
+        "desc": "是否确保登录状态"
+      },
+      "action": {
+        "type": "string",
+        "required": true,
+        "desc": "要执行的主要操作 (例如: 'list')"
+      },
+      "minItems": {
+        "type": "number",
+        "required": false,
+        "desc": "最少需要读取的微博数量"
+      },
+      "scrollRounds": {
+        "type": "number",
+        "required": false,
+        "desc": "向下滚动加载更多微博的尝试次数"
+      },
+      "minNewItems": {
+        "type": "number",
+        "required": false,
+        "desc": "每次滚动加载最少需要的新微博数量"
+      }
+    },
+    "steps": [
+      {
+        "id": "navigate_to_weibo_search_page",
+        "action": {
+          "type": "goto",
+          "url": "https://s.weibo.com"
+        },
+        "next": "check_weibo_login_status"
+      },
+      {
+        "id": "check_weibo_login_status",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "source": "args",
+                "path": "ensure",
+                "op": "truthy"
+              },
+              "to": "invoke_login_ensure"
+            }
+          ],
+          "default": "input_and_trigger_search"
+        }
+      },
+      {
+        "id": "invoke_login_ensure",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "login.ensure"
+            ]
+          },
+          "args": {
+            "login.ensure": true
+          },
+          "onError": "return"
+        },
+        "next": "check_login_status_result"
+      },
+      {
+        "id": "check_login_status_result",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "source": "vars",
+                "path": "invoke_login_ensure.result.login.ensure.result.loggedIn",
+                "op": "truthy"
+              },
+              "to": "input_and_trigger_search"
+            }
+          ],
+          "default": "ask_assist_login_failed"
+        }
+      },
+      {
+        "id": "ask_assist_login_failed",
+        "action": {
+          "type": "ask_assist",
+          "reason": "未能确认登录状态，请手动登录或检查。"
+        },
+        "next": "abort_login_failed"
+      },
+      {
+        "id": "abort_login_failed",
+        "action": {
+          "type": "abort",
+          "reason": "登录失败或无法确认登录状态。"
+        }
+      },
+      {
+        "id": "input_and_trigger_search",
+        "action": {
+          "type": "input",
+          "query": "input[type='search'][placeholder*='搜索'], input[type='text'][placeholder*='搜索'], .search_input, .search_box input",
+          "text": "${args.query}",
+          "pressEnter": true,
+          "postWaitMs": 1000
+        },
+        "next": "wait_for_search_results_load"
+      },
+      {
+        "id": "wait_for_search_results_load",
+        "action": {
+          "type": "wait",
+          "query": "div.card-wrap, .weibo-list, article.weibo-post",
+          "state": "visible",
+          "timeoutMs": 5000
+        },
+        "saveAs": "search_results_present",
+        "next": "check_search_results"
+      },
+      {
+        "id": "check_search_results",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "source": "vars",
+                "path": "search_results_present",
+                "op": "truthy"
+              },
+              "to": "read_initial_weibo_posts"
+            }
+          ],
+          "default": "fallback_click_search_button"
+        }
+      },
+      {
+        "id": "fallback_click_search_button",
+        "action": {
+          "type": "click",
+          "query": "button[type='submit'][aria-label*='搜索'], button[type='submit'][title*='搜索'], .search_button, .search_icon",
+          "postWaitMs": 2000
+        },
+        "next": "wait_after_fallback_click"
+      },
+      {
+        "id": "wait_after_fallback_click",
+        "action": {
+          "type": "wait",
+          "query": "div.card-wrap, .weibo-list, article.weibo-post",
+          "state": "visible",
+          "timeoutMs": 5000
+        },
+        "saveAs": "search_results_present_after_fallback",
+        "next": "check_search_results_after_fallback"
+      },
+      {
+        "id": "check_search_results_after_fallback",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "source": "vars",
+                "path": "search_results_present_after_fallback",
+                "op": "truthy"
+              },
+              "to": "read_initial_weibo_posts"
+            }
+          ],
+          "default": "ask_assist_no_results"
+        }
+      },
+      {
+        "id": "ask_assist_no_results",
+        "action": {
+          "type": "ask_assist",
+          "reason": "未能找到搜索结果列表，请检查页面或手动操作。"
+        },
+        "next": "abort_no_results"
+      },
+      {
+        "id": "abort_no_results",
+        "action": {
+          "type": "abort",
+          "reason": "无法找到搜索结果列表。"
+        }
+      },
+      {
+        "id": "read_initial_weibo_posts",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "read.list"
+            ]
+          },
+          "args": {
+            "read.action": "list",
+            "read.target": "div.card-wrap, .weibo-list, article.weibo-post",
+            "read.fields": [
+              "postId",
+              "url",
+              "title",
+              "text",
+              "authorId",
+              "authorName",
+              "publishTime",
+              "likeCount",
+              "commentCount",
+              "repostCount",
+              "media"
+            ],
+            "read.requireFields": [
+              "postId",
+              "url",
+              "text",
+              "authorName"
+            ],
+            "read.minItems": "${{ args.minItems || 1 }}"
+          }
+        },
+        "next": "load_and_read_more_weibo_posts"
+      },
+      {
+        "id": "load_and_read_more_weibo_posts",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "loadMore"
+            ]
+          },
+          "args": {
+            "loadMore.target": "div.card-wrap, .weibo-list, article.weibo-post",
+            "loadMore.minNewItems": "${{ args.minNewItems || 1 }}",
+            "loadMore.maxTries": "${{ args.scrollRounds || 3 }}",
+            "read.fields": [
+              "postId",
+              "url",
+              "title",
+              "text",
+              "authorId",
+              "authorName",
+              "publishTime",
+              "likeCount",
+              "commentCount",
+              "repostCount",
+              "media"
+            ],
+            "read.requireFields": [
+              "postId",
+              "url",
+              "text",
+              "authorName"
+            ]
+          }
+        },
+        "next": "combine_results"
+      },
+      {
+        "id": "combine_results",
+        "action": {
+          "type": "run_js",
+          "code": "(args, opts, vars, result) => { const initial = vars.read_initial_weibo_posts.result || []; const more = vars.load_and_read_more_weibo_posts.result || []; return [...initial, ...more]; }"
+        },
+        "saveAs": "all_weibo_posts",
+        "next": "done_success"
+      },
+      {
+        "id": "done_success",
+        "action": {
+          "type": "done",
+          "reason": "Successfully retrieved Weibo posts.",
+          "conclusion": "${vars.all_weibo_posts}"
+        }
+      }
+    ]
+  }
+}

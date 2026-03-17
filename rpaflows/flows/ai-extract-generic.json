@@ -1,0 +1,177 @@
+{
+  "capabilities": {
+    "must": [
+      "ai.extract"
+    ],
+    "prefer": [
+      "ai.extract.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 2,
+    "speed": 2
+  },
+  "flow": {
+    "id": "ai_extract_generic",
+    "start": "init_ctx",
+    "args": {
+      "ai": {
+        "type": "object",
+        "required": false,
+        "desc": "AI 参数对象。支持 ai.extract.*"
+      },
+      "extract": {
+        "type": "object",
+        "required": false,
+        "desc": "兼容参数：extract.*"
+      },
+      "goal": {
+        "type": "string",
+        "required": false,
+        "desc": "抽取目标描述"
+      },
+      "fields": {
+        "type": "array<string>",
+        "required": false,
+        "desc": "期望字段"
+      },
+      "requireFields": {
+        "type": "array<string>",
+        "required": false,
+        "desc": "必填字段"
+      },
+      "schema": {
+        "type": "object",
+        "required": false,
+        "desc": "输出 JSON Schema"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "desc": "自定义抽取提示词"
+      },
+      "model": {
+        "type": "string",
+        "required": false,
+        "desc": "模型层级（fast/balanced/advanced）"
+      },
+      "output": {
+        "type": "string",
+        "required": false,
+        "desc": "输出后处理（json/text）"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "desc": "规范化 ai.extract 输入参数",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){ function asText(v){ return String(v == null ? '' : v).trim(); } function asArr(v){ if(!Array.isArray(v)) return []; const out=[]; const seen=new Set(); for(const x of v){ const s=asText(x); if(!s || seen.has(s)) continue; seen.add(s); out.push(s); } return out; } function asObj(v){ return (v && typeof v==='object' && !Array.isArray(v)) ? v : {}; } const root=asObj(input); const ai=asObj(root.ai); const aiExtract=asObj(ai.extract); const ex=asObj(root.extract); const dotExtract = asObj(root['ai.extract']); const merged={ ...ex, ...dotExtract, ...aiExtract }; const goal=asText(merged.goal || root.goal || merged.query || root.query || '提取当前页面所需结构化信息'); const fields=asArr(merged.fields || root.fields); const requireFields=asArr(merged.requireFields || root.requireFields); const model=asText(merged.model || root.model || 'balanced'); const output=asText(merged.output || root.output || 'json').toLowerCase(); const schemaRaw = asObj(merged.schema || root.schema); let schema = schemaRaw; if(!Object.keys(schema).length && (fields.length || requireFields.length)){ const props={}; const all = fields.length ? fields : requireFields; for(const f of all){ props[f] = { type: 'string' }; } schema = { type: 'object', properties: props, required: requireFields, additionalProperties: true }; } if(!Object.keys(schema).length){ schema = { type: 'object', additionalProperties: true }; } const promptRaw=asText(merged.prompt || root.prompt); const prompt = promptRaw || ( '你是网页结构化抽取器。请严格按给定 schema 返回 JSON 对象。' + '\\n目标：' + goal + '\\n字段偏好：' + (fields.length ? fields.join(', ') : '(未指定)') + '\\n必填字段：' + (requireFields.length ? requireFields.join(', ') : '(无)') + '\\n要求：不要输出解释文本，不要输出 markdown，只返回 JSON 对象。' ); return { goal, fields, requireFields, model, output, schema, prompt }; }",
+          "args": [
+            "${{ ({ ai: args.ai || {}, extract: args.extract || {}, goal: args.goal, fields: args.fields, requireFields: args.requireFields, schema: args.schema, prompt: args.prompt, model: args.model, output: args.output }) }}"
+          ]
+        },
+        "saveAs": "extractCtx",
+        "next": {
+          "done": "extract_ai",
+          "failed": "abort_bad_args"
+        }
+      },
+      {
+        "id": "extract_ai",
+        "desc": "调用 run_ai 基于清洗页面内容做结构化抽取",
+        "action": {
+          "type": "run_ai",
+          "model": "${vars.extractCtx.model}",
+          "prompt": "${vars.extractCtx.prompt}",
+          "input": "${{ ({ goal: vars.extractCtx.goal, fields: vars.extractCtx.fields, requireFields: vars.extractCtx.requireFields, output: vars.extractCtx.output }) }}",
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true,
+            "article": true
+          },
+          "schema": "${vars.extractCtx.schema}"
+        },
+        "saveAs": "aiOut",
+        "next": {
+          "done": "normalize_out",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "normalize_out",
+        "desc": "归一化输出并校验 requireFields",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(aiOut, ctx){ function asText(v){ return String(v == null ? '' : v).trim(); } function asObj(v){ return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; } function toText(v){ return String(v==null?'':v).replace(/!\\[[^\\]]*\\]\\([^\\)]*\\)/g,'').replace(/\\[([^\\]]+)\\]\\([^\\)]*\\)/g,'$1').replace(/\\r/g,'').replace(/[ \\t]+\\n/g,'\\n').replace(/\\n{3,}/g,'\\n\\n').trim(); } const data = asObj(aiOut); const c = asObj(ctx); const req = Array.isArray(c.requireFields) ? c.requireFields : []; const outMode = asText(c.output || 'json').toLowerCase(); if(outMode === 'text'){ for(const k of Object.keys(data)){ if(typeof data[k] === 'string'){ data[k] = toText(data[k]); } } } const missingFields = req.filter((k)=>{ const v = data[k]; return v == null || asText(v) === ''; }); return { action:'extract', data, missingFields, meta:{ goal: asText(c.goal), model: asText(c.model), output: outMode, fieldCount: Object.keys(data).length } }; }",
+          "args": [
+            "${{ vars.aiOut || {} }}",
+            "${{ vars.extractCtx || {} }}"
+          ]
+        },
+        "saveAs": "extractOut",
+        "next": {
+          "done": "done",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "ai.extract ok",
+          "conclusion": "${vars.extractOut}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_bad_args",
+        "action": {
+          "type": "abort",
+          "reason": "ai.extract invalid args"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_failed",
+        "action": {
+          "type": "abort",
+          "reason": "ai.extract failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "extractCtx": {
+        "type": "object",
+        "desc": "规范化后的抽取上下文",
+        "from": "init_ctx.saveAs"
+      },
+      "aiOut": {
+        "type": "object",
+        "desc": "run_ai 原始抽取结果",
+        "from": "extract_ai.saveAs"
+      },
+      "extractOut": {
+        "type": "object",
+        "desc": "归一化后的 ai.extract 结果",
+        "from": "normalize_out.saveAs"
+      }
+    }
+  }
+}

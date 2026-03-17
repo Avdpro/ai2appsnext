@@ -1,0 +1,77 @@
+{
+  "id": "smoke_xhs_open_pick3",
+  "start": "open_xhs",
+  "steps": [
+    {
+      "id": "open_xhs",
+      "action": {
+        "type": "goto",
+        "url": "https://www.xiaohongshu.com"
+      },
+      "next": { "done": "wait_home", "failed": "abort_open" }
+    },
+    {
+      "id": "wait_home",
+      "action": {
+        "type": "wait",
+        "by": "css: body",
+        "timeoutMs": 15000
+      },
+      "next": { "done": "ensure_login", "failed": "ensure_login" }
+    },
+    {
+      "id": "ensure_login",
+      "action": {
+        "type": "invoke",
+        "target": "login_check_ensure",
+        "args": {
+          "login.ensure": true
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "loginOut",
+      "next": { "done": "open_pick3", "failed": "abort_login" }
+    },
+    {
+      "id": "open_pick3",
+      "action": {
+        "type": "invoke",
+        "target": "interact_open",
+        "args": {
+          "interact.action": "open",
+          "interact.control": {
+            "by": "query",
+            "query": "帖子/笔记卡片的打开入口（进入详情页）",
+            "pick": 3
+          },
+          "interact.postWaitMs": 1200
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "openOut",
+      "next": { "done": "done", "failed": "abort_open_post" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "xhs pick3 open done",
+        "conclusion": "${{ ({ login: vars.loginOut || {}, openPost: vars.openOut || {} }) }}"
+      }
+    },
+    {
+      "id": "abort_open",
+      "action": { "type": "abort", "reason": "打开小红书失败" }
+    },
+    {
+      "id": "abort_login",
+      "action": { "type": "abort", "reason": "登录流程失败" }
+    },
+    {
+      "id": "abort_open_post",
+      "action": { "type": "abort", "reason": "打开第3条帖子失败" }
+    }
+  ]
+}

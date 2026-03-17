@@ -1,0 +1,128 @@
+{
+  "id": "read_comments_on_current_page",
+  "start": "init",
+  "steps": [
+    {
+      "id": "init",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(maxRounds){ const n=Number(maxRounds); const m=Number.isFinite(n)?Math.max(1,Math.min(12,Math.floor(n))):3; return { round:0, maxRounds:m, itemCount:0, needMin:0, enough:false, exhausted:false }; }",
+        "args": ["${{ args?.ensure?.maxRounds ?? args?.read?.maxRounds ?? 3 }}"]
+      },
+      "saveAs": "ensureState",
+      "next": { "done": "invoke", "failed": "abort" }
+    },
+    {
+      "id": "invoke",
+      "action": {
+        "type": "invoke",
+        "target": "read_comments_generic",
+        "args": {
+          "read.action": "comments",
+          "read.minItems": 0,
+          "read.fields": "${read.fields}",
+          "read.requireFields": "${read.requireFields}",
+          "read.filter": "${read.filter}",
+          "read.sort": "${read.sort}",
+          "read.output": "${read.output}",
+          "read.target": "${read.target}",
+          "query": "${query}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "commentsOut",
+      "next": { "done": "check_count", "failed": "abort" }
+    },
+    {
+      "id": "check_count",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out, state, minItems){ const s=(state&&typeof state==='object')?state:{}; const items=Array.isArray(out&&out.items)?out.items:[]; const minNRaw=Number(minItems); const needMin=Number.isFinite(minNRaw)?Math.max(0,Math.floor(minNRaw)):0; const enough=needMin<=0?true:(items.length>=needMin); const round=Number.isFinite(Number(s.round))?Number(s.round):0; const maxRounds=Number.isFinite(Number(s.maxRounds))?Number(s.maxRounds):3; const exhausted=!enough && round>=maxRounds; return { ...s, itemCount: items.length, needMin, enough, exhausted }; }",
+        "args": [
+          "${{ vars.commentsOut || {} }}",
+          "${{ vars.ensureState || {} }}",
+          "${read.minItems}"
+        ]
+      },
+      "saveAs": "ensureState",
+      "next": { "done": "route_ensure", "failed": "abort" }
+    },
+    {
+      "id": "route_ensure",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "truthy", "source": "vars", "path": "ensureState.enough" }, "to": "done" },
+          { "when": { "op": "truthy", "source": "vars", "path": "ensureState.exhausted" }, "to": "abort_insufficient" }
+        ],
+        "default": "load_more"
+      },
+      "next": {}
+    },
+    {
+      "id": "load_more",
+      "action": {
+        "type": "invoke",
+        "find": {
+          "kind": "rpa",
+          "must": ["loadMore"],
+          "prefer": ["loadMore.target", "loadMore.minNewItems", "loadMore.maxTries"],
+          "filter": [
+            { "key": "domain", "value": "*" },
+            { "key": "locale", "value": "zh-CN" }
+          ],
+          "rank": "quality"
+        },
+        "args": {
+          "loadMore.target": "${read.target}",
+          "loadMore.minNewItems": 1,
+          "loadMore.maxTries": 1,
+          "read.target": "${read.target}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "loadMoreOut",
+      "next": { "done": "bump_round", "failed": "abort_insufficient" }
+    },
+    {
+      "id": "bump_round",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(state){ const s=(state&&typeof state==='object')?state:{}; const round=Number.isFinite(Number(s.round))?Number(s.round):0; return { ...s, round: round+1 }; }",
+        "args": ["${{ vars.ensureState || {} }}"]
+      },
+      "saveAs": "ensureState",
+      "next": { "done": "invoke", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "read.comments ok",
+        "conclusion": "${{ (()=>{ const out=((vars.commentsOut && typeof vars.commentsOut==='object') ? vars.commentsOut : {}); const ensure={ round:Number(vars.ensureState?.round||0), maxRounds:Number(vars.ensureState?.maxRounds||0), itemCount:Number(vars.ensureState?.itemCount||0), needMin:Number(vars.ensureState?.needMin||0), enough:!!vars.ensureState?.enough }; const baseMeta=(out && out.meta && typeof out.meta==='object')?out.meta:{}; const quality=(baseMeta && typeof baseMeta.quality==='object')?baseMeta.quality:null; return { ...out, ensure, meta:{ ...baseMeta, quality: quality||null, stable: !!out._ok, ensure } }; })() }}"
+      },
+      "next": {}
+    },
+    {
+      "id": "abort_insufficient",
+      "action": {
+        "type": "abort",
+        "reason": "read.comments insufficient items after loadMore retries"
+      },
+      "next": {}
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "invoke read.comments failed"
+      },
+      "next": {}
+    }
+  ]
+}

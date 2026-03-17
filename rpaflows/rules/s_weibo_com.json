@@ -1,0 +1,155 @@
+{
+	"web": {
+		"elements": {
+			"sig:29621f897fe65b00": {
+				"value": [
+					"xpath: //div[@class='main']//input[@type='text' or @type='search']"
+				],
+				"pending": false,
+				"time": 1771786648402,
+				"queries": [
+					"scope:https://s.weibo.com|q:页面中部 主搜索框 输入框（更大，不是顶部导航条搜索框）",
+					"scope:https://s.weibo.com|q:页面中部 主搜索框 搜索输入框（更大，不是顶部导航）",
+					"scope:https://s.weibo.com|q:页面中部较大的搜索框（避免顶部导航搜索框）。优先选择页面主体区域的搜索输入框。",
+					"scope:https://s.weibo.com|q:css:main input[type='text']",
+					"scope:https://s.weibo.com|q:页面中部主要搜索框（更大、位于内容区域，不是顶部导航条搜索框）"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|textbox|input:text|ids:none|a11y:none|anchor:c=none|chain=div#pl_homepage_search",
+				"keys": [
+					"weibo_search_read_list_focus_middle_search_box",
+					"weibo_search_read_list_v055_focus_middle_search_box",
+					"weibo_site_search_read_list_locate_center_search_box",
+					"weibo_search_read_results_focus_main_search_box"
+				]
+			},
+			"sig:9371ab057f9198ce": {
+				"value": [
+					"css: #pl_feedlist_index"
+				],
+				"pending": false,
+				"time": 1771787269463,
+				"queries": [
+					"scope:https://s.weibo.com|q:微博搜索结果 列表（内容区）",
+					"scope:https://s.weibo.com|q:微博 结果 列表",
+					"scope:https://s.weibo.com|q:微博搜索结果列表区域（包含多条微博卡片）"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=有8条新微博，点击查看;lift=div|anchor:c=none|chain=div#pl_feed_main>div#pl_feedlist_index",
+				"keys": [
+					"weibo_search_read_list_wait_results_list",
+					"weibo_search_read_list_v055_wait_results_list",
+					"weibo_search_read_results_wait_results_load"
+				]
+			},
+			"sig:02820b65ae539d71": {
+				"value": [
+					"css: input[placeholder*='搜索'], input[aria-label*='搜索'], input[title*='搜索']"
+				],
+				"pending": false,
+				"time": 1771785780557,
+				"queries": [
+					"scope:https://s.weibo.com|q:css:div.searchbox input, css:div.srch_txt input, css:input[name='q'], css:input.search-input"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|textbox|input:text|ids:none|a11y:ph=搜索微博;lab=搜索微博|anchor:c=form|chain=none",
+				"keys": [
+					"weibo_search_read_list_v1_focus_middle_search_box"
+				]
+			},
+			"sig:fc635a9a1432d97e": {
+				"value": [
+					"css: body.wbs-index div.main"
+				],
+				"pending": false,
+				"time": 1771786664304,
+				"queries": [
+					"scope:https://s.weibo.com|q:微博搜索结果 列表（内容区）"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=综合;lift=div|anchor:c=none|chain=div#pl_homepage_search",
+				"keys": []
+			}
+		},
+		"ruleMap": {
+			"weibo_search_read_results_focus_main_search_box": {
+				"eid": "sig:29621f897fe65b00",
+				"query": "scope:https://s.weibo.com|q:页面中部主要搜索框（更大、位于内容区域，不是顶部导航条搜索框）",
+				"time": 1771747302350
+			},
+			"weibo_search_read_results_wait_results_load": {
+				"eid": "sig:9371ab057f9198ce",
+				"query": "scope:https://s.weibo.com|q:微博搜索结果列表区域（包含多条微博卡片）",
+				"time": 1771748205717
+			},
+			"weibo_search_read_list_focus_middle_search_box": {
+				"eid": "sig:29621f897fe65b00",
+				"query": "scope:https://s.weibo.com|q:页面中部 主搜索框 输入框（更大，不是顶部导航条搜索框）",
+				"time": 1771786648402
+			},
+			"weibo_site_search_read_list_locate_center_search_box": {
+				"eid": "sig:29621f897fe65b00",
+				"query": "scope:https://s.weibo.com|q:页面中部较大的搜索框（避免顶部导航搜索框）。优先选择页面主体区域的搜索输入框。",
+				"time": 1771773089457
+			},
+			"weibo_search_read_list_v055_focus_middle_search_box": {
+				"eid": "sig:29621f897fe65b00",
+				"query": "scope:https://s.weibo.com|q:页面中部 主搜索框 搜索输入框（更大，不是顶部导航）",
+				"time": 1771775116416
+			},
+			"weibo_search_read_list_v055_wait_results_list": {
+				"eid": "sig:9371ab057f9198ce",
+				"query": "scope:https://s.weibo.com|q:微博 结果 列表",
+				"time": 1771775124692
+			},
+			"weibo_search_read_list_v1_focus_middle_search_box": {
+				"eid": "sig:02820b65ae539d71",
+				"query": "scope:https://s.weibo.com|q:css:div.searchbox input, css:div.srch_txt input, css:input[name='q'], css:input.search-input",
+				"time": 1771785780557
+			},
+			"weibo_search_read_list_wait_results_list": {
+				"eid": "sig:9371ab057f9198ce",
+				"query": "scope:https://s.weibo.com|q:微博搜索结果 列表（内容区）",
+				"time": 1771787269463
+			},
+			"read_list_generic_ai_extract_list_run_js": {
+				"code": {
+					"text": "function(config){\n  config = config || {};\n  var pageUrl = (config.page && config.page.url) || (typeof location !== 'undefined' ? location.href : '');\n  function txt(el){return (el && (el.innerText||el.textContent)||'').replace(/\\s+/g,' ').trim();}\n  function absUrl(href){\n    href = (href||'').trim();\n    if(!href) return '';\n    if(/^javascript:/i.test(href)) return '';\n    if(href.startsWith('//')) return 'https:' + href;\n    try{ return new URL(href, pageUrl).href; }catch(e){ return href; }\n  }\n  function isBadLink(a){\n    if(!a) return true;\n    var href = (a.getAttribute('href')||'').trim();\n    if(!href || /^javascript:/i.test(href)) return true;\n    var rel = (a.getAttribute('rel')||'').toLowerCase();\n    if(rel.includes('nofollow') && href.startsWith('sinaweibo://')) return true;\n    var t = (a.getAttribute('title')||'') + ' ' + txt(a);\n    t = t.toLowerCase();\n    if(/登录|注册|隐私|条款|协议|帮助|反馈|客服|举报|广告|推广|推荐|关于|下载|app|客户端/.test(t)) return true;\n    return false;\n  }\n  function inExcludedArea(el){\n    if(!el || !el.closest) return false;\n    return !!el.closest('header,nav,footer,aside,.sidebar,.side,.right,.right-rail,.m-main-nav,.Nav_wrap_gHB1a,#searchapps');\n  }\n  function getTargetRoot(){\n    var t = config.target || {};\n    var root = null;\n    if(t && t.by === 'selector' && t.selector){\n      root = document.querySelector(t.selector);\n    } else if(t && t.by === 'query' && t.query){\n      root = document.querySelector(t.query);\n    } else if(t && t.query){\n      root = document.querySelector(t.query);\n    } else if(t && t.selector){\n      root = document.querySelector(t.selector);\n    }\n    if(root) return root;\n    return document.querySelector('#pl_feedlist_index') || document.querySelector('#pl_feed_main') || document.querySelector('.m-main') || document.body;\n  }\n  function pickItems(items){\n    var t = config.target || {};\n    var pick = t.pick;\n    if(pick === undefined || pick === null) return items;\n    if(typeof pick === 'number'){\n      var idx = pick;\n      if(idx === -1) return items.length ? [items[items.length-1]] : [];\n      if(idx > 0) return items[idx-1] ? [items[idx-1]] : [];\n      if(idx === 0) return items[0] ? [items[0]] : [];\n      return [];\n    }\n    if(typeof pick === 'string'){\n      var s = pick.trim();\n      if(!s) return items;\n      var low = s.toLowerCase();\n      var filtered = items.filter(function(it){\n        var hay = ((it.title||'')+' '+(it.summary||'')+' '+(it.text||'')+' '+(it.url||'')).toLowerCase();\n        return hay.includes(low);\n      });\n      return filtered.length ? filtered : items;\n    }\n    return items;\n  }\n  function applyQueryFilter(items){\n    var q = (config.query || config.searchQuery || (config.target && config.target.query) || '').toString().trim();\n    if(!q) return items;\n    var ql = q.toLowerCase();\n    var kept = items.filter(function(it){\n      var hay = ((it.title||'')+' '+(it.summary||'')+' '+(it.text||'')).toLowerCase();\n      return hay.includes(ql);\n    });\n    return kept.length ? kept : items;\n  }\n  function extractFromContainer(root){\n    if(!root) return {items:[], nextCursor:null};\n    var candidates = [];\n    var direct = root.querySelectorAll('[action-type=\"feed_list_item\"], .card-wrap[action-type], .card-wrap');\n    for(var i=0;i<direct.length;i++){\n      var el = direct[i];\n      if(inExcludedArea(el)) continue;\n      if(el.getAttribute('action-type')==='feed_list_item' || el.hasAttribute('mid') || el.querySelector('.card-feed')) candidates.push(el);\n    }\n    if(candidates.length<1){\n      var alt = root.querySelectorAll('.card-feed');\n      for(var j=0;j<alt.length;j++){\n        var p = alt[j].closest('.card-wrap') || alt[j];\n        if(p && !inExcludedArea(p)) candidates.push(p);\n      }\n    }\n    var items = [];\n    for(var k=0;k<candidates.length && items.length<50;k++){\n      var card = candidates[k];\n      if(!card || inExcludedArea(card)) continue;\n      var content = card.querySelector('.content') || card;\n      var titleEl = card.querySelector('a.name') || card.querySelector('.info a.name') || card.querySelector('.card-top .title a') || card.querySelector('h3,h4,.title');\n      var title = txt(titleEl);\n      var summaryEl = card.querySelector('p.txt,[node-type=\"feed_list_content\"],.txt') || card.querySelector('.content');\n      var summary = txt(summaryEl);\n      summary = summary.replace(/展开\\s*[a-z]?$/i,'').trim();\n      var url = '';\n      var fromA = card.querySelector('.from a[href]');\n      if(fromA && !isBadLink(fromA)) url = absUrl(fromA.getAttribute('href'));\n      if(!url){\n        var aList = card.querySelectorAll('a[href]');\n        for(var m=0;m<aList.length;m++){\n          var a = aList[m];\n          if(isBadLink(a)) continue;\n          if(inExcludedArea(a)) continue;\n          var href = a.getAttribute('href')||'';\n          if(/weibo\\.com\\//i.test(href) && /\\/[A-Za-z0-9]{6,}/.test(href)) { url = absUrl(href); break; }\n        }\n      }\n      if(!url){\n        var mid = card.getAttribute('mid') || (card.querySelector('[mid]') && card.querySelector('[mid]').getAttribute('mid'));\n        if(mid) url = absUrl('https://weibo.com/' + mid);\n      }\n      if(!title){\n        var name = card.querySelector('a[name],a.nick-name,a[title]');\n        title = txt(name) || (summary ? summary.slice(0,40) : '');\n      }\n      if(!summary) summary = '';\n      var item = {url:url||'', title:title||'', summary:summary||''};\n      item.text = item.summary || item.title || '';\n      items.push(item);\n    }\n    var nextCursor = null;\n    var pager = root.querySelector('.m-page, .W_pages, .woo-box-flex .m-page') || document.querySelector('.m-page, .W_pages');\n    if(pager){\n      var nextA = pager.querySelector('a.next, a[rel=\"next\"], a[href*=\"page=\"]');\n      if(nextA && !isBadLink(nextA)){\n        var nu = absUrl(nextA.getAttribute('href'));\n        if(nu && nu !== pageUrl) nextCursor = nu;\n      }\n    }\n    if(!nextCursor){\n      var a2 = document.querySelector('a.next[href], a[rel=\"next\"][href]');\n      if(a2 && !inExcludedArea(a2) && !isBadLink(a2)){\n        var nu2 = absUrl(a2.getAttribute('href'));\n        if(nu2 && nu2 !== pageUrl) nextCursor = nu2;\n      }\n    }\n    return {items:items, nextCursor:nextCursor};\n  }\n  function ensureFields(items){\n    return (items||[]).map(function(it){\n      it = it || {};\n      var o = {url:(it.url||'')+'', title:(it.title||'')+'', summary:(it.summary||'')+''};\n      o.text = (it.text||o.summary||o.title||'')+'';\n      return o;\n    });\n  }\n  var root = getTargetRoot();\n  var res = extractFromContainer(root);\n  var items = ensureFields(res.items);\n  if(items.length < (config.minItems||1)){\n    var root2 = document.querySelector('#pl_feedlist_index') || document.querySelector('#pl_feed_main') || document.querySelector('.main-full') || document.querySelector('.m-main') || document.body;\n    res = extractFromContainer(root2);\n    items = ensureFields(res.items);\n  }\n  items = applyQueryFilter(items);\n  items = pickItems(items);\n  var requireFields = config.requireFields || config.fields || [];\n  if(Array.isArray(requireFields) && requireFields.length){\n    items = items.filter(function(it){\n      for(var i=0;i<requireFields.length;i++){\n        var f = requireFields[i];\n        if(typeof f !== 'string') continue;\n        if((it[f]||'').toString().trim()==='') return false;\n      }\n      return true;\n    });\n  }\n  if(config.filter && typeof config.filter === 'function'){\n    try{ items = items.filter(config.filter); }catch(e){}\n  }\n  if(config.sort && typeof config.sort === 'function'){\n    try{ items = items.slice().sort(config.sort); }catch(e){}\n  }\n  if(items.length>50) items = items.slice(0,50);\n  var nextCursor = res.nextCursor;\n  if(nextCursor===undefined) nextCursor = null;\n  if(nextCursor!==null) nextCursor = (nextCursor||'')+'';\n  if(!nextCursor) nextCursor = null;\n  return {action:'list', items:items, nextCursor:nextCursor, pageUrl:pageUrl};\n}",
+					"time": 1771787484969
+				},
+				"query": "{\"pageScope\":\"https://s.weibo.com\",\"profile\":\"list\",\"scope\":\"page\",\"model\":\"gpt-5.2\",\"fallbackModel\":\"gpt-5-mini\",\"promptVersion\":4,\"temperature\":0,\"htmlMaxLen\":80000,\"retryMax\":2,\"codeMaxChars\":12000,\"codeMaxLines\":260,\"repeatPatternLimit\":12,\"verifyEnabled\":true,\"verifyMaxCycles\":3,\"verifyModel\":\"gpt-5-mini\",\"verifyFallbackModel\":\"gpt-4.1\",\"verifyPromptVersion\":1,\"query\":\"编写一个只读函数，从当前网页提取通用 list（搜索结果/文章列表/消息列表/用户列表）。函数签名 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先识别主内容区域中“重复出现的条目容器”作为候选列表，再逐条抽取。强制排除：header/nav/footer/sidebar、登录/注册、隐私条款、帮助反馈、广告推荐位。返回对象必须是 {action:'list',items:Array,nextCursor:string|null,pageUrl:string}。items 每项至少提供 url/title/summary 三个字符串字段（缺失填空字符串，不要 null），url 优先绝对地址，最多 50 条。对 Google/Bing/百度/小红书等页面，优先真实结果卡片，避免站点导航链接。关键要求：必须理解并应用 config.target（{by,query,selector,pick}）语义；当给出 target.query/selector 时应优先在该目标范围提取列表；当给出 target.pick 时，按 pick 规则（number=第N个，-1最后一个，string=文本包含）选择条目。若 config.query/searchQuery 存在，也需结合其语义缩小目标。config 还包括 minItems/fields/requireFields/filter/sort/output。\"}",
+				"time": 1771787484969
+			},
+			"load_more_strategy": {
+				"value": {
+					"data": {
+						"model": "gpt-5.2",
+						"envelope": {
+							"status": "ok",
+							"result": {
+								"action": "click",
+								"selector": "#pl_feedlist_index .m-page a.next",
+								"reason": "主内容区底部存在分页“下一页”链接（.m-page a.next），可继续加载更多结果，且不属于导航/登录/设置/帮助/页脚区域，优先点击。"
+							}
+						},
+						"raw": "{\"status\":\"ok\",\"result\":{\"action\":\"click\",\"selector\":\"#pl_feedlist_index .m-page a.next\",\"reason\":\"主内容区底部存在分页“下一页”链接（.m-page a.next），可继续加载更多结果，且不属于导航/登录/设置/帮助/页脚区域，优先点击。\"}}",
+						"time": 1771787511261
+					},
+					"time": 1771787511261
+				},
+				"query": "run_ai:038a7a8aa4c2c3ec",
+				"time": 1771787511261
+			}
+		},
+		"_gcTime": 1771787270789,
+		"_gcRemoved": 0
+	}
+}

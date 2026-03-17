@@ -1,0 +1,92 @@
+{
+  "id": "flow_tip_persist_nav_smoke",
+  "start": "goto_start",
+  "steps": [
+    {
+      "id": "goto_start",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/prompt-nav/index.html",
+        "waitBy": "css: #start-nav",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "show_tip", "failed": "abort" }
+    },
+    {
+      "id": "show_tip",
+      "action": {
+        "type": "ask_assist",
+        "reason": "TIP_PERSIST_NAV_OK",
+        "waitUserAction": false,
+        "persistAcrossNav": true,
+        "persistTtlMs": 20000,
+        "tipTimeoutMs": 20000,
+        "tipPollMs": 300
+      },
+      "next": { "done": "click_nav_button", "failed": "abort" }
+    },
+    {
+      "id": "click_nav_button",
+      "action": {
+        "type": "click",
+        "by": "css: #start-nav"
+      },
+      "next": { "done": "wait_next_page", "failed": "abort" }
+    },
+    {
+      "id": "wait_next_page",
+      "action": {
+        "type": "wait",
+        "by": "css: #u",
+        "timeoutMs": 12000
+      },
+      "next": { "done": "delay_for_tip_reopen", "failed": "abort" }
+    },
+    {
+      "id": "delay_for_tip_reopen",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(ms){ var n=Number(ms||0); if(!Number.isFinite(n)||n<0)n=0; return new Promise(function(resolve){ setTimeout(function(){ resolve({ok:true, waitedMs:n}); }, n); }); }",
+        "args": [1200]
+      },
+      "next": { "done": "check_tip_visible", "failed": "abort" }
+    },
+    {
+      "id": "check_tip_visible",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(expected){ const root=document.getElementById('__ai2apps_tip_root__'); if(!root) return {ok:false, reason:'tip root missing'}; const tips=Array.from(root.querySelectorAll(\"[data-ai2apps-tip='1']\")); if(!tips.length) return {ok:false, reason:'no tip nodes'}; const text=tips.map(el=>String(el.textContent||'').replace(/\\s+/g,' ').trim()).join(' | '); const ok=text.includes(String(expected||'')); return {ok, text, count:tips.length}; }",
+        "args": ["TIP_PERSIST_NAV_OK"]
+      },
+      "saveAs": "tipCheck",
+      "next": { "done": "route_check", "failed": "abort" }
+    },
+    {
+      "id": "route_check",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "tipCheck.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "conclusion": "${{ ({ ok:true, test:'tip_persist_nav', check: vars.tipCheck || null }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "${{ (vars.tipCheck && vars.tipCheck.reason) ? vars.tipCheck.reason : 'tip persist nav smoke failed' }}"
+      }
+    }
+  ]
+}

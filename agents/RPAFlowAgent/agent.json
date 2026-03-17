@@ -1,0 +1,12 @@
+{
+  "name": "RPAFlowAgent",
+  "label": "RPAFlowAgent",
+  "expose": true,
+  "description": "Run rpaflows flows and goal-driven web RPA tasks.",
+  "entry": "../../AgentNodeMain.mjs",
+  "chatEntry": null,
+  "agents": ["agent.js"],
+  "tools": ["agent.js"],
+  "autoStart": false,
+  "checkUpdate": false
+}

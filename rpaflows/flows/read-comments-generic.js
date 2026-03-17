@@ -1,0 +1,218 @@
+const capabilities = {
+	must: ["read.comments", "read.action"],
+	prefer: ["read.target", "read.fields", "read.minItems", "read.requireFields", "read.output"],
+};
+
+const filters = [
+	{ key: "domain", value: "*" },
+	{ key: "locale", value: "zh-CN" },
+];
+
+const ranks = {
+	cost: 2,
+	quality: 2,
+	speed: 2,
+};
+
+const flow = {
+	id: "read_comments_generic",
+	start: "route_action",
+	args: {
+		read: { type: "object", required: false, desc: "read.* 参数对象" },
+		query: { type: "string", required: false, desc: "可选查询词" },
+	},
+	steps: [
+		{
+			id: "route_action",
+			desc: "仅支持 read.action=comments",
+			action: {
+				type: "branch",
+				cases: [
+					{ when: { op: "eq", source: "args", path: "read.action", value: "comments" }, to: "extract_comments" }
+				],
+				default: "abort_not_comments"
+			},
+			next: {}
+		},
+		{
+			id: "extract_comments",
+			desc: "通过 AI 生成 run_js 并按页面结构提取评论",
+			action: {
+				type: "run_js",
+				scope: "page",
+				cache: true,
+				query: "编写一个只读函数，从当前网页提取评论列表。函数签名必须是 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先使用 config.target.selector 定位评论节点；若未提供或为空，自主识别“评论区重复条目”。返回对象必须是 {action:'comments',items:Array,nextCursor:string|null,pageUrl:string}。items 每项必须包含 id,author,text,summary,time,url 六个字符串字段（缺失填空字符串，不要 null）；text 必须是单条评论正文。硬性排除：主贴内容、发布者卡片、转发/点赞/评论工具栏、排序控件（如按热度/按时间）、来源文案（如来自XX）、回复计数（如共X条回复）、翻译按钮文案（如Translate content）。不要把主贴正文当评论。仅采纳位于“评论容器”中的重复条目：候选条目至少满足作者/时间/评论操作区三类信号中的两类；若只满足一类则丢弃。最多 80 条；去重。config 包含 fields/requireFields/target/output/query。",
+				args: [
+					{
+						fields: "${read.fields}",
+						requireFields: "${read.requireFields}",
+						target: "${read.target}",
+						output: "${read.output}",
+						query: "${query}"
+					}
+				]
+			},
+			saveAs: "rawCommentsOut",
+			next: { done: "normalize_result", failed: "ai_fallback" }
+		},
+		{
+			id: "normalize_result",
+			desc: "规范化 run_js 输出并做基础质量判断",
+			action: {
+				type: "run_js",
+				scope: "agent",
+				code: "function(raw, read, query){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function absUrl(u){ const s=asText(u); if(!s) return ''; try{return new URL(s).href;}catch(_){return s;} } function toObj(x){ if(!x) return {}; if(typeof x==='string'){ try{return JSON.parse(x);}catch(_){ return {}; } } return x; } function normKey(s){ return asText(s).toLowerCase(); } function stripAuthorPrefix(text, author){ let t=asText(text); const a=asText(author); if(!t) return ''; if(a){ const re=new RegExp('^'+a.replace(/[.*+?^${}()|[\\\\]\\\\]/g,'\\\\$&')+'\\\\s*[:：]\\\\s*'); t=t.replace(re,'').trim(); } return t; } function isNoiseText(text){ const t=asText(text); if(!t) return true; if(t.length<2) return true; if(/^(按热度|按时间|同时转发|转发|评论|赞)$/.test(t)) return true; if(/^来自\\S+/.test(t)) return true; if(/^共\\d+条(回复|评论)?$/.test(t)) return true; if(/^(展开|收起|查看全部|查看更多|全部回复)$/.test(t)) return true; if(/^分享这条博文$/.test(t)) return true; return false; } function qualityScore(one){ let s=0; if(one.author) s+=2; if(one.time) s+=1; if(one.url) s+=1; if(one.id) s+=1; s+=Math.min(3, Math.floor(asText(one.text).length/40)); return s; } const r=(read&&typeof read==='object')?read:{}; const want=Array.isArray(r.fields)&&r.fields.length?r.fields:['id','author','text','summary','time','url']; const req=Array.isArray(r.requireFields)?r.requireFields:[]; const minItems=Math.max(0, Number.isFinite(Number(r.minItems))?Math.floor(Number(r.minItems)):0); const obj=toObj(raw); const src=Array.isArray(obj.items)?obj.items:(Array.isArray(obj.list)?obj.list:(Array.isArray(obj.results)?obj.results:(Array.isArray(obj)?obj:[]))); const bestByText=new Map(); for(const it of src){ const o=(it&&typeof it==='object')?it:{}; const one={ id:asText(o.id||o.commentId||o.cid||''), author:asText(o.author||o.user||o.username||o.name||''), text:asText(o.text||o.content||o.body||o.comment||''), summary:asText(o.summary||o.snippet||o.excerpt||o.text||o.content||''), time:asText(o.time||o.date||o.createdAt||o.created_at||o.datetime||''), url:absUrl(o.url||o.permalink||o.href||'') }; one.text=stripAuthorPrefix(one.text, one.author); if(!one.summary) one.summary=one.text.slice(0,200); if(isNoiseText(one.text)) continue; const tk=normKey(one.text); if(!tk) continue; const prev=bestByText.get(tk); if(!prev || qualityScore(one)>qualityScore(prev)){ bestByText.set(tk, one); } } const out=[]; for(const one of bestByText.values()){ const row={}; for(const f0 of want){ const f=asText(f0); if(!f) continue; if(Object.prototype.hasOwnProperty.call(one,f)) row[f]=one[f]; else if(f==='content') row[f]=one.text; else row[f]=''; } out.push(row); if(out.length>=80) break; } const missingFields=req.filter((k)=>!out.some((it)=>{ const v=it&&it[k]; return !(v==null || String(v).trim()===''); })); const total=Math.max(1,out.length); const authorHits=out.filter((it)=>asText(it&&it.author)).length; const textHits=out.filter((it)=>asText(it&&it.text)).length; const idOrUrlHits=out.filter((it)=>asText(it&&it.id)||asText(it&&it.url)).length; const shortTextHits=out.filter((it)=>asText(it&&it.text).length<3).length; const uniqueTextRatio=(new Set(out.map((it)=>normKey(it&&it.text))).size)/total; const quality={ minItems, authorRate:authorHits/total, textRate:textHits/total, idOrUrlRate:idOrUrlHits/total, shortTextRate:shortTextHits/total, uniqueTextRatio }; const stableByShape=(out.length>=Math.max(1,minItems)) && quality.textRate>=0.95 && quality.shortTextRate<=0.55 && quality.uniqueTextRatio>=0.6 && (quality.authorRate>=0.5 || quality.idOrUrlRate>=0.6); const reqOk=(req.length===0 || missingFields.length<req.length); const ok=stableByShape && reqOk; return { action:'comments', items:out, nextCursor:obj.nextCursor||null, missingFields, meta:{ selectorUsed: asText(r?.target?.selector||''), count: out.length, query: asText(query||''), by: 'run_js_ai', quality }, _ok: ok }; }",
+				args: [
+					"${vars.rawCommentsOut}",
+					"${read}",
+					"${query}"
+				]
+			},
+			saveAs: "normalizedOut",
+			next: { done: "route_quality", failed: "ai_fallback" }
+		},
+		{
+			id: "route_quality",
+			desc: "默认优先返回 run_js 结果；仅在显式要求时走 run_ai 兜底",
+			action: {
+				type: "branch",
+					cases: [
+						{ when: { op: "eq", source: "vars", path: "normalizedOut._ok", value: true }, to: "done" },
+						{ when: { op: "eq", source: "vars", path: "normalizedOut._ok", value: false }, to: "retry_prepare" },
+						{ when: { op: "eq", source: "args", path: "read.forceAiFallback", value: true }, to: "ai_fallback" }
+					],
+				default: "done"
+			},
+			next: {}
+		},
+		{
+			id: "retry_prepare",
+			desc: "首轮无结果时，滚动到评论区域并短暂等待后重试",
+			action: {
+				type: "run_js",
+				scope: "page",
+				code: "function(){ try{ if(typeof location!=='undefined' && !/#comment/.test(String(location.href||''))){ location.hash='comment'; } window.scrollBy(0, 320); }catch(_){} const t=Date.now(); while(Date.now()-t<1800){} return { ok:true }; }"
+			},
+			next: { done: "extract_comments_retry", failed: "extract_comments_retry" }
+		},
+		{
+			id: "extract_comments_retry",
+			desc: "使用同一 run_js 缓存代码重试评论提取",
+			action: {
+				type: "run_js",
+				scope: "page",
+				cache: true,
+				query: "编写一个只读函数，从当前网页提取评论列表。函数签名必须是 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先使用 config.target.selector 定位评论节点；若未提供或为空，自主识别“评论区重复条目”。返回对象必须是 {action:'comments',items:Array,nextCursor:string|null,pageUrl:string}。items 每项必须包含 id,author,text,summary,time,url 六个字符串字段（缺失填空字符串，不要 null）；text 必须是单条评论正文。硬性排除：主贴内容、发布者卡片、转发/点赞/评论工具栏、排序控件（如按热度/按时间）、来源文案（如来自XX）、回复计数（如共X条回复）、翻译按钮文案（如Translate content）。不要把主贴正文当评论。仅采纳位于“评论容器”中的重复条目：候选条目至少满足作者/时间/评论操作区三类信号中的两类；若只满足一类则丢弃。最多 80 条；去重。config 包含 fields/requireFields/target/output/query。",
+				args: [
+					{
+						fields: "${read.fields}",
+						requireFields: "${read.requireFields}",
+						target: "${read.target}",
+						output: "${read.output}",
+						query: "${query}"
+					}
+				]
+			},
+			saveAs: "rawCommentsOutRetry",
+			next: { done: "normalize_retry", failed: "done" }
+		},
+		{
+			id: "normalize_retry",
+			desc: "重试结果规范化",
+			action: {
+				type: "run_js",
+				scope: "agent",
+				code: "function(raw, read, query){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function absUrl(u){ const s=asText(u); if(!s) return ''; try{return new URL(s).href;}catch(_){return s;} } function toObj(x){ if(!x) return {}; if(typeof x==='string'){ try{return JSON.parse(x);}catch(_){ return {}; } } return x; } function normKey(s){ return asText(s).toLowerCase(); } function stripAuthorPrefix(text, author){ let t=asText(text); const a=asText(author); if(!t) return ''; if(a){ const re=new RegExp('^'+a.replace(/[.*+?^${}()|[\\\\]\\\\]/g,'\\\\$&')+'\\\\s*[:：]\\\\s*'); t=t.replace(re,'').trim(); } return t; } function isNoiseText(text){ const t=asText(text); if(!t) return true; if(t.length<2) return true; if(/^(按热度|按时间|同时转发|转发|评论|赞)$/.test(t)) return true; if(/^来自\\S+/.test(t)) return true; if(/^共\\d+条(回复|评论)?$/.test(t)) return true; if(/^(展开|收起|查看全部|查看更多|全部回复)$/.test(t)) return true; if(/^分享这条博文$/.test(t)) return true; return false; } function qualityScore(one){ let s=0; if(one.author) s+=2; if(one.time) s+=1; if(one.url) s+=1; if(one.id) s+=1; s+=Math.min(3, Math.floor(asText(one.text).length/40)); return s; } const r=(read&&typeof read==='object')?read:{}; const want=Array.isArray(r.fields)&&r.fields.length?r.fields:['id','author','text','summary','time','url']; const req=Array.isArray(r.requireFields)?r.requireFields:[]; const minItems=Math.max(0, Number.isFinite(Number(r.minItems))?Math.floor(Number(r.minItems)):0); const obj=toObj(raw); const src=Array.isArray(obj.items)?obj.items:(Array.isArray(obj.list)?obj.list:(Array.isArray(obj.results)?obj.results:(Array.isArray(obj)?obj:[]))); const bestByText=new Map(); for(const it of src){ const o=(it&&typeof it==='object')?it:{}; const one={ id:asText(o.id||o.commentId||o.cid||''), author:asText(o.author||o.user||o.username||o.name||''), text:asText(o.text||o.content||o.body||o.comment||''), summary:asText(o.summary||o.snippet||o.excerpt||o.text||o.content||''), time:asText(o.time||o.date||o.createdAt||o.created_at||o.datetime||''), url:absUrl(o.url||o.permalink||o.href||'') }; one.text=stripAuthorPrefix(one.text, one.author); if(!one.summary) one.summary=one.text.slice(0,200); if(isNoiseText(one.text)) continue; const tk=normKey(one.text); if(!tk) continue; const prev=bestByText.get(tk); if(!prev || qualityScore(one)>qualityScore(prev)){ bestByText.set(tk, one); } } const out=[]; for(const one of bestByText.values()){ const row={}; for(const f0 of want){ const f=asText(f0); if(!f) continue; if(Object.prototype.hasOwnProperty.call(one,f)) row[f]=one[f]; else if(f==='content') row[f]=one.text; else row[f]=''; } out.push(row); if(out.length>=80) break; } const missingFields=req.filter((k)=>!out.some((it)=>{ const v=it&&it[k]; return !(v==null || String(v).trim()===''); })); const total=Math.max(1,out.length); const authorHits=out.filter((it)=>asText(it&&it.author)).length; const textHits=out.filter((it)=>asText(it&&it.text)).length; const idOrUrlHits=out.filter((it)=>asText(it&&it.id)||asText(it&&it.url)).length; const shortTextHits=out.filter((it)=>asText(it&&it.text).length<3).length; const uniqueTextRatio=(new Set(out.map((it)=>normKey(it&&it.text))).size)/total; const quality={ minItems, authorRate:authorHits/total, textRate:textHits/total, idOrUrlRate:idOrUrlHits/total, shortTextRate:shortTextHits/total, uniqueTextRatio }; const stableByShape=(out.length>=Math.max(1,minItems)) && quality.textRate>=0.95 && quality.shortTextRate<=0.55 && quality.uniqueTextRatio>=0.6 && (quality.authorRate>=0.5 || quality.idOrUrlRate>=0.6); const reqOk=(req.length===0 || missingFields.length<req.length); const ok=stableByShape && reqOk; return { action:'comments', items:out, nextCursor:obj.nextCursor||null, missingFields, meta:{ selectorUsed: asText(r?.target?.selector||''), count: out.length, query: asText(query||''), by: 'run_js_ai_retry', quality }, _ok: ok }; }",
+				args: [
+					"${vars.rawCommentsOutRetry}",
+					"${read}",
+					"${query}"
+				]
+			},
+			saveAs: "normalizedRetryOut",
+			next: { done: "done_retry", failed: "done" }
+		},
+		{
+			id: "done_retry",
+			desc: "返回重试后的 read.comments 结果",
+			action: {
+				type: "done",
+				reason: "read.comments retry done",
+				conclusion: "${vars.normalizedRetryOut}"
+			},
+			next: {}
+		},
+		{
+			id: "ai_fallback",
+			desc: "run_js 提取失败或质量不足时，使用 run_ai 兜底提取评论列表",
+			action: {
+				type: "run_ai",
+				model: "advanced",
+				prompt: "你是网页评论提取器。请返回 JSON envelope。status='ok' 时 result 必须是对象：{action:'comments',items:Array,nextCursor:null,missingFields:Array}。items 每项必须包含 id,author,text,summary,time,url 六个字符串字段（缺失填空字符串）。最多返回 80 条。",
+				input: {
+					read: "${read}",
+					query: "${query}"
+				},
+				page: { url: true, title: true, html: true },
+				schema: {
+					type: "object",
+					properties: {
+						action: { type: "string" },
+						items: { type: "array" },
+						nextCursor: { type: ["string", "null"] },
+						missingFields: { type: "array" }
+					},
+					required: ["action", "items", "nextCursor", "missingFields"]
+				},
+				cache: { enabled: false }
+			},
+			saveAs: "commentsOut",
+			next: { done: "done", failed: "abort_failed" }
+		},
+		{
+			id: "done",
+			desc: "返回 read.comments 结果",
+			action: {
+				type: "done",
+				reason: "read.comments ok",
+				conclusion: "${{ (vars.commentsOut && Number(vars.commentsOut?.items?.length || 0) > 0 && Number(vars.normalizedOut?.meta?.count || 0) === 0) ? vars.commentsOut : vars.normalizedOut }}"
+			},
+			next: {}
+		},
+		{
+			id: "abort_not_comments",
+			desc: "不支持的 read.action",
+			action: {
+				type: "abort",
+				reason: "read_comments_generic only supports read.action=comments"
+			},
+			next: {}
+		},
+		{
+			id: "abort_failed",
+			desc: "提取失败",
+			action: {
+				type: "abort",
+				reason: "read.comments extraction failed"
+			},
+			next: {}
+		}
+	],
+	vars: {
+		rawCommentsOut: { type: "any", desc: "run_js 原始结果", from: "extract_comments.saveAs" },
+		rawCommentsOutRetry: { type: "any", desc: "run_js 重试原始结果", from: "extract_comments_retry.saveAs" },
+		normalizedOut: { type: "object", desc: "规范化后的评论结果", from: "normalize_result.saveAs" },
+		normalizedRetryOut: { type: "object", desc: "重试规范化后的评论结果", from: "normalize_retry.saveAs" },
+		commentsOut: { type: "object", desc: "run_ai 兜底结果", from: "ai_fallback.saveAs" }
+	}
+};
+
+const readCommentsGenericObject = {
+	capabilities,
+	filters,
+	ranks,
+	flow,
+};
+
+export default readCommentsGenericObject;
+export { capabilities, filters, ranks, flow, readCommentsGenericObject };

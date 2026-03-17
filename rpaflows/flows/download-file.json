@@ -1,0 +1,203 @@
+{
+  "capabilities": {
+    "must": [
+      "download"
+    ],
+    "prefer": [
+      "download.action",
+      "download.url",
+      "download.target",
+      "download.saveAs",
+      "download.multi"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 1,
+    "quality": 2,
+    "speed": 3
+  },
+  "flow": {
+    "id": "download_file",
+    "start": "init_ctx",
+    "args": {
+      "download": {
+        "type": "object",
+        "required": false,
+        "desc": "download args, supports action/url/target/saveAs/multi"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tconst download = (input && input.download) || {};\n\t\t\t\t\tconst action = t((input && input[\"download.action\"]) || download.action || \"file\").toLowerCase() || \"file\";\n\t\t\t\t\tconst url = t((input && input[\"download.url\"]) || download.url || \"\");\n\t\t\t\t\tconst target = download.target && typeof download.target === \"object\" ? download.target : {};\n\t\t\t\t\tconst by = t(target.selector || target.bySelector || \"\");\n\t\t\t\t\tconst query = t(target.query || \"\");\n\t\t\t\t\tconst targetMode = by ? \"selector\" : (query ? \"query\" : \"none\");\n\t\t\t\t\tconst beginTimeoutMs = Math.max(500, Number(download.beginTimeoutMs || 15000) || 15000);\n\t\t\t\t\tconst endTimeoutMs = Math.max(500, Number(download.endTimeoutMs || 60000) || 60000);\n\t\t\t\t\treturn {\n\t\t\t\t\t\taction,\n\t\t\t\t\t\turl,\n\t\t\t\t\t\ttargetMode,\n\t\t\t\t\t\tby,\n\t\t\t\t\t\tquery,\n\t\t\t\t\t\tbeginTimeoutMs,\n\t\t\t\t\t\tendTimeoutMs,\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${{ ({ download: args.download || {}, 'download.action': args['download.action'] || '', 'download.url': args['download.url'] || '' }) }}"
+          ]
+        },
+        "saveAs": "dlCtx",
+        "next": {
+          "done": "check_action",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "check_action",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "dlCtx.action",
+                "value": "file"
+              },
+              "to": "route_source"
+            }
+          ],
+          "default": "abort_unsupported_action"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_source",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "dlCtx.url"
+              },
+              "to": "download_by_url"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "dlCtx.targetMode",
+                "value": "selector"
+              },
+              "to": "download_by_selector"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "dlCtx.targetMode",
+                "value": "query"
+              },
+              "to": "download_by_query"
+            }
+          ],
+          "default": "abort_missing_target"
+        },
+        "next": {}
+      },
+      {
+        "id": "download_by_url",
+        "action": {
+          "type": "download",
+          "url": "${vars.dlCtx.url}",
+          "beginTimeoutMs": "${vars.dlCtx.beginTimeoutMs}",
+          "endTimeoutMs": "${vars.dlCtx.endTimeoutMs}",
+          "waitForEnd": true
+        },
+        "saveAs": "dlOut",
+        "next": {
+          "done": "done",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "download_by_selector",
+        "action": {
+          "type": "download",
+          "by": "${vars.dlCtx.by}",
+          "beginTimeoutMs": "${vars.dlCtx.beginTimeoutMs}",
+          "endTimeoutMs": "${vars.dlCtx.endTimeoutMs}",
+          "waitForEnd": true
+        },
+        "saveAs": "dlOut",
+        "next": {
+          "done": "done",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "download_by_query",
+        "action": {
+          "type": "download",
+          "query": "${vars.dlCtx.query}",
+          "beginTimeoutMs": "${vars.dlCtx.beginTimeoutMs}",
+          "endTimeoutMs": "${vars.dlCtx.endTimeoutMs}",
+          "waitForEnd": true
+        },
+        "saveAs": "dlOut",
+        "next": {
+          "done": "done",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "download.file ok",
+          "conclusion": "${{ ({ action:'file', ok: !!vars.dlOut?.ok, started: !!vars.dlOut?.started, finished: !!vars.dlOut?.finished, filepath: vars.dlOut?.end?.filepath || vars.dlOut?.begin?.file || '', url: vars.dlOut?.end?.url || vars.dlOut?.begin?.url || '' }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_missing_target",
+        "action": {
+          "type": "abort",
+          "reason": "download.file requires download.url or download.target.selector/query"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_unsupported_action",
+        "action": {
+          "type": "abort",
+          "reason": "download_file only supports download.action=file"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort",
+        "action": {
+          "type": "abort",
+          "reason": "download.file failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "dlCtx": {
+        "type": "object",
+        "desc": "normalized download args",
+        "from": "init_ctx.saveAs"
+      },
+      "dlOut": {
+        "type": "object",
+        "desc": "download output",
+        "from": "download_by_url.saveAs/download_by_selector.saveAs/download_by_query.saveAs"
+      }
+    }
+  }
+}

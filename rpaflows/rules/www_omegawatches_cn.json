@@ -1,0 +1,52 @@
+{
+	"zh-Hans-CN": {
+		"elements": {
+			"sig:df17f001d7edb5d6": {
+				"value": [
+					"css: #notice-cookie-block button[data-role='cookie-action'][data-action='allow-all']"
+				],
+				"pending": false,
+				"time": 1771474542102,
+				"queries": [
+					"scope:https://www.omegawatches.cn|q:关闭当前页面阻挡交互的弹窗或遮罩。优先点击：关闭/同意/接受/仅本次/我知道了/继续 等按钮；禁止点击会导致跳转或登录提交的按钮。"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|button|ids:none|a11y:txt=全部同意|anchor:c=none|chain=body#html-body>div#notice-cookie-block",
+				"keys": [
+					"blockers_check_clear_click_close"
+				]
+			},
+			"sig:7927dee5eac48b90": {
+				"value": [
+					"xpath: //button[contains(@class,'ow-collapsible__title') and @data-role='trigger' and contains(normalize-space(.),'技术') and contains(normalize-space(.),'数据')]"
+				],
+				"pending": false,
+				"time": 1771474917525,
+				"queries": [
+					"scope:https://www.omegawatches.cn|q:技术数据"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=技术数据|anchor:c=main:id=maincontent|chain=none",
+				"keys": [
+					"find_until_generic_do_click"
+				]
+			}
+		},
+		"ruleMap": {
+			"blockers_check_clear_click_close": {
+				"eid": "sig:df17f001d7edb5d6",
+				"query": "scope:https://www.omegawatches.cn|q:关闭当前页面阻挡交互的弹窗或遮罩。优先点击：关闭/同意/接受/仅本次/我知道了/继续 等按钮；禁止点击会导致跳转或登录提交的按钮。",
+				"time": 1771474542102
+			},
+			"find_until_generic_do_click": {
+				"eid": "sig:7927dee5eac48b90",
+				"query": "scope:https://www.omegawatches.cn|q:技术数据",
+				"time": 1771474917525
+			}
+		}
+	}
+}

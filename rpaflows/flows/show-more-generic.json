@@ -1,0 +1,317 @@
+{
+  "capabilities": {
+    "must": [
+      "showMore"
+    ],
+    "prefer": [
+      "showMore.target",
+      "showMore.checkOnly",
+      "showMore.expand",
+      "showMore.maxTries",
+      "showMore.timeoutMs",
+      "showMore.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 3,
+    "speed": 3
+  },
+  "flow": {
+    "id": "show_more_generic",
+    "start": "init_ctx",
+    "args": {
+      "showMore": {
+        "type": "object",
+        "required": false,
+        "desc": "showMore 参数，支持 target/checkOnly/expand/maxTries/timeoutMs"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tconst sm = (input && input.showMore) || {};\n\t\t\t\t\tconst target = sm.target && typeof sm.target === \"object\" ? sm.target : {};\n\t\t\t\t\tconst by = t(target.selector || target.bySelector || \"\");\n\t\t\t\t\tconst query = t(target.query || \"\");\n\t\t\t\t\tconst targetMode = by ? \"selector\" : (query ? \"query\" : \"none\");\n\t\t\t\t\tconst checkOnly = !!((input && input[\"showMore.checkOnly\"]) ?? sm.checkOnly ?? false);\n\t\t\t\t\tconst expand = !!((input && input[\"showMore.expand\"]) ?? sm.expand ?? true);\n\t\t\t\t\tconst maxTries = Math.max(1, Math.min(8, Number((input && input[\"showMore.maxTries\"]) ?? sm.maxTries ?? 2) || 2));\n\t\t\t\t\tconst timeoutMs = Math.max(1000, Math.min(60000, Number((input && input[\"showMore.timeoutMs\"]) ?? sm.timeoutMs ?? 8000) || 8000));\n\t\t\t\t\treturn { targetMode, by, query, checkOnly, expand, maxTries, timeoutMs };\n\t\t\t\t}",
+          "args": [
+            "${{ ({ showMore: args.showMore || {}, 'showMore.checkOnly': args['showMore.checkOnly'], 'showMore.expand': args['showMore.expand'], 'showMore.maxTries': args['showMore.maxTries'], 'showMore.timeoutMs': args['showMore.timeoutMs'] }) }}"
+          ]
+        },
+        "saveAs": "smCtx",
+        "next": {
+          "done": "route_target",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_target",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "smCtx.targetMode",
+                "value": "selector"
+              },
+              "to": "resolve_target_by"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "smCtx.targetMode",
+                "value": "query"
+              },
+              "to": "resolve_target_query"
+            }
+          ],
+          "default": "check_collapsed"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_target_by",
+        "action": {
+          "type": "selector",
+          "by": "${vars.smCtx.by}"
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "check_collapsed",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "resolve_target_query",
+        "action": {
+          "type": "selector",
+          "query": "${vars.smCtx.query}"
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "check_collapsed",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "check_collapsed",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(targetBy){\n\tfunction text(v){ return String(v == null ? \"\" : v).replace(/\\s+/g, \" \").trim(); }\n\tfunction parseBy(raw){\n\t\tconst s = text(raw);\n\t\tif(!s) return { kind: \"css\", expr: \"\" };\n\t\tif(/^css\\s*:/i.test(s)) return { kind: \"css\", expr: s.replace(/^css\\s*:/i, \"\").trim() };\n\t\tif(/^xpath\\s*:/i.test(s)) return { kind: \"xpath\", expr: s.replace(/^xpath\\s*:/i, \"\").trim() };\n\t\tif(/^(\\/\\/|\\/|\\(|\\.\\/|\\.\\.\\/)/.test(s)) return { kind: \"xpath\", expr: s };\n\t\treturn { kind: \"css\", expr: s };\n\t}\n\tfunction q(root, parsed){\n\t\tif(!parsed.expr) return [];\n\t\tif(parsed.kind === \"xpath\"){\n\t\t\ttry{\n\t\t\t\tconst snap = document.evaluate(parsed.expr, root || document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n\t\t\t\tconst arr=[]; for(let i=0;i<snap.snapshotLength;i++){ const n=snap.snapshotItem(i); if(n && n.nodeType===1) arr.push(n); }\n\t\t\t\treturn arr;\n\t\t\t}catch(_){ return []; }\n\t\t}\n\t\ttry{ return Array.from((root||document).querySelectorAll(parsed.expr)); }catch(_){ return []; }\n\t}\n\tfunction visible(el){\n\t\tif(!el) return false;\n\t\tconst st = window.getComputedStyle(el);\n\t\tif(!st) return false;\n\t\tif(st.display===\"none\" || st.visibility===\"hidden\" || Number(st.opacity||\"1\")<=0.02) return false;\n\t\tconst r = el.getBoundingClientRect();\n\t\treturn r.width>2 && r.height>2;\n\t}\n\tfunction scoreToggle(el){\n\t\tconst t = text((el && (el.innerText || el.textContent || el.getAttribute(\"aria-label\") || el.getAttribute(\"title\"))) || \"\").toLowerCase();\n\t\tconst idc = text((el && (el.id + \" \" + el.className)) || \"\").toLowerCase();\n\t\tlet s = 0;\n\t\tif(/展开|更多|全文|继续阅读|显示全部|read more|show more|more|expand|see more/.test(t)) s += 5;\n\t\tif(/expand|more|fold|collapsed|ellipsis|line-clamp/.test(idc)) s += 3;\n\t\tconst aria = String((el && el.getAttribute(\"aria-expanded\")) || \"\").toLowerCase();\n\t\tif(aria === \"false\") s += 4;\n\t\treturn s;\n\t}\n\tconst rootParsed = parseBy(targetBy);\n\tlet root = document.body;\n\tif(rootParsed.expr){\n\t\tconst roots = q(document, rootParsed);\n\t\tif(roots.length) root = roots[0];\n\t}\n\tconst cands = Array.from(root.querySelectorAll(\"button,a,[role='button'],summary,.show-more,.read-more,.expand-more,[aria-expanded]\")).filter(visible);\n\tconst toggles = cands\n\t\t.map((el)=>({ el, score: scoreToggle(el), txt: text(el.innerText||el.textContent||el.getAttribute(\"aria-label\")||\"\") }))\n\t\t.filter((x)=>x.score>=4)\n\t\t.sort((a,b)=>b.score-a.score);\n\tconst blocked = toggles.length>0;\n\tconst top = toggles[0] || null;\n\treturn {\n\t\tblocked,\n\t\texpanded: !blocked,\n\t\treason: blocked ? (\"found expandable control: \" + (top.txt || \"(no text)\")) : \"no expandable control found\",\n\t\tcandidates: toggles.slice(0,8).map((x)=>({ score:x.score, text:x.txt })),\n\t};\n}",
+          "args": [
+            "${{ vars.targetSel?.by || '' }}"
+          ]
+        },
+        "saveAs": "checkOut",
+        "next": {
+          "done": "route_after_check",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_after_check",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "checkOut.blocked",
+                "value": false
+              },
+              "to": "done_checked"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "smCtx.checkOnly",
+                "value": true
+              },
+              "to": "done_checked"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "smCtx.expand",
+                "value": false
+              },
+              "to": "done_checked"
+            }
+          ],
+          "default": "expand_once"
+        },
+        "next": {}
+      },
+      {
+        "id": "expand_once",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "async function(targetBy, cfg){\n\tfunction sleep(ms){ return new Promise((r)=>setTimeout(r, ms)); }\n\tfunction text(v){ return String(v == null ? \"\" : v).replace(/\\s+/g, \" \").trim(); }\n\tfunction parseBy(raw){\n\t\tconst s = text(raw);\n\t\tif(!s) return { kind: \"css\", expr: \"\" };\n\t\tif(/^css\\s*:/i.test(s)) return { kind: \"css\", expr: s.replace(/^css\\s*:/i, \"\").trim() };\n\t\tif(/^xpath\\s*:/i.test(s)) return { kind: \"xpath\", expr: s.replace(/^xpath\\s*:/i, \"\").trim() };\n\t\tif(/^(\\/\\/|\\/|\\(|\\.\\/|\\.\\.\\/)/.test(s)) return { kind: \"xpath\", expr: s };\n\t\treturn { kind: \"css\", expr: s };\n\t}\n\tfunction q(root, parsed){\n\t\tif(!parsed.expr) return [];\n\t\tif(parsed.kind === \"xpath\"){\n\t\t\ttry{\n\t\t\t\tconst snap = document.evaluate(parsed.expr, root || document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n\t\t\t\tconst arr=[]; for(let i=0;i<snap.snapshotLength;i++){ const n=snap.snapshotItem(i); if(n && n.nodeType===1) arr.push(n); }\n\t\t\t\treturn arr;\n\t\t\t}catch(_){ return []; }\n\t\t}\n\t\ttry{ return Array.from((root||document).querySelectorAll(parsed.expr)); }catch(_){ return []; }\n\t}\n\tfunction visible(el){\n\t\tif(!el) return false;\n\t\tconst st = window.getComputedStyle(el);\n\t\tif(!st) return false;\n\t\tif(st.display===\"none\" || st.visibility===\"hidden\" || Number(st.opacity||\"1\")<=0.02) return false;\n\t\tconst r = el.getBoundingClientRect();\n\t\treturn r.width>2 && r.height>2;\n\t}\n\tfunction scoreToggle(el){\n\t\tconst t = text((el && (el.innerText || el.textContent || el.getAttribute(\"aria-label\") || el.getAttribute(\"title\"))) || \"\").toLowerCase();\n\t\tconst idc = text((el && (el.id + \" \" + el.className)) || \"\").toLowerCase();\n\t\tlet s = 0;\n\t\tif(/展开|更多|全文|继续阅读|显示全部|read more|show more|more|expand|see more/.test(t)) s += 5;\n\t\tif(/expand|more|fold|collapsed|ellipsis|line-clamp/.test(idc)) s += 3;\n\t\tconst aria = String((el && el.getAttribute(\"aria-expanded\")) || \"\").toLowerCase();\n\t\tif(aria === \"false\") s += 4;\n\t\treturn s;\n\t}\n\tfunction collect(root){\n\t\tconst cands = Array.from(root.querySelectorAll(\"button,a,[role='button'],summary,.show-more,.read-more,.expand-more,[aria-expanded]\")).filter(visible);\n\t\treturn cands\n\t\t\t.map((el)=>({ el, score: scoreToggle(el), txt: text(el.innerText||el.textContent||el.getAttribute(\"aria-label\")||\"\") }))\n\t\t\t.filter((x)=>x.score>=4)\n\t\t\t.sort((a,b)=>b.score-a.score);\n\t}\n\tconst maxTries = Math.max(1, Math.min(8, Number((cfg&&cfg.maxTries) || 2)));\n\tconst timeoutMs = Math.max(1000, Math.min(60000, Number((cfg&&cfg.timeoutMs) || 8000)));\n\tconst waitPerTry = Math.max(150, Math.min(1200, Math.floor(timeoutMs / Math.max(1, maxTries))));\n\tconst rootParsed = parseBy(targetBy);\n\tlet root = document.body;\n\tif(rootParsed.expr){\n\t\tconst roots = q(document, rootParsed);\n\t\tif(roots.length) root = roots[0];\n\t}\n\tconst beforeLen = text(root.innerText || \"\").length;\n\tlet acted = false;\n\tlet tries = 0;\n\tlet lastReason = \"no expandable control\";\n\tfor(tries = 1; tries <= maxTries; tries++){\n\t\tconst toggles = collect(root);\n\t\tif(!toggles.length){\n\t\t\tlastReason = \"no expandable control\";\n\t\t\tbreak;\n\t\t}\n\t\tconst top = toggles[0];\n\t\tlastReason = top.txt ? (\"clicked: \" + top.txt) : \"clicked top expandable control\";\n\t\ttry{\n\t\t\ttop.el.scrollIntoView({ block: \"center\", inline: \"nearest\" });\n\t\t}catch(_){}\n\t\ttry{\n\t\t\ttop.el.click();\n\t\t\tacted = true;\n\t\t}catch(_){}\n\t\tawait sleep(waitPerTry);\n\t\tconst afterToggles = collect(root);\n\t\tif(!afterToggles.length){\n\t\t\tlastReason = \"expanded; no more toggles\";\n\t\t\tbreak;\n\t\t}\n\t}\n\tconst afterToggles = collect(root);\n\tconst blocked = afterToggles.length > 0;\n\tconst afterLen = text(root.innerText || \"\").length;\n\tconst expanded = !blocked || afterLen > beforeLen;\n\tconst newItems = afterLen > beforeLen ? 1 : 0;\n\treturn {\n\t\tblocked,\n\t\texpanded,\n\t\tnewItems,\n\t\ttries,\n\t\treason: expanded ? lastReason : (\"expand failed: \" + lastReason),\n\t};\n}",
+          "args": [
+            "${{ vars.targetSel?.by || '' }}",
+            "${{ ({ maxTries: vars.smCtx?.maxTries || 2, timeoutMs: vars.smCtx?.timeoutMs || 8000 }) }}"
+          ]
+        },
+        "saveAs": "expandOut",
+        "next": {
+          "done": "route_after_expand",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_after_expand",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "expandOut.expanded",
+                "value": true
+              },
+              "to": "done_expanded"
+            }
+          ],
+          "default": "resolve_ai_toggle"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_ai_toggle",
+        "action": {
+          "type": "selector",
+          "query": "在当前页面或目标区域内，定位“展开更多/展开全文/显示全部/read more/show more/expand”按钮或链接。禁止选择导航菜单、登录入口、页脚链接。",
+          "cacheKeySuffix": "${{ vars.targetSel?.by || 'showmore_root' }}"
+        },
+        "saveAs": "aiToggleSel",
+        "next": {
+          "done": "click_ai_toggle",
+          "failed": "done_expanded"
+        }
+      },
+      {
+        "id": "click_ai_toggle",
+        "action": {
+          "type": "click",
+          "by": "${vars.aiToggleSel.by}",
+          "postWaitMs": 600
+        },
+        "saveAs": "aiToggleClickOut",
+        "next": {
+          "done": "recheck_after_ai",
+          "failed": "done_expanded"
+        }
+      },
+      {
+        "id": "recheck_after_ai",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(targetBy){\n\tfunction text(v){ return String(v == null ? \"\" : v).replace(/\\s+/g, \" \").trim(); }\n\tfunction parseBy(raw){\n\t\tconst s = text(raw);\n\t\tif(!s) return { kind: \"css\", expr: \"\" };\n\t\tif(/^css\\s*:/i.test(s)) return { kind: \"css\", expr: s.replace(/^css\\s*:/i, \"\").trim() };\n\t\tif(/^xpath\\s*:/i.test(s)) return { kind: \"xpath\", expr: s.replace(/^xpath\\s*:/i, \"\").trim() };\n\t\tif(/^(\\/\\/|\\/|\\(|\\.\\/|\\.\\.\\/)/.test(s)) return { kind: \"xpath\", expr: s };\n\t\treturn { kind: \"css\", expr: s };\n\t}\n\tfunction q(root, parsed){\n\t\tif(!parsed.expr) return [];\n\t\tif(parsed.kind === \"xpath\"){\n\t\t\ttry{\n\t\t\t\tconst snap = document.evaluate(parsed.expr, root || document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n\t\t\t\tconst arr=[]; for(let i=0;i<snap.snapshotLength;i++){ const n=snap.snapshotItem(i); if(n && n.nodeType===1) arr.push(n); }\n\t\t\t\treturn arr;\n\t\t\t}catch(_){ return []; }\n\t\t}\n\t\ttry{ return Array.from((root||document).querySelectorAll(parsed.expr)); }catch(_){ return []; }\n\t}\n\tfunction visible(el){\n\t\tif(!el) return false;\n\t\tconst st = window.getComputedStyle(el);\n\t\tif(!st) return false;\n\t\tif(st.display===\"none\" || st.visibility===\"hidden\" || Number(st.opacity||\"1\")<=0.02) return false;\n\t\tconst r = el.getBoundingClientRect();\n\t\treturn r.width>2 && r.height>2;\n\t}\n\tfunction scoreToggle(el){\n\t\tconst t = text((el && (el.innerText || el.textContent || el.getAttribute(\"aria-label\") || el.getAttribute(\"title\"))) || \"\").toLowerCase();\n\t\tconst idc = text((el && (el.id + \" \" + el.className)) || \"\").toLowerCase();\n\t\tlet s = 0;\n\t\tif(/展开|更多|全文|继续阅读|显示全部|read more|show more|more|expand|see more/.test(t)) s += 5;\n\t\tif(/expand|more|fold|collapsed|ellipsis|line-clamp/.test(idc)) s += 3;\n\t\tconst aria = String((el && el.getAttribute(\"aria-expanded\")) || \"\").toLowerCase();\n\t\tif(aria === \"false\") s += 4;\n\t\treturn s;\n\t}\n\tconst rootParsed = parseBy(targetBy);\n\tlet root = document.body;\n\tif(rootParsed.expr){\n\t\tconst roots = q(document, rootParsed);\n\t\tif(roots.length) root = roots[0];\n\t}\n\tconst cands = Array.from(root.querySelectorAll(\"button,a,[role='button'],summary,.show-more,.read-more,.expand-more,[aria-expanded]\")).filter(visible);\n\tconst toggles = cands\n\t\t.map((el)=>({ el, score: scoreToggle(el), txt: text(el.innerText||el.textContent||el.getAttribute(\"aria-label\")||\"\") }))\n\t\t.filter((x)=>x.score>=4)\n\t\t.sort((a,b)=>b.score-a.score);\n\tconst blocked = toggles.length>0;\n\tconst top = toggles[0] || null;\n\treturn {\n\t\tblocked,\n\t\texpanded: !blocked,\n\t\treason: blocked ? (\"found expandable control: \" + (top.txt || \"(no text)\")) : \"no expandable control found\",\n\t\tcandidates: toggles.slice(0,8).map((x)=>({ score:x.score, text:x.txt })),\n\t};\n}",
+          "args": [
+            "${{ vars.targetSel?.by || '' }}"
+          ]
+        },
+        "saveAs": "checkAfterAi",
+        "next": {
+          "done": "merge_ai_expand_out",
+          "failed": "done_expanded"
+        }
+      },
+      {
+        "id": "merge_ai_expand_out",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(prev, after){\n\t\t\t\t\tconst p = (prev && typeof prev === \"object\") ? prev : {};\n\t\t\t\t\tconst a = (after && typeof after === \"object\") ? after : {};\n\t\t\t\t\tconst expanded = !!(p.expanded || !a.blocked);\n\t\t\t\t\tconst blocked = !expanded;\n\t\t\t\t\tconst reason = expanded\n\t\t\t\t\t\t? (a.reason ? (\"ai fallback success: \" + a.reason) : \"ai fallback success\")\n\t\t\t\t\t\t: (p.reason || \"expand failed\");\n\t\t\t\t\treturn {\n\t\t\t\t\t\tblocked,\n\t\t\t\t\t\texpanded,\n\t\t\t\t\t\tnewItems: expanded ? Math.max(1, Number(p.newItems || 0)) : Number(p.newItems || 0),\n\t\t\t\t\t\ttries: Number(p.tries || 0),\n\t\t\t\t\t\treason,\n\t\t\t\t\t\taiFallback: true,\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${{ vars.expandOut || {} }}",
+            "${{ vars.checkAfterAi || {} }}"
+          ]
+        },
+        "saveAs": "expandOut",
+        "next": {
+          "done": "done_expanded",
+          "failed": "done_expanded"
+        }
+      },
+      {
+        "id": "done_checked",
+        "action": {
+          "type": "done",
+          "reason": "showMore checked",
+          "conclusion": "${{ ({ blocked: !!vars.checkOut?.blocked, expanded: !!vars.checkOut?.expanded, newItems: 0, reason: vars.checkOut?.reason || '' }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "done_expanded",
+        "action": {
+          "type": "done",
+          "reason": "showMore expand attempted",
+          "conclusion": "${{ ({ blocked: !!vars.expandOut?.blocked, expanded: !!vars.expandOut?.expanded, newItems: Number(vars.expandOut?.newItems || 0), reason: vars.expandOut?.reason || '' }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort",
+        "action": {
+          "type": "abort",
+          "reason": "showMore failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "smCtx": {
+        "type": "object",
+        "desc": "normalized showMore args",
+        "from": "init_ctx.saveAs"
+      },
+      "targetSel": {
+        "type": "object",
+        "desc": "resolved showMore target selector",
+        "from": "resolve_target_by.saveAs/resolve_target_query.saveAs"
+      },
+      "checkOut": {
+        "type": "object",
+        "desc": "showMore check result",
+        "from": "check_collapsed.saveAs"
+      },
+      "expandOut": {
+        "type": "object",
+        "desc": "showMore expand result",
+        "from": "expand_once.saveAs"
+      },
+      "aiToggleSel": {
+        "type": "object",
+        "desc": "ai fallback selector for showMore toggle",
+        "from": "resolve_ai_toggle.saveAs"
+      },
+      "checkAfterAi": {
+        "type": "object",
+        "desc": "showMore recheck result after ai fallback click",
+        "from": "recheck_after_ai.saveAs"
+      }
+    }
+  }
+}

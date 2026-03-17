@@ -1,0 +1,65 @@
+{
+  "id": "invoke_smoke",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": { "type": "goto", "url": "https://example.com" },
+      "next": { "done": "invoke_by_target", "failed": "abort" }
+    },
+    {
+      "id": "invoke_by_target",
+      "action": {
+        "type": "invoke",
+        "target": "invoke_echo",
+        "args": {
+          "msg": "hello-target"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "targetResult",
+      "next": { "done": "invoke_by_find", "failed": "abort" }
+    },
+    {
+      "id": "invoke_by_find",
+      "action": {
+        "type": "invoke",
+        "find": {
+          "kind": "rpa",
+          "must": ["echo.cap"],
+          "prefer": ["echo.fast"],
+          "filter": [
+            { "key": "domain", "value": "*" },
+            { "key": "locale", "value": "zh-CN" }
+          ],
+          "rank": "cost"
+        },
+        "args": {
+          "msg": "hello-find"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "findResult",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "ok",
+        "conclusion": "invoke smoke done"
+      },
+      "next": {}
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "invoke smoke failed"
+      },
+      "next": {}
+    }
+  ]
+}

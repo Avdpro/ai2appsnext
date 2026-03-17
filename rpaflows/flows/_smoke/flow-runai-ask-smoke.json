@@ -1,0 +1,47 @@
+{
+  "id": "runai_askassist_smoke",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "desc": "open example",
+      "action": { "type": "goto", "url": "https://example.com" },
+      "next": { "done": "ai", "failed": "abort" }
+    },
+    {
+      "id": "ai",
+      "desc": "run ai summary",
+      "action": {
+        "type": "run_ai",
+        "prompt": "根据输入与页面信息，返回 {title,url,kind}，kind固定为example。",
+        "input": { "task": "extract" },
+        "page": { "url": true, "title": true },
+        "model": "balanced"
+      },
+      "saveAs": "aiOut",
+      "next": { "done": "assist", "failed": "abort" }
+    },
+    {
+      "id": "assist",
+      "desc": "notify assistant",
+      "action": {
+        "type": "ask_assist",
+        "reason": "这是一条 ask_assist 测试提示（非阻塞）",
+        "waitUserAction": false
+      },
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "desc": "finish",
+      "action": { "type": "done", "reason": "ok", "conclusion": "run_ai + ask_assist ok" },
+      "next": {}
+    },
+    {
+      "id": "abort",
+      "desc": "abort",
+      "action": { "type": "abort", "reason": "smoke failed" },
+      "next": {}
+    }
+  ]
+}

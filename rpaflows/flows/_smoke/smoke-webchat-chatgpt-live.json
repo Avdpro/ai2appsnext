@@ -1,0 +1,106 @@
+{
+  "id": "smoke_webchat_chatgpt_live",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "https://chatgpt.com/",
+        "waitBy": "css: textarea, [contenteditable='true'][role='textbox']",
+        "waitTimeoutMs": 45000
+      },
+      "next": { "done": "new_session", "failed": "abort" }
+    },
+    {
+      "id": "new_session",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "Calorie Steps Test" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "newOut",
+      "next": { "done": "send_msg", "failed": "abort" }
+    },
+    {
+      "id": "send_msg",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "send",
+          "webChat.text": "1500大卡要走多少步？",
+          "webChat.sendMode": "auto"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "sendOut",
+      "next": { "done": "wait_reply", "failed": "abort" }
+    },
+    {
+      "id": "wait_reply",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "waitReply",
+          "webChat.timeoutMs": 90000,
+          "webChat.pollMs": 1000,
+          "webChat.idleMs": 1800,
+          "webChat.minNew": 1
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "waitOut",
+      "next": { "done": "get_messages", "failed": "abort" }
+    },
+    {
+      "id": "get_messages",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "getMessages",
+          "webChat.limit": 12
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "msgsOut",
+      "next": { "done": "summarize", "failed": "abort" }
+    },
+    {
+      "id": "summarize",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ function asText(v){ return String(v==null?'':v).trim(); } const o=(out&&typeof out==='object')?out:{}; const items=Array.isArray(o.items)?o.items:[]; const user=items.filter((x)=>asText(x&&x.role)==='user'); const ai=items.filter((x)=>asText(x&&x.role)==='assistant'); const lastAi=ai.length?ai[ai.length-1]:null; return { ok:user.length>0 && ai.length>0, total:items.length, userCount:user.length, aiCount:ai.length, lastAiText:asText(lastAi&&lastAi.text).slice(0,800) }; }",
+        "args": ["${{ vars.msgsOut || {} }}"]
+      },
+      "saveAs": "summary",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "chatgpt live smoke finished",
+        "conclusion": "${{ ({ ok:true, summary:vars.summary, newOut:vars.newOut, sendOut:vars.sendOut, waitOut:vars.waitOut }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "chatgpt live smoke failed"
+      }
+    }
+  ]
+}

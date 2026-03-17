@@ -1,0 +1,111 @@
+{
+  "id": "smoke_webchat_waitreply_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/webchat/chatgpt-mock.html",
+        "waitBy": "css: [data-role='chat-input']",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "new_session", "failed": "abort" }
+    },
+    {
+      "id": "new_session",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "WaitReply Smoke Session" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "send_msg", "failed": "abort" }
+    },
+    {
+      "id": "send_msg",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "send",
+          "webChat.session": { "kind": "ai" },
+          "webChat.text": "请给我一个简短答复。",
+          "webChat.sendMode": "button"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "wait_reply", "failed": "abort" }
+    },
+    {
+      "id": "wait_reply",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "waitReply",
+          "webChat.session": { "kind": "ai" },
+          "webChat.timeoutMs": 25000,
+          "webChat.pollMs": 500,
+          "webChat.idleMs": 1200,
+          "webChat.minNew": 1,
+          "webChat.requireDoneSignal": false,
+          "webChat.limit": 50
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "waitOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ function asText(v){ return String(v==null?'':v).trim(); } const o=(out&&typeof out==='object')?out:{}; const items=Array.isArray(o.items)?o.items:[]; const hasAssistant=items.some((it)=>asText(it&&it.role)==='assistant' && asText(it&&it.text).length>0); const ok=asText(o.action)==='waitReply' && !!o.received && hasAssistant; return { ok, action:asText(o.action), received:!!o.received, timedOut:!!o.timedOut, count:items.length, hasAssistant, reason:asText(o.reason||''), sample:items.slice(-2) }; }",
+        "args": ["${{ vars.waitOut || {} }}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke webchat waitReply local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut, out:vars.waitOut }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: action=${vars.verifyOut.action}, received=${vars.verifyOut.received}, timedOut=${vars.verifyOut.timedOut}, hasAssistant=${vars.verifyOut.hasAssistant}, count=${vars.verifyOut.count}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke webchat waitReply local failed"
+      }
+    }
+  ]
+}

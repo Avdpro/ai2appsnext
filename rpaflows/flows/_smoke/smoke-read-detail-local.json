@@ -1,0 +1,82 @@
+{
+  "id": "smoke_read_detail_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/loadmore/next-page-load.html",
+        "waitBy": "css: #item-list > li",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "invoke", "failed": "abort" }
+    },
+    {
+      "id": "invoke",
+      "action": {
+        "type": "invoke",
+        "target": "read_detail_generic",
+        "args": {
+          "read.action": "detail",
+          "read.target": {
+            "by": "selector",
+            "selector": "css: #item-list > li",
+            "pick": 3
+          },
+          "read.fields": ["url", "title", "summary", "content"],
+          "read.requireFields": ["content"],
+          "read.output": "json"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "out",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; const action=String(o.action||''); const d=(o.data&&typeof o.data==='object')?o.data:{}; const content=String(d.content||''); const summary=String(d.summary||''); const missing=Array.isArray(o.missingFields)?o.missingFields:[]; const ok=action==='detail' && content.includes('Item 3') && summary.includes('Item 3') && missing.length===0; return { ok, action, contentLen:content.length, summary, missingCount:missing.length }; }",
+        "args": ["${{ vars.out || {} }}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke read detail local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut, out:vars.out }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: action=${vars.verifyOut.action}, contentLen=${vars.verifyOut.contentLen}, summary=${vars.verifyOut.summary}, missing=${vars.verifyOut.missingCount}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke read detail local failed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,514 @@
+{
+  "capabilities": {
+    "must": [
+      "interact",
+      "interact.open"
+    ],
+    "prefer": [
+      "interact.action",
+      "interact.target",
+      "interact.control",
+      "interact.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 1,
+    "quality": 2,
+    "speed": 3
+  },
+  "flow": {
+    "id": "interact_open",
+    "start": "init_ctx",
+    "args": {
+      "interact": {
+        "type": "object",
+        "required": false,
+        "desc": "interact 参数，当前仅实现 action=open"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tfunction normPick(v){\n\t\t\t\t\t\tif(v == null || v === \"\") return null;\n\t\t\t\t\t\tif(typeof v === \"number\" && Number.isFinite(v)) return Math.trunc(v);\n\t\t\t\t\t\tconst s = String(v).trim();\n\t\t\t\t\t\tif(!s) return null;\n\t\t\t\t\t\tif(/^[+-]?\\d+$/.test(s)) return Number.parseInt(s, 10);\n\t\t\t\t\t\tconst low = s.toLowerCase();\n\t\t\t\t\t\tif(low === \"first\") return 1;\n\t\t\t\t\t\tif(low === \"last\") return -1;\n\t\t\t\t\t\treturn s;\n\t\t\t\t\t}\n\t\t\t\t\tconst interact = (input && input.interact) || {};\n\t\t\t\t\tconst action = t(interact.action || \"open\").toLowerCase();\n\t\t\t\t\tconst target = interact.target && typeof interact.target === \"object\" ? interact.target : {};\n\t\t\t\t\tconst control = interact.control && typeof interact.control === \"object\" ? interact.control : {};\n\t\t\t\t\tconst targetBy = t(target.selector || \"\");\n\t\t\t\t\tconst targetQuery = t(target.query || \"\");\n\t\t\t\t\tconst targetPick = normPick(target.pick);\n\t\t\t\t\tconst controlBy = t(control.selector || \"\");\n\t\t\t\t\tconst controlQuery = t(control.query || \"\");\n\t\t\t\t\tconst controlPick = normPick(control.pick);\n\t\t\t\t\tconst waitBy = t(interact.waitBy || interact.waitFor || \"\");\n\t\t\t\t\tconst postWaitMsRaw = Number(interact.postWaitMs);\n\t\t\t\t\tconst postWaitMs = Number.isFinite(postWaitMsRaw) ? Math.max(0, Math.min(15000, Math.floor(postWaitMsRaw))) : 1200;\n\t\t\t\t\tconst waitTimeoutMsRaw = Number(interact.waitTimeoutMs);\n\t\t\t\t\tconst waitTimeoutMs = Number.isFinite(waitTimeoutMsRaw) ? Math.max(200, Math.min(30000, Math.floor(waitTimeoutMsRaw))) : 8000;\n\t\t\t\t\tconst openHint = t(controlQuery || interact.query || interact.value || \"打开详情/原文\");\n\t\t\t\t\treturn {\n\t\t\t\t\t\taction,\n\t\t\t\t\t\ttargetBy,\n\t\t\t\t\t\ttargetQuery,\n\t\t\t\t\t\ttargetPick,\n\t\t\t\t\t\tcontrolBy,\n\t\t\t\t\t\tcontrolQuery,\n\t\t\t\t\t\tcontrolPick,\n\t\t\t\t\t\thasTarget: !!(targetBy || targetQuery),\n\t\t\t\t\t\thasControl: !!(controlBy || controlQuery),\n\t\t\t\t\t\twaitBy,\n\t\t\t\t\t\twaitTimeoutMs,\n\t\t\t\t\t\tpostWaitMs,\n\t\t\t\t\t\topenHint,\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${{ ({ interact: args.interact || {} }) }}"
+          ]
+        },
+        "saveAs": "ctx",
+        "next": {
+          "done": "check_action",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "check_action",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "ctx.action",
+                "value": "open"
+              },
+              "to": "snapshot_before"
+            }
+          ],
+          "default": "abort_unsupported"
+        },
+        "next": {}
+      },
+      {
+        "id": "snapshot_before",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(){ return { url: String(location.href||''), title: String(document.title||''), ts: Date.now() }; }"
+        },
+        "saveAs": "before",
+        "next": {
+          "done": "route_target",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "route_target",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "ctx.hasTarget",
+                "value": true
+              },
+              "to": "target_resolve_mode"
+            }
+          ],
+          "default": "set_default_target"
+        },
+        "next": {}
+      },
+      {
+        "id": "target_resolve_mode",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "ctx.targetBy"
+              },
+              "to": "resolve_target_by"
+            },
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "ctx.targetQuery"
+              },
+              "to": "resolve_target_query"
+            }
+          ],
+          "default": "set_default_target"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_target_by",
+        "action": {
+          "type": "selector",
+          "by": "${vars.ctx.targetBy}",
+          "pick": "${vars.ctx.targetPick}",
+          "multi": true
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "route_control",
+          "failed": "abort_target_not_found"
+        }
+      },
+      {
+        "id": "resolve_target_query",
+        "action": {
+          "type": "selector",
+          "query": "${vars.ctx.targetQuery}",
+          "pick": "${vars.ctx.targetPick}",
+          "multi": true,
+          "cacheKeySuffix": "${vars.ctx.targetQuery}"
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "route_control",
+          "failed": "abort_target_not_found"
+        }
+      },
+      {
+        "id": "set_default_target",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(){ return { by: 'css: body', sigKey: null, fromCache: false }; }"
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "route_control",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "route_control",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "ctx.hasControl",
+                "value": true
+              },
+              "to": "control_resolve_mode"
+            }
+          ],
+          "default": "auto_find_control"
+        },
+        "next": {}
+      },
+      {
+        "id": "control_resolve_mode",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "ctx.controlBy"
+              },
+              "to": "resolve_control_by"
+            },
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "ctx.controlQuery"
+              },
+              "to": "resolve_control_query"
+            }
+          ],
+          "default": "auto_find_control"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_control_by",
+        "action": {
+          "type": "selector",
+          "by": "${vars.ctx.controlBy}",
+          "pick": "${vars.ctx.controlPick}",
+          "multi": true
+        },
+        "saveAs": "controlSel",
+        "next": {
+          "done": "verify_control_in_target",
+          "failed": "abort_control_not_found"
+        }
+      },
+      {
+        "id": "resolve_control_query",
+        "action": {
+          "type": "selector",
+          "query": "${vars.ctx.controlQuery}",
+          "pick": "${vars.ctx.controlPick}",
+          "multi": true,
+          "cacheKeySuffix": "${vars.ctx.controlQuery}"
+        },
+        "saveAs": "controlSel",
+        "next": {
+          "done": "verify_control_in_target",
+          "failed": "auto_find_control"
+        }
+      },
+      {
+        "id": "auto_find_control",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(targetBy, hint){\n\t\t\t\t\tfunction asText(v){ return String(v == null ? \"\" : v).replace(/\\s+/g, \" \").trim(); }\n\t\t\t\t\tfunction parseBy(raw){\n\t\t\t\t\t\tconst s = asText(raw);\n\t\t\t\t\t\tif(!s) return { kind: \"css\", expr: \"\" };\n\t\t\t\t\t\tif(/^css\\s*:/i.test(s)) return { kind: \"css\", expr: s.replace(/^css\\s*:/i, \"\").trim() };\n\t\t\t\t\t\tif(/^xpath\\s*:/i.test(s)) return { kind: \"xpath\", expr: s.replace(/^xpath\\s*:/i, \"\").trim() };\n\t\t\t\t\t\tif(/^(\\/\\/|\\/|\\(|\\.\\/|\\.\\.\\/)/.test(s)) return { kind: \"xpath\", expr: s };\n\t\t\t\t\t\treturn { kind: \"css\", expr: s };\n\t\t\t\t\t}\n\t\t\t\t\tfunction firstBy(raw){\n\t\t\t\t\t\tconst p = parseBy(raw);\n\t\t\t\t\t\tif(!p.expr) return document.body;\n\t\t\t\t\t\ttry{\n\t\t\t\t\t\t\tif(p.kind === \"xpath\"){\n\t\t\t\t\t\t\t\tconst it = document.evaluate(p.expr, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);\n\t\t\t\t\t\t\t\treturn (it && it.singleNodeValue) || document.body;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn document.querySelector(p.expr) || document.body;\n\t\t\t\t\t\t}catch(_){ return document.body; }\n\t\t\t\t\t}\n\t\t\t\t\tfunction score(el, tokens){\n\t\t\t\t\t\tlet s = 0;\n\t\t\t\t\t\tconst tag = String(el.tagName || \"\").toLowerCase();\n\t\t\t\t\t\tif(tag === \"a\") s += 3;\n\t\t\t\t\t\tif(tag === \"button\") s += 2;\n\t\t\t\t\t\tconst href = asText(el.getAttribute(\"href\") || \"\");\n\t\t\t\t\t\tif(href && !/^javascript:/i.test(href)) s += 2;\n\t\t\t\t\t\tconst hay = asText([\n\t\t\t\t\t\t\tel.innerText || \"\",\n\t\t\t\t\t\t\tel.getAttribute(\"aria-label\") || \"\",\n\t\t\t\t\t\t\tel.getAttribute(\"title\") || \"\",\n\t\t\t\t\t\t\tel.getAttribute(\"data-testid\") || \"\",\n\t\t\t\t\t\t\thref\n\t\t\t\t\t\t].join(\" \")).toLowerCase();\n\t\t\t\t\t\tfor(const tk of tokens){ if(tk && hay.includes(tk)) s += 4; }\n\t\t\t\t\t\tif(/(read|detail|open|continue|more|原文|详情|阅读|查看|继续)/i.test(hay)) s += 2;\n\t\t\t\t\t\treturn s;\n\t\t\t\t\t}\n\t\t\t\t\tfunction toXpath(el){\n\t\t\t\t\t\tif(!el || el.nodeType !== 1) return \"\";\n\t\t\t\t\t\tif(el.id){\n\t\t\t\t\t\t\tconst safe = String(el.id).replace(/\"/g, '\\\"');\n\t\t\t\t\t\t\treturn '//*[@id=\"' + safe + '\"]';\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconst segs = [];\n\t\t\t\t\t\tlet n = el;\n\t\t\t\t\t\twhile(n && n.nodeType === 1 && n !== document.body){\n\t\t\t\t\t\t\tconst tag = String(n.tagName || \"\").toLowerCase();\n\t\t\t\t\t\t\tif(!tag) break;\n\t\t\t\t\t\t\tlet idx = 1;\n\t\t\t\t\t\t\tlet p = n.previousElementSibling;\n\t\t\t\t\t\t\twhile(p){\n\t\t\t\t\t\t\t\tif(String(p.tagName || \"\").toLowerCase() === tag) idx++;\n\t\t\t\t\t\t\t\tp = p.previousElementSibling;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tsegs.unshift(tag + \"[\" + idx + \"]\");\n\t\t\t\t\t\t\tn = n.parentElement;\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn segs.length ? (\"//\" + segs.join(\"/\")) : \"\";\n\t\t\t\t\t}\n\t\t\t\t\tconst root = firstBy(targetBy);\n\t\t\t\t\tconst hintTokens = asText(hint).toLowerCase().split(/[\\s,，。;；:：|/]+/).filter(Boolean).slice(0, 8);\n\t\t\t\t\tconst candidates = Array.from((root || document).querySelectorAll(\"a[href],button,[role='button'],[role='link'],[onclick],summary,[data-click],[data-action]\"));\n\t\t\t\t\tif(!candidates.length) return { ok: false, reason: \"no clickable candidate in target\" };\n\t\t\t\t\tlet best = null;\n\t\t\t\t\tlet bestScore = -1;\n\t\t\t\t\tfor(const el of candidates){\n\t\t\t\t\t\tconst sc = score(el, hintTokens);\n\t\t\t\t\t\tif(sc > bestScore){ bestScore = sc; best = el; }\n\t\t\t\t\t}\n\t\t\t\t\tif(!best) return { ok: false, reason: \"no clickable picked\" };\n\t\t\t\t\tconst xp = toXpath(best);\n\t\t\t\t\tif(!xp) return { ok: false, reason: \"cannot build selector for clickable\" };\n\t\t\t\t\treturn { ok: true, by: \"xpath: \" + xp, score: bestScore, hint: asText(best.innerText || best.textContent || \"\").slice(0, 120) };\n\t\t\t\t}",
+          "args": [
+            "${vars.targetSel.by}",
+            "${vars.ctx.openHint}"
+          ]
+        },
+        "saveAs": "controlAuto",
+        "next": {
+          "done": "check_auto_control",
+          "failed": "abort_control_not_found"
+        }
+      },
+      {
+        "id": "check_auto_control",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "controlAuto.ok",
+                "value": true
+              },
+              "to": "set_control_from_auto"
+            }
+          ],
+          "default": "abort_control_not_found"
+        },
+        "next": {}
+      },
+      {
+        "id": "set_control_from_auto",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(v){ return { by: String((v&&v.by)||''), sigKey: null, fromCache: false, byAuto: true, hint: String((v&&v.hint)||'') }; }",
+          "args": [
+            "${vars.controlAuto}"
+          ]
+        },
+        "saveAs": "controlSel",
+        "next": {
+          "done": "verify_control_in_target",
+          "failed": "abort_control_not_found"
+        }
+      },
+      {
+        "id": "verify_control_in_target",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(targetBy, controlBy){\n\t\t\t\t\tfunction asText(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tfunction parseBy(raw){\n\t\t\t\t\t\tconst s = asText(raw);\n\t\t\t\t\t\tif(!s) return { kind:\"css\", expr:\"\" };\n\t\t\t\t\t\tif(/^css\\s*:/i.test(s)) return { kind:\"css\", expr:s.replace(/^css\\s*:/i,\"\").trim() };\n\t\t\t\t\t\tif(/^xpath\\s*:/i.test(s)) return { kind:\"xpath\", expr:s.replace(/^xpath\\s*:/i,\"\").trim() };\n\t\t\t\t\t\tif(/^(\\/\\/|\\/|\\(|\\.\\/|\\.\\.\\/)/.test(s)) return { kind:\"xpath\", expr:s };\n\t\t\t\t\t\treturn { kind:\"css\", expr:s };\n\t\t\t\t\t}\n\t\t\t\t\tfunction firstBy(raw){\n\t\t\t\t\t\tconst p=parseBy(raw);\n\t\t\t\t\t\tif(!p.expr) return null;\n\t\t\t\t\t\ttry{\n\t\t\t\t\t\t\tif(p.kind===\"xpath\"){\n\t\t\t\t\t\t\t\tconst it=document.evaluate(p.expr,document,null,XPathResult.FIRST_ORDERED_NODE_TYPE,null);\n\t\t\t\t\t\t\t\treturn it && it.singleNodeValue || null;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn document.querySelector(p.expr);\n\t\t\t\t\t\t}catch(_){ return null; }\n\t\t\t\t\t}\n\t\t\t\t\tconst target = firstBy(targetBy);\n\t\t\t\t\tconst control = firstBy(controlBy);\n\t\t\t\t\tif(!control) return { ok:false, reason:\"control not found on page\" };\n\t\t\t\t\tif(!target) return { ok:true, inTarget:true };\n\t\t\t\t\treturn { ok: target===control || target.contains(control), inTarget: target===control || target.contains(control), reason: \"control not inside target\" };\n\t\t\t\t}",
+          "args": [
+            "${vars.targetSel.by}",
+            "${vars.controlSel.by}"
+          ]
+        },
+        "saveAs": "controlCheck",
+        "next": {
+          "done": "route_control_check",
+          "failed": "abort_control_not_found"
+        }
+      },
+      {
+        "id": "route_control_check",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "controlCheck.ok",
+                "value": true
+              },
+              "to": "click_open"
+            },
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "controlSel.byAuto"
+              },
+              "to": "abort_control_outside_target"
+            }
+          ],
+          "default": "auto_find_control"
+        },
+        "next": {}
+      },
+      {
+        "id": "click_open",
+        "action": {
+          "type": "click",
+          "by": "${vars.controlSel.by}",
+          "postWaitMs": "${vars.ctx.postWaitMs}"
+        },
+        "next": {
+          "done": "route_wait_after",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "route_wait_after",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "ctx.waitBy"
+              },
+              "to": "wait_after_open"
+            }
+          ],
+          "default": "snapshot_after"
+        },
+        "next": {}
+      },
+      {
+        "id": "wait_after_open",
+        "action": {
+          "type": "wait",
+          "by": "${vars.ctx.waitBy}",
+          "timeoutMs": "${vars.ctx.waitTimeoutMs}"
+        },
+        "next": {
+          "done": "snapshot_after",
+          "timeout": "snapshot_after",
+          "failed": "snapshot_after"
+        }
+      },
+      {
+        "id": "snapshot_after",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(){ return { url: String(location.href||''), title: String(document.title||''), ts: Date.now() }; }"
+        },
+        "saveAs": "after",
+        "next": {
+          "done": "assess_result",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "assess_result",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(before, after, ctx, targetSel, controlSel){\n\t\t\t\t\tconst b = (before && typeof before===\"object\") ? before : {};\n\t\t\t\t\tconst a = (after && typeof after===\"object\") ? after : {};\n\t\t\t\t\tconst urlChanged = String(b.url||\"\") !== String(a.url||\"\");\n\t\t\t\t\tconst titleChanged = String(b.title||\"\") !== String(a.title||\"\");\n\t\t\t\t\tconst changed = urlChanged || titleChanged;\n\t\t\t\t\treturn {\n\t\t\t\t\t\taction: \"open\",\n\t\t\t\t\t\tchanged,\n\t\t\t\t\t\topened: changed,\n\t\t\t\t\t\turl: String(a.url||\"\"),\n\t\t\t\t\t\ttitle: String(a.title||\"\"),\n\t\t\t\t\t\tbefore: { url: String(b.url||\"\"), title: String(b.title||\"\") },\n\t\t\t\t\t\tafter: { url: String(a.url||\"\"), title: String(a.title||\"\") },\n\t\t\t\t\t\ttargetBy: String((targetSel&&targetSel.by)||\"\"),\n\t\t\t\t\t\tcontrolBy: String((controlSel&&controlSel.by)||\"\"),\n\t\t\t\t\t\tmeta: {\n\t\t\t\t\t\t\twaitBy: String((ctx&&ctx.waitBy)||\"\"),\n\t\t\t\t\t\t\tpostWaitMs: Number((ctx&&ctx.postWaitMs)||0)\n\t\t\t\t\t\t}\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${vars.before}",
+            "${vars.after}",
+            "${vars.ctx}",
+            "${vars.targetSel}",
+            "${vars.controlSel}"
+          ]
+        },
+        "saveAs": "openOut",
+        "next": {
+          "done": "done",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "interact.open ok",
+          "conclusion": "${vars.openOut}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_unsupported",
+        "action": {
+          "type": "abort",
+          "reason": "interact_open only supports interact.action=open"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_target_not_found",
+        "action": {
+          "type": "abort",
+          "reason": "interact.open target not found"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_control_not_found",
+        "action": {
+          "type": "abort",
+          "reason": "interact.open control not found"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_control_outside_target",
+        "action": {
+          "type": "abort",
+          "reason": "interact.open control is outside target"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_failed",
+        "action": {
+          "type": "abort",
+          "reason": "interact.open failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "ctx": {
+        "type": "object",
+        "desc": "标准化参数上下文",
+        "from": "init_ctx.saveAs"
+      },
+      "before": {
+        "type": "object",
+        "desc": "点击前页面快照",
+        "from": "snapshot_before.saveAs"
+      },
+      "targetSel": {
+        "type": "object",
+        "desc": "目标容器 selector",
+        "from": "resolve_target_*.saveAs/set_default_target.saveAs"
+      },
+      "controlSel": {
+        "type": "object",
+        "desc": "可点击控件 selector",
+        "from": "resolve_control_*.saveAs/set_control_from_auto.saveAs"
+      },
+      "controlAuto": {
+        "type": "object",
+        "desc": "自动定位控件结果",
+        "from": "auto_find_control.saveAs"
+      },
+      "controlCheck": {
+        "type": "object",
+        "desc": "控件是否位于目标容器内",
+        "from": "verify_control_in_target.saveAs"
+      },
+      "after": {
+        "type": "object",
+        "desc": "点击后页面快照",
+        "from": "snapshot_after.saveAs"
+      },
+      "openOut": {
+        "type": "object",
+        "desc": "打开结果",
+        "from": "assess_result.saveAs"
+      }
+    }
+  }
+}

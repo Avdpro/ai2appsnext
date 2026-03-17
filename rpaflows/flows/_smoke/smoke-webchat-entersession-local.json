@@ -1,0 +1,133 @@
+{
+  "id": "smoke_webchat_entersession_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/webchat/chatgpt-mock.html",
+        "waitBy": "css: [data-role='new-session']",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "new_session_1", "failed": "abort" }
+    },
+    {
+      "id": "new_session_1",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "Session A" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "new_session_2", "failed": "abort" }
+    },
+    {
+      "id": "new_session_2",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "Session B" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "get_sessions", "failed": "abort" }
+    },
+    {
+      "id": "get_sessions",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "getSessions",
+          "webChat.limit": 20
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "sessionsOut",
+      "next": { "done": "pick_target", "failed": "abort" }
+    },
+    {
+      "id": "pick_target",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ function asText(v){ return String(v==null?'':v).trim(); } const o=(out&&typeof out==='object')?out:{}; const items=Array.isArray(o.items)?o.items:[]; const target=(items[items.length-1]&&typeof items[items.length-1]==='object')?items[items.length-1]:null; if(!target){ throw new Error('no session to enter'); } return { id: asText(target.id), title: asText(target.title) }; }",
+        "args": ["${{ vars.sessionsOut || {} }}"]
+      },
+      "saveAs": "targetSession",
+      "next": { "done": "enter_session", "failed": "abort" }
+    },
+    {
+      "id": "enter_session",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "enterSession",
+          "webChat.session": {
+            "kind": "ai",
+            "id": "${vars.targetSession.id}",
+            "title": "${vars.targetSession.title}"
+          }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "enterOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(entered,target){ function asText(v){ return String(v==null?'':v).trim(); } const e=(entered&&typeof entered==='object')?entered:{}; const t=(target&&typeof target==='object')?target:{}; const s=(e.session&&typeof e.session==='object')?e.session:{}; const ok=asText(e.action)==='enterSession' && !!e.entered && asText(s.id)===asText(t.id); return { ok, action:asText(e.action), entered:!!e.entered, gotId:asText(s.id), wantId:asText(t.id), title:asText(s.title) }; }",
+        "args": ["${{ vars.enterOut || {} }}", "${{ vars.targetSession || {} }}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke webchat enterSession local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut, out:vars.enterOut, target:vars.targetSession }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: action=${vars.verifyOut.action}, entered=${vars.verifyOut.entered}, got=${vars.verifyOut.gotId}, want=${vars.verifyOut.wantId}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke webchat enterSession local failed"
+      }
+    }
+  ]
+}

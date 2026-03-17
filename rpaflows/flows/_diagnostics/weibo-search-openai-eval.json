@@ -1,0 +1,75 @@
+{
+  "ok": false,
+  "reason": "flow generation failed: run_ai invalid envelope (not object)",
+  "errors": [],
+  "repairs": 0,
+  "provider": "openai",
+  "modelTier": "advanced",
+  "capabilities": null,
+  "filters": null,
+  "plan": {
+    "goal": "在微博搜索页确认已登录后，用页面中部的大搜索框搜索指定 query，读取微博列表并在不足时滚动加载更多。",
+    "flowIdHint": "weibo_search_read_feed",
+    "steps": [
+      {
+        "idHint": "open_weibo_search",
+        "intent": "打开微博搜索页并等待页面可交互",
+        "actionTypeHint": "browser.goto",
+        "why": "进入目标站点页面，为后续登录检查与搜索操作做准备。"
+      },
+      {
+        "idHint": "check_login_state",
+        "intent": "确认当前账号已登录（必要时提示人工处理登录/验证码）",
+        "actionTypeHint": "login.check",
+        "why": "未登录可能导致搜索结果受限或无法正常加载，需要先确保会话有效。"
+      },
+      {
+        "idHint": "focus_middle_search_box",
+        "intent": "定位并聚焦页面中部更大的搜索输入框（非顶部导航搜索框）",
+        "actionTypeHint": "dom.find_and_focus",
+        "why": "确保输入发生在正确的搜索框，避免误用顶部导航输入框导致流程偏差。"
+      },
+      {
+        "idHint": "enter_query_and_submit",
+        "intent": "在中部搜索框输入参数 query，按回车或点击搜索触发查询",
+        "actionTypeHint": "search",
+        "why": "执行站内搜索以获取对应微博列表结果。"
+      },
+      {
+        "idHint": "wait_results_load",
+        "intent": "等待搜索结果列表加载完成（约1-3秒，必要时轮询列表出现/更新）",
+        "actionTypeHint": "wait",
+        "why": "给页面异步加载时间，避免过早读取导致空列表或旧内容。"
+      },
+      {
+        "idHint": "read_weibo_list",
+        "intent": "读取当前已加载的微博列表条目，提取所需字段（如作者/时间/正文/互动数/链接等按需）",
+        "actionTypeHint": "read.list",
+        "why": "获取结构化结果用于后续判断数量是否足够与输出。"
+      },
+      {
+        "idHint": "load_more_by_scroll",
+        "intent": "若结果不足（如少于 minResults/minItems），向下滚动触发加载更多并继续读取，直到满足条件或达到 maxTries/timeout",
+        "actionTypeHint": "loadMore",
+        "why": "微博列表为滚动加载，需分页式追加抓取以满足最小结果数量。"
+      },
+      {
+        "idHint": "ask_assist_if_dom_ambiguous",
+        "intent": "若无法稳定区分中部大搜索框与顶部搜索框，或列表条目结构变化，发起 ask_assist 让人工确认选择器/定位方式",
+        "actionTypeHint": "ask_assist",
+        "why": "微博页面结构可能随AB测试变化，必要时通过人工确认保证定位准确。"
+      }
+    ],
+    "notes": [
+      "参数化输入：query 为必填；可选使用 minResults/minItems、minNewItems、maxTries、waitMs/timeout 控制加载更多策略。",
+      "读取字段可通过 fields 参数控制（例如：text, author, time, url, reposts, comments, likes）。",
+      "等待策略建议优先使用“列表出现/条目数增加”的条件等待，辅以 1000-3000ms 的短等待。"
+    ],
+    "risks": [
+      "未登录或触发验证码/风控导致无法自动化继续，需要人工介入。",
+      "页面DOM/选择器变动导致中部搜索框或列表条目定位失败。",
+      "滚动加载存在去重/懒加载延迟，可能需要多次滚动与等待才能获得新条目。"
+    ]
+  },
+  "flow": null
+}

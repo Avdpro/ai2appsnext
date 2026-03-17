@@ -1,0 +1,54 @@
+{
+  "id": "diag_weibo_comments_ready",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "https://weibo.com/3689493785/QrWRT3hVt?from=feed#comment",
+        "waitBy": "css: body",
+        "waitTimeoutMs": 25000,
+        "postWaitMs": 4000
+      },
+      "next": { "done": "probe_a", "failed": "abort" }
+    },
+    {
+      "id": "probe_a",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(){ function c(s){ try{return document.querySelectorAll(s).length;}catch(_){return -1;} } const text=(document.body&&document.body.innerText||'').slice(0,4000); return { phase:'t+4s', url:location.href, title:document.title, ready:document.readyState, counts:{ commentHash:c('#comment li'), idContains:c('[id*=\\\"comment\\\"] li'), commentItem:c('.comment-item'), wooInline:c('.woo-box-item-inline'), anyComment:c('[class*=\\\"comment\\\" i]') }, hasKeywords:{ pinglun:/评论|comment/i.test(text), zhanKai:/展开|查看更多|更多评论/i.test(text), login:/登录|注册|手机号|验证码/i.test(text) }, textSample:text.slice(0,800) }; }"
+      },
+      "saveAs": "p1",
+      "next": { "done": "pause_then_probe_b", "failed": "abort" }
+    },
+    {
+      "id": "pause_then_probe_b",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(){ const t=Date.now(); while(Date.now()-t<7000){} return { ok:true }; }"
+      },
+      "next": { "done": "probe_b", "failed": "abort" }
+    },
+    {
+      "id": "probe_b",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(){ function c(s){ try{return document.querySelectorAll(s).length;}catch(_){return -1;} } const text=(document.body&&document.body.innerText||'').slice(0,5000); return { phase:'t+11s', url:location.href, title:document.title, ready:document.readyState, counts:{ commentHash:c('#comment li'), idContains:c('[id*=\\\"comment\\\"] li'), commentItem:c('.comment-item'), wooInline:c('.woo-box-item-inline'), anyComment:c('[class*=\\\"comment\\\" i]') }, hasKeywords:{ pinglun:/评论|comment/i.test(text), zhanKai:/展开|查看更多|更多评论/i.test(text), login:/登录|注册|手机号|验证码/i.test(text) }, textSample:text.slice(0,1000) }; }"
+      },
+      "saveAs": "p2",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": { "type": "done", "reason": "diag done", "conclusion": { "probe1": "${vars.p1}", "probe2": "${vars.p2}" } }
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "diag failed" }
+    }
+  ]
+}

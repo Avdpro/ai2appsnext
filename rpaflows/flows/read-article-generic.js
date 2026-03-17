@@ -1,0 +1,131 @@
+const capabilities = {
+	must: ["read.article", "read.action"],
+	prefer: ["read.fields", "read.requireFields", "read.output"],
+};
+
+const filters = [
+	{ key: "domain", value: "*" },
+	{ key: "locale", value: "zh-CN" },
+];
+
+const ranks = {
+	cost: 1,
+	quality: 2,
+	speed: 2,
+};
+
+const flow = {
+	id: "read_article_generic",
+	start: "route_action",
+	args: {
+		read: { type: "object", required: false, desc: "read.* 参数对象" },
+		query: { type: "string", required: false, desc: "可选查询词（当前版本未使用）" },
+	},
+	steps: [
+		{
+			id: "route_action",
+			desc: "仅支持 read.action=article",
+			action: {
+				type: "branch",
+				cases: [
+					{ when: { op: "eq", source: "args", path: "read.action", value: "article" }, to: "read_page_materials" },
+				],
+				default: "abort_not_article",
+			},
+			next: {},
+		},
+		{
+			id: "read_page_materials",
+			desc: "读取当前页面 URL/标题/文章 Markdown（优先 WebDriveRpa.readArticle）",
+			action: {
+				type: "readPage",
+				field: { url: true, title: true, article: true },
+			},
+			saveAs: "pageData",
+			next: { done: "normalize_result", failed: "ai_fallback_read_article" },
+		},
+		{
+			id: "ai_fallback_read_article",
+			desc: "readPage 失败时，使用 run_ai 从当前页面兜底提取文章信息",
+			action: {
+				type: "run_ai",
+				model: "balanced",
+				prompt: "你是网页文章提取器。请基于输入的 page 上下文返回 JSON envelope：{status:'ok',result} 或 {status:'error',reason}。当 status='ok' 时，result 必须是对象：{url:string,title:string,content:string}。其中 content 应是可读正文（优先 markdown 风格，至少 120 字符；若页面不够长则尽量完整输出）。禁止返回除 JSON 外的任何文本。",
+				page: { url: true, title: true, html: true, article: true },
+				schema: {
+					type: "object",
+					properties: {
+						url: { type: "string" },
+						title: { type: "string" },
+						content: { type: "string" }
+					},
+					required: ["url", "title", "content"]
+				},
+				cache: { enabled: false }
+			},
+			saveAs: "aiOut",
+			next: { done: "normalize_result", failed: "abort_failed" },
+		},
+		{
+			id: "normalize_result",
+			desc: "按 read.fields/read.requireFields/read.output 归一化输出",
+			action: {
+				type: "run_js",
+				scope: "agent",
+				code: "function(pageData, aiOut, fields, requireFields, output){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function toText(md){ return String(md||'').replace(/!\\[[^\\]]*\\]\\([^\\)]*\\)/g,'').replace(/\\[([^\\]]+)\\]\\([^\\)]*\\)/g,'$1').replace(/\\r/g,'').replace(/[ \\t]+\\n/g,'\\n').replace(/\\n{3,}/g,'\\n\\n').trim(); } const pd=(pageData&&typeof pageData==='object')?pageData:{}; const ai=(aiOut&&typeof aiOut==='object')?aiOut:{}; const hasPageData = !!(pd && (pd.article!=null || pd.title!=null || pd.url!=null)); const url=asText((hasPageData ? pd.url : ai.url) || ''); const title=asText((hasPageData ? pd.title : ai.title) || ''); const articleRaw=String((hasPageData ? pd.article : ai.content)==null ? '' : (hasPageData ? pd.article : ai.content)); const articleText=toText(articleRaw); const modeRaw=asText(output||'').toLowerCase(); const outMode=(modeRaw==='raw'||modeRaw==='markdown'||modeRaw==='json'||modeRaw==='text')?modeRaw:'markdown'; const reqFields=Array.isArray(requireFields)?requireFields:[]; const wanted=Array.isArray(fields)&&fields.length?fields:['url','title','content']; const data={}; for(const f0 of wanted){ const f=String(f0||'').trim(); if(!f) continue; if(f==='url'){ data.url=url; continue; } if(f==='title'){ data.title=title; continue; } if(f==='content' || f==='article' || f==='body'){ data[f]= (outMode==='text') ? articleText : articleRaw; continue; } if(f==='text'){ data[f]=articleText; continue; } if(f==='markdown'){ data[f]=articleRaw; continue; } if(f==='output'){ data.output=outMode; continue; } data[f]=''; } if(!('url' in data) && wanted.includes('url')) data.url=url; if(!('title' in data) && wanted.includes('title')) data.title=title; const missingFields=reqFields.filter((k)=>{ const v=data[k]; return v==null || String(v).trim()===''; }); return { action:'article', data, missingFields }; }",
+				args: [
+					"${{ vars.pageData || {} }}",
+					"${{ vars.aiOut || {} }}",
+					"${read.fields}",
+					"${read.requireFields}",
+					"${read.output}",
+				],
+			},
+			saveAs: "articleOut",
+			next: { done: "done", failed: "abort_failed" },
+		},
+		{
+			id: "done",
+			desc: "返回 read.article 结果",
+			action: {
+				type: "done",
+				reason: "read.article ok",
+				conclusion: "${vars.articleOut}",
+			},
+			next: {},
+		},
+		{
+			id: "abort_not_article",
+			desc: "不支持的 read.action",
+			action: {
+				type: "abort",
+				reason: "read_article_generic only supports read.action=article",
+			},
+			next: {},
+		},
+		{
+			id: "abort_failed",
+			desc: "读取失败",
+			action: {
+				type: "abort",
+				reason: "read.article extraction failed",
+			},
+			next: {},
+		},
+	],
+	vars: {
+		pageData: { type: "object", desc: "readPage 返回的页面材料", from: "read_page_materials.saveAs" },
+		aiOut: { type: "object", desc: "run_ai 兜底提取结果", from: "ai_fallback_read_article.saveAs" },
+		articleOut: { type: "object", desc: "归一化后的 read.article 结果", from: "normalize_result.saveAs" },
+	},
+};
+
+const readArticleGenericObject = {
+	capabilities,
+	filters,
+	ranks,
+	flow,
+};
+
+export default readArticleGenericObject;
+export { capabilities, filters, ranks, flow, readArticleGenericObject };

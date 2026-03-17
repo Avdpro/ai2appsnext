@@ -1,0 +1,52 @@
+{
+  "id": "read_element_smoke",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": { "type": "goto", "url": "https://example.com" },
+      "next": { "done": "h1", "failed": "abort" }
+    },
+    {
+      "id": "h1",
+      "action": {
+        "type": "readElement",
+        "by": "css: h1",
+        "pick": "text"
+      },
+      "saveAs": "h1",
+      "next": { "done": "link", "failed": "abort" }
+    },
+    {
+      "id": "link",
+      "action": {
+        "type": "readElement",
+        "by": "css: a",
+        "pick": "attr:href"
+      },
+      "saveAs": "href",
+      "next": { "done": "allp", "failed": "abort" }
+    },
+    {
+      "id": "allp",
+      "action": {
+        "type": "readElement",
+        "by": "css: p",
+        "pick": "text",
+        "multi": true
+      },
+      "saveAs": "paras",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": { "type": "done", "reason": "ok", "conclusion": "readElement ok" },
+      "next": {}
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "readElement failed" },
+      "next": {}
+    }
+  ]
+}

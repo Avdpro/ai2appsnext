@@ -1,0 +1,485 @@
+{
+  "capabilities": {
+    "must": [
+      "read.reactions",
+      "read.action"
+    ],
+    "prefer": [
+      "read.target",
+      "read.fields",
+      "read.requireFields",
+      "read.output"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 3,
+    "speed": 2
+  },
+  "flow": {
+    "id": "read_reactions_generic",
+    "start": "route_action",
+    "args": {
+      "read": {
+        "type": "object",
+        "required": false,
+        "desc": "read.* 参数对象"
+      },
+      "query": {
+        "type": "string",
+        "required": false,
+        "desc": "可选查询词"
+      }
+    },
+    "steps": [
+      {
+        "id": "route_action",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "args",
+                "path": "read.action",
+                "value": "reactions"
+              },
+              "to": "init_target"
+            }
+          ],
+          "default": "abort_not_reactions"
+        },
+        "next": {}
+      },
+      {
+        "id": "init_target",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(target){ const t=(target&&typeof target==='object')?target:{}; const by=String(t.by||'auto').toLowerCase(); const selector=String(t.selector||'').trim(); const query=String(t.query||'').trim(); return { by, selector, query, hasTarget: !!(selector||query) }; }",
+          "args": [
+            "${{ args?.read?.target || {} }}"
+          ]
+        },
+        "saveAs": "targetNorm",
+        "next": {
+          "done": "route_target",
+          "failed": "extract_rules"
+        }
+      },
+      {
+        "id": "route_target",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "and",
+                "items": [
+                  {
+                    "op": "eq",
+                    "source": "vars",
+                    "path": "targetNorm.by",
+                    "value": "query"
+                  },
+                  {
+                    "op": "truthy",
+                    "source": "vars",
+                    "path": "targetNorm.query"
+                  }
+                ]
+              },
+              "to": "resolve_target_query"
+            },
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "targetNorm.selector"
+              },
+              "to": "resolve_target_selector"
+            }
+          ],
+          "default": "extract_rules"
+        },
+        "next": {}
+      },
+      {
+        "id": "resolve_target_query",
+        "action": {
+          "type": "selector",
+          "query": "${{ vars.targetNorm.query }}",
+          "cacheKeySuffix": "read_reactions_target"
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "click_target",
+          "failed": "extract_rules"
+        }
+      },
+      {
+        "id": "resolve_target_selector",
+        "action": {
+          "type": "selector",
+          "by": "${vars.targetNorm.selector}"
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "click_target",
+          "failed": "extract_rules"
+        }
+      },
+      {
+        "id": "click_target",
+        "action": {
+          "type": "click",
+          "by": "${vars.targetSel.by}",
+          "postWaitMs": 900
+        },
+        "next": {
+          "done": "extract_rules",
+          "failed": "extract_rules"
+        }
+      },
+      {
+        "id": "extract_rules",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(fields, requireFields){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function parseCountText(raw){ const s=asText(raw).replace(/,/g,''); if(!s) return ''; const m=s.match(/([0-9]+(?:\\.[0-9]+)?)\\s*([kKmMwW万亿]?)/); if(!m) return s; const n=Number(m[1]); if(!Number.isFinite(n)) return s; const unit=(m[2]||'').toLowerCase(); let val=n; if(unit==='k') val=n*1e3; else if(unit==='m') val=n*1e6; else if(unit==='w' || unit==='万') val=n*1e4; else if(unit==='亿') val=n*1e8; return String(Math.round(val)); } function pickFromElement(el, labels){ if(!el) return ''; const txt=asText(el.innerText||el.textContent||''); if(!txt) return ''; const low=txt.toLowerCase(); let hit=false; for(const lb of labels){ const l=String(lb||'').toLowerCase(); if(l && low.includes(l)){ hit=true; break; } } if(!hit) return ''; const m1=txt.match(/([0-9][0-9.,]*\\s*[kKmMwW万亿]?)/); if(m1&&m1[1]) return parseCountText(m1[1]); const m2=txt.match(/([kKmMwW万亿]?)\\s*([0-9][0-9.,]*)/); if(m2) return parseCountText((m2[2]||'')+(m2[1]||'')); return ''; } function pickByAttr(labels){ const attrs=['aria-label','title','data-testid','data-test','class','id']; const nodes=Array.from(document.querySelectorAll('button,a,[role=\"button\"],span,div')).slice(0,1800); for(const el of nodes){ const hay=(attrs.map((k)=>asText(el.getAttribute&&el.getAttribute(k))).join(' ')+' '+asText(el.innerText||el.textContent)).toLowerCase(); let hit=false; for(const lb of labels){ const l=String(lb||'').toLowerCase(); if(l && hay.includes(l)){ hit=true; break; } } if(!hit) continue; const v=pickFromElement(el, labels); if(v) return v; } return ''; } function pickByBodyRegex(labels){ const body=asText((document.body&&document.body.innerText)||'').slice(0,12000); if(!body) return ''; for(const lb0 of labels){ const lb=String(lb0||''); if(!lb) continue; const p1=new RegExp('([0-9][0-9.,]*\\\\s*[kKmMwW万亿]?)\\\\s*'+lb.replace(/[.*+?^${}()|[\\\\]\\\\]/g,'\\\\$&'),'i'); const m1=body.match(p1); if(m1&&m1[1]) return parseCountText(m1[1]); const p2=new RegExp(lb.replace(/[.*+?^${}()|[\\\\]\\\\]/g,'\\\\$&')+'\\\\s*[:：]?\\\\s*([0-9][0-9.,]*\\\\s*[kKmMwW万亿]?)','i'); const m2=body.match(p2); if(m2&&m2[1]) return parseCountText(m2[1]); } return ''; } function pick(labels){ return pickByAttr(labels) || pickByBodyRegex(labels) || ''; } const aliases={ likes:['点赞','赞','喜欢','likes','like'], comments:['评论','留言','comments','comment'], shares:['转发','分享','shares','share','repost','retweet'], favorites:['收藏','favorites','favorite','bookmarks','bookmark'], views:['浏览','阅读','观看','views','view','impressions','plays'], upvotes:['upvote','upvotes','顶'], downvotes:['downvote','downvotes','踩'] }; const defaults=['likes','comments','shares','favorites','views']; const want=Array.isArray(fields)&&fields.length?fields:defaults; const raw={ likes:pick(aliases.likes), comments:pick(aliases.comments), shares:pick(aliases.shares), favorites:pick(aliases.favorites), views:pick(aliases.views), upvotes:pick(aliases.upvotes), downvotes:pick(aliases.downvotes), pageUrl:String(location.href||'') }; const data={}; for(const f0 of want){ const f=String(f0||'').trim(); if(!f) continue; if(Object.prototype.hasOwnProperty.call(raw,f)){ data[f]=raw[f]; continue; } const low=f.toLowerCase(); if((low==='likecount'||low==='like_count') && raw.likes) data[f]=raw.likes; else if((low==='commentcount'||low==='comment_count') && raw.comments) data[f]=raw.comments; else if((low==='sharecount'||low==='share_count'||low==='repostcount') && raw.shares) data[f]=raw.shares; else if((low==='favoritecount'||low==='favorite_count'||low==='bookmarkcount') && raw.favorites) data[f]=raw.favorites; else if((low==='viewcount'||low==='view_count'||low==='playcount') && raw.views) data[f]=raw.views; else data[f]=''; } const req=Array.isArray(requireFields)?requireFields:[]; const missingFields=req.filter((k)=>{ const v=data[k]; return v==null || String(v).trim()===''; }); const nonEmpty=Object.keys(data).filter((k)=>{ const v=data[k]; return !(v==null || String(v).trim()===''); }).length; return { action:'reactions', data, missingFields, meta:{ pageUrl: raw.pageUrl, nonEmpty, from:'rules' } }; }",
+          "args": [
+            "${read.fields}",
+            "${read.requireFields}"
+          ]
+        },
+        "saveAs": "rulesOut",
+        "next": {
+          "done": "route_rules_quality",
+          "failed": "extract_codegen"
+        }
+      },
+      {
+        "id": "route_rules_quality",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "and",
+                "items": [
+                  {
+                    "op": "gt",
+                    "source": "vars",
+                    "path": "rulesOut.meta.nonEmpty",
+                    "value": 0
+                  },
+                  {
+                    "op": "eq",
+                    "source": "vars",
+                    "path": "rulesOut.missingFields.length",
+                    "value": 0
+                  }
+                ]
+              },
+              "to": "set_final_rules"
+            }
+          ],
+          "default": "extract_codegen"
+        },
+        "next": {}
+      },
+      {
+        "id": "extract_codegen",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "cache": true,
+          "query": "编写一个只读函数，从当前网页提取单个对象的互动数据。函数签名必须是 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先使用 config.target（selector/query）限定提取范围；未提供时在页面主内容区域提取。返回对象必须是 {action:'reactions',data:{likes:string,comments:string,shares:string,favorites:string,views:string,upvotes:string,downvotes:string,pageUrl:string}}。缺失字段填空字符串，不要 null。若遇到 1.2k/9.8万 等格式，保留原始字符串。",
+          "args": [
+            {
+              "target": "${read.target}",
+              "fields": "${read.fields}",
+              "requireFields": "${read.requireFields}",
+              "output": "${read.output}",
+              "query": "${query}"
+            }
+          ]
+        },
+        "saveAs": "rawCodegenOut",
+        "next": {
+          "done": "normalize_codegen",
+          "failed": "ai_fallback"
+        }
+      },
+      {
+        "id": "normalize_codegen",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(raw, fields, requireFields){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function normCount(v){ const s=asText(v).replace(/,/g,''); if(!s) return ''; const m=s.match(/([0-9]+(?:\\.[0-9]+)?)\\s*([kKmMwW万亿]?)/); if(!m) return s; const n=Number(m[1]); if(!Number.isFinite(n)) return s; const unit=(m[2]||'').toLowerCase(); let val=n; if(unit==='k') val=n*1e3; else if(unit==='m') val=n*1e6; else if(unit==='w' || unit==='万') val=n*1e4; else if(unit==='亿') val=n*1e8; return String(Math.round(val)); } function toObj(x){ if(!x) return {}; if(typeof x==='string'){ try{return JSON.parse(x);}catch(_){ return {}; } } return x; } const obj=toObj(raw); const d=(obj.data&&typeof obj.data==='object')?obj.data:obj; const rawMap={ likes:normCount(d.likes||''), comments:normCount(d.comments||''), shares:normCount(d.shares||''), favorites:normCount(d.favorites||''), views:normCount(d.views||''), upvotes:normCount(d.upvotes||''), downvotes:normCount(d.downvotes||''), pageUrl: asText(d.pageUrl||obj.pageUrl||'') }; const defaults=['likes','comments','shares','favorites','views']; const want=Array.isArray(fields)&&fields.length?fields:defaults; const data={}; for(const f0 of want){ const f=String(f0||'').trim(); if(!f) continue; if(Object.prototype.hasOwnProperty.call(rawMap,f)) data[f]=rawMap[f]; else data[f]=''; } const req=Array.isArray(requireFields)?requireFields:[]; const missingFields=req.filter((k)=>{ const v=data[k]; return v==null || String(v).trim()===''; }); const nonEmpty=Object.keys(data).filter((k)=>{ const v=data[k]; return !(v==null || String(v).trim()===''); }).length; return { action:'reactions', data, missingFields, meta:{ pageUrl: rawMap.pageUrl || asText(obj.pageUrl||''), nonEmpty, from:'run_js_codegen' } }; }",
+          "args": [
+            "${{ vars.rawCodegenOut || {} }}",
+            "${read.fields}",
+            "${read.requireFields}"
+          ]
+        },
+        "saveAs": "codegenOut",
+        "next": {
+          "done": "merge_results",
+          "failed": "ai_fallback"
+        }
+      },
+      {
+        "id": "merge_results",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(a,b,fields,requireFields){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function isNumLike(v){ return /^\\d+$/.test(asText(v)); } function choose(v1,v2){ const s1=asText(v1), s2=asText(v2); if(!s1 && !s2) return ''; if(!s1) return s2; if(!s2) return s1; if(isNumLike(s1) && !isNumLike(s2)) return s1; if(!isNumLike(s1) && isNumLike(s2)) return s2; return s1.length>=s2.length ? s1 : s2; } const r1=(a&&typeof a==='object')?a:{}; const r2=(b&&typeof b==='object')?b:{}; const d1=(r1.data&&typeof r1.data==='object')?r1.data:{}; const d2=(r2.data&&typeof r2.data==='object')?r2.data:{}; const defaults=['likes','comments','shares','favorites','views']; const want=Array.isArray(fields)&&fields.length?fields:defaults; const data={}; for(const f0 of want){ const f=String(f0||'').trim(); if(!f) continue; data[f]=choose(d1[f], d2[f]); } const req=Array.isArray(requireFields)?requireFields:[]; const missingFields=req.filter((k)=>{ const v=data[k]; return v==null || String(v).trim()===''; }); const nonEmpty=Object.keys(data).filter((k)=>asText(data[k])).length; const pageUrl=asText((r2.meta&&r2.meta.pageUrl) || (r1.meta&&r1.meta.pageUrl) || ''); return { action:'reactions', data, missingFields, meta:{ pageUrl, nonEmpty, from:'merged_rules_codegen' } }; }",
+          "args": [
+            "${{ vars.rulesOut || {} }}",
+            "${{ vars.codegenOut || {} }}",
+            "${read.fields}",
+            "${read.requireFields}"
+          ]
+        },
+        "saveAs": "mergedOut",
+        "next": {
+          "done": "evaluate_merged_quality",
+          "failed": "ai_fallback"
+        }
+      },
+      {
+        "id": "evaluate_merged_quality",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(merged, requireFields){ function asText(v){ return String(v==null?'':v).trim(); } const m=(merged&&typeof merged==='object')?merged:{}; const d=(m.data&&typeof m.data==='object')?m.data:{}; const req=Array.isArray(requireFields)?requireFields:[]; const missing=Array.isArray(m.missingFields)?m.missingFields:req.filter((k)=>!asText(d[k])); const vals=Object.keys(d).map((k)=>asText(d[k])).filter((v)=>v!==''); const nonEmpty=Number((m.meta&&m.meta.nonEmpty)||vals.length||0); const uniqueCount=new Set(vals).size; const suspiciousSameValue = vals.length>=3 && uniqueCount<=2; const baseOk=req.length>0 ? (missing.length===0 && nonEmpty>0) : (nonEmpty>0); const ok=baseOk && !suspiciousSameValue; return { ok, nonEmpty, missingCount: missing.length, requiredCount: req.length, uniqueCount, suspiciousSameValue }; }",
+          "args": [
+            "${{ vars.mergedOut || {} }}",
+            "${read.requireFields}"
+          ]
+        },
+        "saveAs": "mergedQuality",
+        "next": {
+          "done": "route_merged_quality",
+          "failed": "ai_fallback"
+        }
+      },
+      {
+        "id": "route_merged_quality",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "mergedQuality.ok",
+                "value": true
+              },
+              "to": "set_final_merged"
+            }
+          ],
+          "default": "ai_fallback"
+        },
+        "next": {}
+      },
+      {
+        "id": "ai_fallback",
+        "action": {
+          "type": "run_ai",
+          "model": "balanced",
+          "prompt": "你是网页互动数据提取器。请返回结构化对象：{likes:string,comments:string,shares:string,favorites:string,views:string,upvotes:string,downvotes:string,pageUrl:string}。缺失字段返回空字符串，不要 null。",
+          "input": {
+            "read": "${read}",
+            "query": "${query}"
+          },
+          "page": {
+            "url": true,
+            "title": true,
+            "html": true
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "likes": {
+                "type": "string"
+              },
+              "comments": {
+                "type": "string"
+              },
+              "shares": {
+                "type": "string"
+              },
+              "favorites": {
+                "type": "string"
+              },
+              "views": {
+                "type": "string"
+              },
+              "upvotes": {
+                "type": "string"
+              },
+              "downvotes": {
+                "type": "string"
+              },
+              "pageUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "likes",
+              "comments",
+              "shares",
+              "favorites",
+              "views",
+              "upvotes",
+              "downvotes",
+              "pageUrl"
+            ]
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "saveAs": "aiOut",
+        "next": {
+          "done": "normalize_ai",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "normalize_ai",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(aiOut, fields, requireFields){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function normCount(v){ const s=asText(v).replace(/,/g,''); if(!s) return ''; const m=s.match(/([0-9]+(?:\\.[0-9]+)?)\\s*([kKmMwW万亿]?)/); if(!m) return s; const n=Number(m[1]); if(!Number.isFinite(n)) return s; const unit=(m[2]||'').toLowerCase(); let val=n; if(unit==='k') val=n*1e3; else if(unit==='m') val=n*1e6; else if(unit==='w' || unit==='万') val=n*1e4; else if(unit==='亿') val=n*1e8; return String(Math.round(val)); } const a=(aiOut&&typeof aiOut==='object')?aiOut:{}; const raw={ likes:normCount(a.likes||''), comments:normCount(a.comments||''), shares:normCount(a.shares||''), favorites:normCount(a.favorites||''), views:normCount(a.views||''), upvotes:normCount(a.upvotes||''), downvotes:normCount(a.downvotes||''), pageUrl:asText(a.pageUrl||'') }; const defaults=['likes','comments','shares','favorites','views']; const want=Array.isArray(fields)&&fields.length?fields:defaults; const data={}; for(const f0 of want){ const f=String(f0||'').trim(); if(!f) continue; if(Object.prototype.hasOwnProperty.call(raw,f)) data[f]=raw[f]; else data[f]=''; } const req=Array.isArray(requireFields)?requireFields:[]; const missingFields=req.filter((k)=>{ const v=data[k]; return v==null || String(v).trim()===''; }); const nonEmpty=Object.keys(data).filter((k)=>asText(data[k])).length; return { action:'reactions', data, missingFields, meta:{ pageUrl: raw.pageUrl, nonEmpty, from:'ai_fallback' } }; }",
+          "args": [
+            "${{ vars.aiOut || {} }}",
+            "${read.fields}",
+            "${read.requireFields}"
+          ]
+        },
+        "saveAs": "reactionsOut",
+        "next": {
+          "done": "done",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "set_final_rules",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(v){ return v && typeof v==='object' ? v : { action:'reactions', data:{}, missingFields:[], meta:{ from:'rules_empty' } }; }",
+          "args": [
+            "${{ vars.rulesOut || {} }}"
+          ]
+        },
+        "saveAs": "reactionsOut",
+        "next": {
+          "done": "done",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "set_final_merged",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(v){ return v && typeof v==='object' ? v : { action:'reactions', data:{}, missingFields:[], meta:{ from:'merged_empty' } }; }",
+          "args": [
+            "${{ vars.mergedOut || {} }}"
+          ]
+        },
+        "saveAs": "reactionsOut",
+        "next": {
+          "done": "done",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "read.reactions ok",
+          "conclusion": "${vars.reactionsOut}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_not_reactions",
+        "action": {
+          "type": "abort",
+          "reason": "read_reactions_generic only supports read.action=reactions"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_failed",
+        "action": {
+          "type": "abort",
+          "reason": "read.reactions extraction failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "targetNorm": {
+        "type": "object",
+        "desc": "规范化 target",
+        "from": "init_target.saveAs"
+      },
+      "targetSel": {
+        "type": "object",
+        "desc": "目标 selector",
+        "from": "resolve_target_query.saveAs/resolve_target_selector.saveAs"
+      },
+      "rulesOut": {
+        "type": "object",
+        "desc": "规则提取结果",
+        "from": "extract_rules.saveAs"
+      },
+      "rawCodegenOut": {
+        "type": "any",
+        "desc": "AI 生成 run_js 原始输出",
+        "from": "extract_codegen.saveAs"
+      },
+      "codegenOut": {
+        "type": "object",
+        "desc": "AI 生成 run_js 归一化输出",
+        "from": "normalize_codegen.saveAs"
+      },
+      "mergedOut": {
+        "type": "object",
+        "desc": "规则与 codegen 合并输出",
+        "from": "merge_results.saveAs"
+      },
+      "mergedQuality": {
+        "type": "object",
+        "desc": "合并结果质量判断",
+        "from": "evaluate_merged_quality.saveAs"
+      },
+      "aiOut": {
+        "type": "object",
+        "desc": "run_ai 兜底输出",
+        "from": "ai_fallback.saveAs"
+      },
+      "reactionsOut": {
+        "type": "object",
+        "desc": "最终输出",
+        "from": "set_final_*/normalize_ai.saveAs"
+      }
+    }
+  }
+}

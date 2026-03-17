@@ -1,0 +1,81 @@
+{
+  "id": "smoke_read_batch_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/read/batch/index.html",
+        "waitBy": "css: .item a",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "invoke", "failed": "abort" }
+    },
+    {
+      "id": "invoke",
+      "action": {
+        "type": "invoke",
+        "target": "read_batch_generic",
+        "args": {
+          "read.action": "batch",
+          "read.fields": ["url", "title", "summary", "content"],
+          "read.requireFields": ["title", "content"],
+          "read.output": "json",
+          "read.concurrency": 2,
+          "urls": [
+            "http://127.0.0.1:8787/read/batch/detail-1.html",
+            "http://127.0.0.1:8787/read/batch/detail-2.html",
+            "http://127.0.0.1:8787/read/batch/detail-3.html"
+          ]
+        }
+      },
+      "saveAs": "out",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; const items=Array.isArray(o.items)?o.items:[]; const okItems=items.filter((it)=>it&&it.ok); const allHasTitle=okItems.every((it)=>String(it?.data?.title||'').includes('BATCH-')); const allHasContent=okItems.every((it)=>String(it?.data?.content||'').length>20); const ok=o.action==='batch' && items.length===3 && okItems.length===3 && allHasTitle && allHasContent; return { ok, total:items.length, okCount:okItems.length, allHasTitle, allHasContent }; }",
+        "args": ["${{ vars.out || {} }}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke read batch local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut, out:vars.out }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: total=${vars.verifyOut.total}, okCount=${vars.verifyOut.okCount}, allHasTitle=${vars.verifyOut.allHasTitle}, allHasContent=${vars.verifyOut.allHasContent}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke read batch local failed"
+      }
+    }
+  ]
+}

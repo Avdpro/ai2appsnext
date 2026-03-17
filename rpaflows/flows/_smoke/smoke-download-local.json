@@ -1,0 +1,71 @@
+{
+  "id": "smoke_download_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8795/download/index.html",
+        "waitBy": "css: #download-link",
+        "waitTimeoutMs": 10000
+      },
+      "next": { "done": "invoke_download", "failed": "abort" }
+    },
+    {
+      "id": "invoke_download",
+      "action": {
+        "type": "invoke",
+        "target": "download_file",
+        "args": {
+          "download.action": "file",
+          "download.target": {
+            "by": "selector",
+            "selector": "#download-link"
+          }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "dlOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(v){ const o=(v&&typeof v==='object')?v:{}; const fp=String(o.filepath||''); const started=!!o.started; const finished=!!o.finished; const ok=started&&finished&&/sample.*\\.txt$/i.test(fp); return { ok, started, finished, filepath: fp, url: String(o.url||'') }; }",
+        "args": ["${vars.dlOut}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke download local passed",
+        "conclusion": "${{ ({ ok:true, dlOut: vars.dlOut || null, verify: vars.verifyOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke download local failed"
+      }
+    }
+  ]
+}
+

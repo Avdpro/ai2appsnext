@@ -1,0 +1,203 @@
+const capabilities = {
+	must: ["read.profile", "read.action"],
+	prefer: ["read.fields", "read.requireFields", "read.target", "read.output"],
+};
+
+const filters = [
+	{ key: "domain", value: "*" },
+	{ key: "locale", value: "zh-CN" },
+];
+
+const ranks = {
+	cost: 2,
+	quality: 2,
+	speed: 2,
+};
+
+const flow = {
+	id: "read_profile_generic",
+	start: "route_action",
+	args: {
+		read: { type: "object", required: false, desc: "read.* 参数对象" },
+		query: { type: "string", required: false, desc: "可选查询词" },
+	},
+	steps: [
+		{
+			id: "route_action",
+			action: {
+				type: "branch",
+				cases: [
+					{ when: { op: "eq", source: "args", path: "read.action", value: "profile" }, to: "init_target" },
+				],
+				default: "abort_not_profile",
+			},
+			next: {},
+		},
+		{
+			id: "init_target",
+			action: {
+				type: "run_js",
+				scope: "agent",
+				code: "function(target){ const t=(target&&typeof target==='object')?target:{}; const by=String(t.by||'auto').toLowerCase(); const selector=String(t.selector||'').trim(); const query=String(t.query||'').trim(); return { by, selector, query, hasTarget: !!(selector || query) }; }",
+				args: ["${{ args?.read?.target || {} }}"],
+			},
+			saveAs: "targetNorm",
+			next: { done: "route_target", failed: "extract_profile" },
+		},
+		{
+			id: "route_target",
+			action: {
+				type: "branch",
+				cases: [
+					{
+						when: {
+							op: "and",
+							items: [
+								{ op: "eq", source: "vars", path: "targetNorm.by", value: "query" },
+								{ op: "truthy", source: "vars", path: "targetNorm.query" }
+							]
+						},
+						to: "resolve_target_query"
+					},
+					{ when: { op: "truthy", source: "vars", path: "targetNorm.selector" }, to: "resolve_target_selector" },
+				],
+				default: "extract_profile",
+			},
+			next: {},
+		},
+		{
+			id: "resolve_target_query",
+			action: {
+				type: "selector",
+				query: "${{ vars.targetNorm.query }}",
+				cacheKeySuffix: "read_profile_target",
+			},
+			saveAs: "targetSel",
+			next: { done: "click_target", failed: "extract_profile" },
+		},
+		{
+			id: "resolve_target_selector",
+			action: {
+				type: "selector",
+				by: "${vars.targetNorm.selector}",
+			},
+			saveAs: "targetSel",
+			next: { done: "click_target", failed: "extract_profile" },
+		},
+		{
+			id: "click_target",
+			action: {
+				type: "click",
+				by: "${vars.targetSel.by}",
+				postWaitMs: 900,
+			},
+			next: { done: "extract_profile", failed: "extract_profile" },
+		},
+		{
+			id: "extract_profile",
+			action: {
+				type: "run_js",
+				scope: "page",
+				code: "function(fields, requireFields){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function absUrl(u){ const s=asText(u); if(!s) return ''; try{return new URL(s, location.href).href;}catch(_){ return s; } } function q(sel){ try{return document.querySelector(sel);}catch(_){ return null; } } function pickText(list){ for(const sel of list){ const el=q(sel); const txt=asText(el && (el.innerText||el.textContent)); if(txt) return txt; } return ''; } function pickAttr(list, attr){ for(const sel of list){ const el=q(sel); const v=asText(el && el.getAttribute && el.getAttribute(attr)); if(v) return v; } return ''; } function statByLabel(labels){ const body=asText((document.body&&document.body.innerText)||''); for(const lb of labels){ const re1=new RegExp('([0-9][0-9.,kKmMwW万]*)\\\\s*'+lb,'i'); const m1=body.match(re1); if(m1&&m1[1]) return asText(m1[1]); const re2=new RegExp(lb+'\\\\s*[:：]?\\\\s*([0-9][0-9.,kKmMwW万]*)','i'); const m2=body.match(re2); if(m2&&m2[1]) return asText(m2[1]); } return ''; } const title=asText(document.title||''); const ogTitle=asText((q('meta[property=\\\"og:title\\\"]')||{}).content||''); const name=pickText(['h1[itemprop=\\\"name\\\"]','h1','.profile-name','[data-testid*=\\\"name\\\"]','.user-name','.nickname']) || (ogTitle?ogTitle.split(/[-|｜]/)[0].trim():'') || title.split(/[-|｜]/)[0].trim(); const bio=pickText(['[itemprop=\\\"description\\\"]','.profile-bio','.bio','[data-testid*=\\\"bio\\\"]','[data-role=\\\"bio\\\"]']) || asText((q('meta[name=\\\"description\\\"]')||{}).content||''); const followers=pickAttr(['[data-followers]'],'data-followers') || statByLabel(['粉丝','followers','关注者']); const following=pickAttr(['[data-following]'],'data-following') || statByLabel(['关注','following']); const posts=pickAttr(['[data-posts]'],'data-posts') || statByLabel(['帖子','动态','posts']); const likes=pickAttr(['[data-likes]'],'data-likes') || statByLabel(['获赞','likes']); const verified = !!(q('.verified,.is-verified,[aria-label*=\\\"verified\\\" i],[title*=\\\"认证\\\"]')); const avatar=absUrl((q('meta[property=\\\"og:image\\\"]')||{}).content || pickAttr(['img.avatar','[class*=\\\"avatar\\\"] img','img[alt*=\\\"avatar\\\" i]'],'src')); const profileUrl = String(location.href||''); const raw={ name:asText(name), bio:asText(bio), followers:asText(followers), following:asText(following), posts:asText(posts), likes:asText(likes), verified: !!verified, profileUrl: asText(profileUrl), avatarUrl: asText(avatar) }; const want=Array.isArray(fields)&&fields.length?fields:['name','bio','followers','following','verified','profileUrl','avatarUrl']; const data={}; for(const f0 of want){ const f=String(f0||'').trim(); if(!f) continue; if(Object.prototype.hasOwnProperty.call(raw,f)) data[f]=raw[f]; else data[f]=''; } const req=Array.isArray(requireFields)?requireFields:[]; const missingFields=req.filter((k)=>{ const v=data[k]; if(typeof v==='boolean') return false; return v==null || String(v).trim()===''; }); return { action:'profile', data, missingFields, meta:{ pageUrl: profileUrl } }; }",
+				args: [
+					"${read.fields}",
+					"${read.requireFields}"
+				],
+			},
+			saveAs: "profileOut",
+			next: { done: "route_quality", failed: "ai_fallback" },
+		},
+		{
+			id: "route_quality",
+			action: {
+				type: "branch",
+				cases: [
+					{ when: { op: "gt", source: "vars", path: "profileOut.missingFields.length", value: 0 }, to: "ai_fallback" }
+				],
+				default: "done",
+			},
+			next: {},
+		},
+		{
+			id: "ai_fallback",
+			action: {
+				type: "run_ai",
+				model: "balanced",
+				prompt: "你是网页 profile 提取器。请返回 JSON envelope。status='ok' 时 result 必须是对象：{name:string,bio:string,followers:string,following:string,posts:string,likes:string,verified:boolean,profileUrl:string,avatarUrl:string}。缺失字段返回空字符串，verified 用布尔值。",
+				input: {
+					read: "${read}",
+					query: "${query}"
+				},
+				page: { url: true, title: true, html: true },
+				schema: {
+					type: "object",
+					properties: {
+						name: { type: "string" },
+						bio: { type: "string" },
+						followers: { type: "string" },
+						following: { type: "string" },
+						posts: { type: "string" },
+						likes: { type: "string" },
+						verified: { type: "boolean" },
+						profileUrl: { type: "string" },
+						avatarUrl: { type: "string" }
+					},
+					required: ["name","bio","followers","following","posts","likes","verified","profileUrl","avatarUrl"]
+				},
+				cache: { enabled: false }
+			},
+			saveAs: "profileAiOut",
+			next: { done: "normalize_ai", failed: "abort_failed" },
+		},
+		{
+			id: "normalize_ai",
+			action: {
+				type: "run_js",
+				scope: "agent",
+				code: "function(aiOut, fields, requireFields){ function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } const a=(aiOut&&typeof aiOut==='object')?aiOut:{}; const raw={ name:asText(a.name||''), bio:asText(a.bio||''), followers:asText(a.followers||''), following:asText(a.following||''), posts:asText(a.posts||''), likes:asText(a.likes||''), verified: !!a.verified, profileUrl:asText(a.profileUrl||''), avatarUrl:asText(a.avatarUrl||'') }; const want=Array.isArray(fields)&&fields.length?fields:['name','bio','followers','following','verified','profileUrl','avatarUrl']; const data={}; for(const f0 of want){ const f=String(f0||'').trim(); if(!f) continue; if(Object.prototype.hasOwnProperty.call(raw,f)) data[f]=raw[f]; else data[f]=''; } const req=Array.isArray(requireFields)?requireFields:[]; const missingFields=req.filter((k)=>{ const v=data[k]; if(typeof v==='boolean') return false; return v==null || String(v).trim()===''; }); return { action:'profile', data, missingFields, meta:{ from:'ai_fallback' } }; }",
+				args: [
+					"${{ vars.profileAiOut || {} }}",
+					"${read.fields}",
+					"${read.requireFields}"
+				]
+			},
+			saveAs: "profileOut",
+			next: { done: "done", failed: "abort_failed" },
+		},
+		{
+			id: "done",
+			action: {
+				type: "done",
+				reason: "read.profile ok",
+				conclusion: "${vars.profileOut}",
+			},
+			next: {},
+		},
+		{
+			id: "abort_not_profile",
+			action: { type: "abort", reason: "read_profile_generic only supports read.action=profile" },
+			next: {},
+		},
+		{
+			id: "abort_failed",
+			action: { type: "abort", reason: "read.profile extraction failed" },
+			next: {},
+		},
+	],
+	vars: {
+		targetNorm: { type: "object", desc: "规范化 target", from: "init_target.saveAs" },
+		targetSel: { type: "object", desc: "目标 selector", from: "resolve_target_query.saveAs/resolve_target_selector.saveAs" },
+		profileOut: { type: "object", desc: "profile 输出", from: "extract_profile.saveAs/normalize_ai.saveAs" },
+		profileAiOut: { type: "object", desc: "AI 兜底结果", from: "ai_fallback.saveAs" },
+	},
+};
+
+const readProfileGenericObject = {
+	capabilities,
+	filters,
+	ranks,
+	flow,
+};
+
+export default readProfileGenericObject;
+export { capabilities, filters, ranks, flow, readProfileGenericObject };

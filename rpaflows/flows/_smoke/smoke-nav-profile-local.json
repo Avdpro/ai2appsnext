@@ -1,0 +1,66 @@
+{
+  "id": "smoke_nav_profile_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/nav/profile-entry.html",
+        "waitBy": "css: #avatarBtn",
+        "waitTimeoutMs": 10000
+      },
+      "next": { "done": "invoke_nav", "failed": "abort" }
+    },
+    {
+      "id": "invoke_nav",
+      "action": {
+        "type": "invoke",
+        "target": "nav_generic",
+        "args": {
+          "nav.dest": "profile"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "navOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; const url=String(o.url||''); const title=String(o.title||''); const dest=String(o.dest||''); const ok = dest==='profile' && /\\/nav\\/profile-page\\.html/i.test(url) && /个人主页|profile/i.test(title); return { ok, url, title, dest, assisted: !!o.assisted, via: o.via || '' }; }",
+        "args": ["${vars.navOut}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke nav profile local passed",
+        "conclusion": "${{ ({ ok:true, navOut: vars.navOut || null, verify: vars.verifyOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke nav profile local failed"
+      }
+    }
+  ]
+}

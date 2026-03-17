@@ -1,0 +1,138 @@
+{
+	"web": {
+		"elements": {
+			"sig:b72a84d51c6d82cb": {
+				"value": [
+					"css: #exploreFeeds section.note-item a.cover[href^=\"/explore/\"]"
+				],
+				"pending": false,
+				"time": 1771389155716,
+				"queries": [
+					"scope:https://www.xiaohongshu.com|q:打开第一条笔记/帖子"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"keys": [
+					"interact_open_resolve_control_query__6bbeac74275b"
+				]
+			},
+			"sig:54ac783e5521f713": {
+				"value": [
+					"css: #exploreFeeds section.note-item a.cover[href^=\"/explore/\"]"
+				],
+				"pending": false,
+				"time": 1771389267534,
+				"queries": [
+					"scope:https://www.xiaohongshu.com|q:帖子/笔记卡片的打开入口（进入详情页）"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"keys": [
+					"interact_open_resolve_control_query__d422143fbfdd"
+				]
+			},
+			"sig:9d98a2bbb83c52dc": {
+				"value": [
+					"xpath: (//section[contains(@class,'note-item')]//a[contains(@class,'author') and contains(@href,'/user/profile/')])[1]"
+				],
+				"pending": false,
+				"time": 1771432027401,
+				"queries": [
+					"scope:https://www.xiaohongshu.com|q:打开“个人主页/我的主页/Profile/Account/Me”入口（可能在头像、用户名、侧边栏菜单或下拉菜单中）"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=只鱼Yu|anchor:c=section|chain=none",
+				"keys": [
+					"nav_generic_resolve_profile_query_1__a5de68f3b6d2"
+				]
+			},
+			"sig:a4f68306427f4796": {
+				"value": [
+					"xpath: //div[contains(@class,'login-modal') and contains(@class,'reds-modal-open')]//button[contains(@class,'submit') and normalize-space()='登录']"
+				],
+				"pending": false,
+				"time": 1771432048353,
+				"queries": [
+					"scope:https://www.xiaohongshu.com|q:在当前页面继续定位可进入“个人主页/Profile/Account”页面的按钮或菜单项；优先含“主页/个人/Profile/Account/Me”文本"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=登录|anchor:c=form|chain=none",
+				"keys": [
+					"nav_generic_resolve_profile_query_2__16165c7b3881"
+				]
+			},
+			"sig:04084bb880045a6e": {
+				"value": [
+					"xpath: //div[contains(@class,'login-container')]//div[contains(@class,'close-button')]"
+				],
+				"pending": false,
+				"time": 1771432058330,
+				"queries": [
+					"scope:https://www.xiaohongshu.com|q:若仍未到达个人主页，继续查找“查看个人主页/我的主页/Profile page/Account center”等入口并点击"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|textbox|editable|ids:none|a11y:icon=svg:use=#close;lift=div|anchor:c=none|chain=div#app>div[role=presentation]",
+				"keys": [
+					"nav_generic_resolve_profile_query_3__d0929bfb9953"
+				]
+			},
+			"sig:a92884a7770a6dd8": {
+				"value": [
+					"css: .side-bar .channel-list a[title='我'][href^='/user/profile/']"
+				],
+				"pending": false,
+				"time": 1771433166115,
+				"queries": [
+					"scope:https://www.xiaohongshu.com|q:打开“我的/Me/My/Profile/Account”入口（通常在页面顶栏、侧边栏、头像菜单）。不要点击内容卡片里作者/用户主页链接"
+				],
+				"mode": "instance",
+				"policy": "single",
+				"share": true,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=我|anchor:c=none|chain=div#app>div#global",
+				"keys": [
+					"nav_generic_resolve_profile_query_1__7567a4c4b914"
+				]
+			}
+		},
+		"ruleMap": {
+			"interact_open_resolve_control_query__6bbeac74275b": {
+				"eid": "sig:b72a84d51c6d82cb",
+				"query": "scope:https://www.xiaohongshu.com|q:打开第一条笔记/帖子",
+				"time": 1771389155716
+			},
+			"interact_open_resolve_control_query__d422143fbfdd": {
+				"eid": "sig:54ac783e5521f713",
+				"query": "scope:https://www.xiaohongshu.com|q:帖子/笔记卡片的打开入口（进入详情页）",
+				"time": 1771389267534
+			},
+			"nav_generic_resolve_profile_query_1__a5de68f3b6d2": {
+				"eid": "sig:9d98a2bbb83c52dc",
+				"query": "scope:https://www.xiaohongshu.com|q:打开“个人主页/我的主页/Profile/Account/Me”入口（可能在头像、用户名、侧边栏菜单或下拉菜单中）",
+				"time": 1771432027401
+			},
+			"nav_generic_resolve_profile_query_2__16165c7b3881": {
+				"eid": "sig:a4f68306427f4796",
+				"query": "scope:https://www.xiaohongshu.com|q:在当前页面继续定位可进入“个人主页/Profile/Account”页面的按钮或菜单项；优先含“主页/个人/Profile/Account/Me”文本",
+				"time": 1771432048353
+			},
+			"nav_generic_resolve_profile_query_3__d0929bfb9953": {
+				"eid": "sig:04084bb880045a6e",
+				"query": "scope:https://www.xiaohongshu.com|q:若仍未到达个人主页，继续查找“查看个人主页/我的主页/Profile page/Account center”等入口并点击",
+				"time": 1771432058330
+			},
+			"nav_generic_resolve_profile_query_1__7567a4c4b914": {
+				"eid": "sig:a92884a7770a6dd8",
+				"query": "scope:https://www.xiaohongshu.com|q:打开“我的/Me/My/Profile/Account”入口（通常在页面顶栏、侧边栏、头像菜单）。不要点击内容卡片里作者/用户主页链接",
+				"time": 1771433166115
+			}
+		}
+	}
+}

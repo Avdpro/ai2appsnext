@@ -1,0 +1,99 @@
+{
+	"zh-cn": {
+		"elements": {
+			"sig:81f5fd6767feabeb": {
+				"value": [
+					"css: textarea[placeholder*='新鲜事']",
+					"css: textarea[placeholder='有什么新鲜事想分享给大家？']"
+				],
+				"pending": false,
+				"time": 1770878931534,
+				"queries": [
+					"正文/内容编辑器输入区域（Post body editor）。优先：contenteditable=true 的编辑区或主要 textarea，通常是页面最大输入区",
+					"标题输入框（Title input）。优先：placeholder/aria-label/name 含 title/标题；常见为 input 或 textarea，位于编辑器顶部",
+					"可见的撰写编辑器/输入区（用于发布内容），通常是 textarea 或 contenteditable 区域，并且附近常出现“发布/发送/下一步/Submit/Post/Publish/Send”等按钮；优先匹配主要编辑区域而非搜索框"
+				],
+				"mode": "instance",
+				"policy": "pool",
+				"share": true,
+				"maxLen": 10,
+				"sigKey": "v3.10|textbox|textarea|ids:none|a11y:ph=有什么新鲜事想分享给大家？;lab=有什么新鲜事想分享给大家？|anchor:c=main|chain=div#homeWrap",
+				"keys": [
+					"compose_input_clickContent",
+					"compose_input_clickContentForTitleFallback",
+					"compose_input_clickTitle",
+					"compose_start_generic_checkComposeReady"
+				]
+			},
+			"sig:42be6b756964e434": {
+				"value": [
+					"xpath: //div[contains(@class,'_publishCard_gykin_19')]//div[contains(@class,'_file_1jg7d_67') and .//span[normalize-space(.)='图片']]"
+				],
+				"pending": false,
+				"time": 1770878991724,
+				"queries": [
+					"the image upload button or file input for adding photos/images (e.g., 'Add photo', 'Upload image', 'Photos') in the current compose editor"
+				],
+				"mode": "instance",
+				"policy": "pool",
+				"share": true,
+				"maxLen": 10,
+				"sigKey": "v3.10|textbox|editable|ids:none|a11y:txt=图片;lift=div|anchor:c=main|chain=div#homeWrap",
+				"keys": [
+					"compose_file_uploadImages"
+				]
+			},
+			"sig:3d50a83392cbb60e": {
+				"value": [
+					"xpath: //div[contains(@class,'_publishCard_gykin_19')]//button[.//span[contains(normalize-space(.),'发送')]]"
+				],
+				"pending": false,
+				"time": 1770879213107,
+				"queries": [
+					"发布/发送/提交（Post/Publish/Send/Submit）按钮：用于把当前已编辑好的内容发布出去"
+				],
+				"mode": "instance",
+				"policy": "pool",
+				"share": true,
+				"maxLen": 10,
+				"sigKey": "v3.10|button|clickable|ids:none|a11y:txt=发送|anchor:c=main|chain=div#homeWrap",
+				"keys": [
+					"compose_publish_clickPublish"
+				]
+			}
+		},
+		"ruleMap": {
+			"compose_start_generic_checkComposeReady": {
+				"eid": "sig:81f5fd6767feabeb",
+				"query": "可见的撰写编辑器/输入区（用于发布内容），通常是 textarea 或 contenteditable 区域，并且附近常出现“发布/发送/下一步/Submit/Post/Publish/Send”等按钮；优先匹配主要编辑区域而非搜索框",
+				"time": 1770779250050
+			},
+			"compose_input_clickTitle": {
+				"status": "failed",
+				"reason": "User chose fail.",
+				"query": "标题输入框（Title input）。优先：placeholder/aria-label/name 含 title/标题；常见为 input 或 textarea，位于编辑器顶部",
+				"time": 1770878013950
+			},
+			"compose_input_clickContentForTitleFallback": {
+				"eid": "sig:81f5fd6767feabeb",
+				"query": "正文/内容编辑器输入区域（Post body editor）。优先：contenteditable=true 的编辑区或主要 textarea，通常是页面最大输入区",
+				"time": 1770878054514
+			},
+			"compose_input_clickContent": {
+				"eid": "sig:81f5fd6767feabeb",
+				"query": "正文/内容编辑器输入区域（Post body editor）。优先：contenteditable=true 的编辑区或主要 textarea，通常是页面最大输入区",
+				"time": 1770878931534
+			},
+			"compose_file_uploadImages": {
+				"eid": "sig:42be6b756964e434",
+				"query": "the image upload button or file input for adding photos/images (e.g., 'Add photo', 'Upload image', 'Photos') in the current compose editor",
+				"time": 1770878991724
+			},
+			"compose_publish_clickPublish": {
+				"eid": "sig:3d50a83392cbb60e",
+				"query": "发布/发送/提交（Post/Publish/Send/Submit）按钮：用于把当前已编辑好的内容发布出去",
+				"time": 1770879213107
+			}
+		}
+	}
+}

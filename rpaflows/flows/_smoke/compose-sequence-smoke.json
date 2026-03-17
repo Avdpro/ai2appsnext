@@ -1,0 +1,133 @@
+{
+  "id": "compose_sequence_smoke",
+  "start": "start_compose",
+  "args": {
+    "compose": { "type": "object", "required": false, "desc": "compose sequence inputs: title/subtitle/content" }
+  },
+  "steps": [
+    {
+      "id": "start_compose",
+      "desc": "Open compose editor and reset draft",
+      "action": {
+        "type": "invoke",
+        "target": "compose_start",
+        "args": {
+          "compose.action": "start",
+          "compose.type": "${args.compose.type}",
+          "compose.visibility": "${args.compose.visibility}",
+          "compose.resetDraftOnStart": true
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "input_title", "failed": "abort" }
+    },
+    {
+      "id": "input_title",
+      "action": {
+        "type": "invoke",
+        "target": "compose_input",
+        "args": {
+          "compose.action": "input",
+          "compose.type": "${args.compose.type}",
+          "compose.field": "title",
+          "compose.fieldPolicy": "strict",
+          "compose.text": "${args.compose.title}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "input_subtitle", "failed": "abort" }
+    },
+    {
+      "id": "input_subtitle",
+      "action": {
+        "type": "invoke",
+        "target": "compose_input",
+        "args": {
+          "compose.action": "input",
+          "compose.type": "${args.compose.type}",
+          "compose.field": "subtitle",
+          "compose.fieldPolicy": "strict",
+          "compose.text": "${args.compose.subtitle}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "input_content", "failed": "abort" }
+    },
+    {
+      "id": "input_content",
+      "action": {
+        "type": "invoke",
+        "target": "compose_input",
+        "args": {
+          "compose.action": "input",
+          "compose.type": "${args.compose.type}",
+          "compose.field": "content",
+          "compose.fieldPolicy": "strict",
+          "compose.text": "${args.compose.content}"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "verify_editor_text", "failed": "abort" }
+    },
+    {
+      "id": "verify_editor_text",
+      "desc": "Read back editor text and verify all sections exist",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "function(expected){\n  function t(v){ return String(v == null ? '' : v).replace(/\\s+/g,' ').trim(); }\n  function visible(el){\n    if(!el) return false;\n    const st = window.getComputedStyle(el);\n    if(!st) return false;\n    if(st.display==='none' || st.visibility==='hidden' || Number(st.opacity||'1')<=0.02) return false;\n    const r = el.getBoundingClientRect();\n    return r.width>2 && r.height>2;\n  }\n  const cands = Array.from(document.querySelectorAll('textarea,[contenteditable=\"true\"],[role=\"textbox\"]')).filter(visible);\n  let best = null;\n  let text = '';\n  for(const el of cands){\n    const v = t(el.value != null ? el.value : (el.innerText || el.textContent || ''));\n    if(v.length > text.length){ text = v; best = el; }\n  }\n  const expTitle = t(expected && expected.title);\n  const expSubtitle = t(expected && expected.subtitle);\n  const expContent = t(expected && expected.content);\n  const hasTitle = !expTitle || text.includes(expTitle);\n  const hasSubtitle = !expSubtitle || text.includes(expSubtitle);\n  const hasContent = !expContent || text.includes(expContent);\n  const ok = !!text && hasTitle && hasSubtitle && hasContent;\n  return {\n    ok,\n    text,\n    textLen: text.length,\n    hasTitle,\n    hasSubtitle,\n    hasContent,\n    missing: [hasTitle ? '' : 'title', hasSubtitle ? '' : 'subtitle', hasContent ? '' : 'content'].filter(Boolean),\n    tag: best ? String(best.tagName||'').toLowerCase() : '',\n    role: best ? String(best.getAttribute('role')||'') : ''\n  };\n}",
+        "args": [
+          "${{ ({ title: args.compose?.title || '', subtitle: args.compose?.subtitle || '', content: args.compose?.content || '' }) }}"
+        ]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify_result", "failed": "abort" }
+    },
+    {
+      "id": "route_verify_result",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "confirm_user" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "confirm_user",
+      "desc": "Ask user to verify final editor content manually",
+      "action": {
+        "type": "ask_assist",
+        "reason": "自动校验已通过。请再目测确认当前编辑器内容是否正确（title/subtitle/content 已按顺序写入）。正确请点“已处理，继续”；不正确请点“无法处理”。",
+        "waitUserAction": true,
+        "modal": false,
+        "mask": false
+      },
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "compose sequence smoke completed",
+        "conclusion": "${{ ({ ok:true }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "compose sequence smoke failed" }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "compose sequence verify failed: missing=${vars.verifyOut.missing}; textLen=${vars.verifyOut.textLen}"
+      }
+    }
+  ]
+}

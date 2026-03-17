@@ -1,0 +1,28 @@
+{
+  "id": "ai_selector_smoke",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {"type": "goto", "url": "https://example.com"},
+      "next": "find_title"
+    },
+    {
+      "id": "find_title",
+      "action": {
+        "type": "selector",
+        "query": "页面主标题（Example Domain 那个大标题）"
+      },
+      "next": {"done": "finish", "failed": "fail"},
+      "saveAs": "mainTitleSelector"
+    },
+    {
+      "id": "finish",
+      "action": {"type": "done", "reason": "ai smoke ok", "conclusion": "ai selector resolved"}
+    },
+    {
+      "id": "fail",
+      "action": {"type": "abort", "reason": "ai smoke failed"}
+    }
+  ]
+}

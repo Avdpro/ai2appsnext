@@ -1,0 +1,198 @@
+{
+  "capabilities": {
+    "must": [
+      "read.list",
+      "read.action"
+    ],
+    "prefer": [
+      "read.fields",
+      "read.minItems",
+      "read.output",
+      "read.target",
+      "search.query"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 2,
+    "speed": 3
+  },
+  "flow": {
+    "id": "read_list_generic_ai",
+    "start": "route_action",
+    "args": {
+      "read": {
+        "type": "object",
+        "required": false,
+        "desc": "read.* 参数对象"
+      },
+      "query": {
+        "type": "string",
+        "required": false,
+        "desc": "可选查询词"
+      }
+    },
+    "steps": [
+      {
+        "id": "route_action",
+        "desc": "仅支持 read.action=list",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "args",
+                "path": "read.action",
+                "value": "list"
+              },
+              "to": "extract_list"
+            }
+          ],
+          "default": "abort_not_list"
+        },
+        "next": {}
+      },
+      {
+        "id": "extract_list",
+        "desc": "通过 AI 生成 run_js 代码并在页面提取通用列表",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "cache": true,
+          "query": "编写一个只读函数，从当前网页提取通用 list（搜索结果/文章列表/消息列表/用户列表）。函数签名 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先识别主内容区域中“重复出现的条目容器”作为候选列表，再逐条抽取。强制排除：header/nav/footer/sidebar、登录/注册、隐私条款、帮助反馈、广告推荐位。返回对象必须是 {action:'list',items:Array,nextCursor:string|null,pageUrl:string}。items 每项至少提供 url/title/summary 三个字符串字段（缺失填空字符串，不要 null），url 优先绝对地址，最多 50 条。对 Google/Bing/百度/小红书等页面，优先真实结果卡片，避免站点导航链接。关键要求：必须理解并应用 config.target（{by,query,selector,pick}）语义；当给出 target.query/selector 时应优先在该目标范围提取列表；当给出 target.pick 时，按 pick 规则（number=第N个，-1最后一个，string=文本包含）选择条目。若 config.query/searchQuery 存在，也需结合其语义缩小目标。config 还包括 minItems/fields/requireFields/filter/sort/output。",
+          "args": [
+            {
+              "minItems": "${read.minItems}",
+              "fields": "${read.fields}",
+              "requireFields": "${read.requireFields}",
+              "target": "${read.target}",
+              "filter": "${read.filter}",
+              "sort": "${read.sort}",
+              "output": "${read.output}",
+              "query": "${query}",
+              "searchQuery": "${search.query}"
+            }
+          ]
+        },
+        "saveAs": "rawListData",
+        "next": {
+          "done": "normalize_result",
+          "failed": "ask_user"
+        }
+      },
+      {
+        "id": "ask_user",
+        "desc": "自动提取失败时请求人工介入",
+        "action": {
+          "type": "ask_assist",
+          "reason": "read.list 自动提取失败，请确认页面是否有可读列表，或手动滚动到列表区域后继续。",
+          "waitUserAction": true
+        },
+        "next": {
+          "done": "extract_list_retry",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "extract_list_retry",
+        "desc": "人工介入后的二次提取",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "cache": true,
+          "query": "编写一个只读函数，从当前网页提取通用 list（搜索结果/文章列表/消息列表/用户列表）。函数签名 function(config)。严格禁止：导航跳转、网络请求、DOM 修改、事件触发。优先识别主内容区域中“重复出现的条目容器”作为候选列表，再逐条抽取。强制排除：header/nav/footer/sidebar、登录/注册、隐私条款、帮助反馈、广告推荐位。返回对象必须是 {action:'list',items:Array,nextCursor:string|null,pageUrl:string}。items 每项至少提供 url/title/summary 三个字符串字段（缺失填空字符串，不要 null），url 优先绝对地址，最多 50 条。对 Google/Bing/百度/小红书等页面，优先真实结果卡片，避免站点导航链接。关键要求：必须理解并应用 config.target（{by,query,selector,pick}）语义；当给出 target.query/selector 时应优先在该目标范围提取列表；当给出 target.pick 时，按 pick 规则（number=第N个，-1最后一个，string=文本包含）选择条目。若 config.query/searchQuery 存在，也需结合其语义缩小目标。config 还包括 minItems/fields/requireFields/filter/sort/output。",
+          "args": [
+            {
+              "minItems": "${read.minItems}",
+              "fields": "${read.fields}",
+              "requireFields": "${read.requireFields}",
+              "target": "${read.target}",
+              "filter": "${read.filter}",
+              "sort": "${read.sort}",
+              "output": "${read.output}",
+              "query": "${query}",
+              "searchQuery": "${search.query}"
+            }
+          ]
+        },
+        "saveAs": "rawListData",
+        "next": {
+          "done": "normalize_result",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "normalize_result",
+        "desc": "规范化 run_js 输出为 read.list 标准对象",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(raw, fields, minItems, requireFields, target){ function toObj(x){ if(!x) return {}; if(typeof x==='string'){ try{return JSON.parse(x);}catch(_){ return { items:[{ title:x, url:'', summary:''}]}; } } return x; } function asText(v){ return String(v==null?'':v).replace(/\\s+/g,' ').trim(); } function shouldDropItem(x){ const t=asText(x.title).toLowerCase(); const u=asText(x.url).toLowerCase(); const s=asText(x.summary).toLowerCase(); const ban=['sign in','login','log in','cookie','privacy','terms','help','support','settings','feedback','about']; if(!t && !u && !s) return true; if((!s || s.length<6) && ban.some((w)=>t===w || t.startsWith(w+' ') || u.includes('/'+w.replace(/\\s+/g,'')))) return true; return false; } function normalizePick(v){ if(v==null || v==='') return null; if(typeof v==='number' && Number.isFinite(v)) return Math.trunc(v); const s=String(v).trim(); if(!s) return null; if(/^[+-]?\\d+$/.test(s)) return Number.parseInt(s,10); const low=s.toLowerCase(); if(low==='first') return 1; if(low==='last') return -1; return s; } function applyPick(items,pick){ const arr=Array.isArray(items)?items:[]; const pv=normalizePick(pick); if(pv==null) return { items: arr, applied:false, pick:null }; if(!arr.length) return { items: [], applied:true, pick:pv }; if(typeof pv==='number' && Number.isFinite(pv)){ const n=Math.trunc(pv); let idx=0; if(n===-1) idx=arr.length-1; else if(n>=1) idx=n-1; else if(n<=-2) idx=arr.length+n; if(idx<0 || idx>=arr.length) return { items: [], applied:true, pick:pv }; return { items:[arr[idx]], applied:true, pick:pv }; } const q=asText(pv).toLowerCase(); if(!q) return { items: arr, applied:false, pick:null }; const found=arr.find((it)=>{ const one=(it&&typeof it==='object')?it:{}; const hay=[one.title,one.summary,one.url,one.id,one.text,one.name].map(asText).join(' ').toLowerCase(); return hay.includes(q); }); return { items: found?[found]:[], applied:true, pick:pv }; } const obj=toObj(raw); let items=[]; if(Array.isArray(obj.items)) items=obj.items; else if(Array.isArray(obj.list)) items=obj.list; else if(Array.isArray(obj.results)) items=obj.results; else if(Array.isArray(obj)) items=obj; const want=Array.isArray(fields)&&fields.length?fields:['url','title','summary']; const out=[]; const seen=new Set(); for(const it of items){ const o=(it&&typeof it==='object')?it:{ title:asText(it), url:'', summary:'' }; const one={}; for(const f of want){ if(f==='url') one.url=asText(o.url||o.href||''); else if(f==='title') one.title=asText(o.title||o.text||o.name||''); else if(f==='summary') one.summary=asText(o.summary||o.snippet||o.desc||o.description||''); else one[f]=o[f]??''; } if(shouldDropItem(one)) continue; const key=(one.url?one.url.toLowerCase():'')+'|'+(one.title?one.title.toLowerCase():'')+'|'+(one.summary?one.summary.toLowerCase():''); if(seen.has(key)) continue; seen.add(key); out.push(one); if(out.length>=50) break; } const picked=applyPick(out, target&&typeof target==='object'?target.pick:null); const pickedOut=picked.items; const req=Array.isArray(requireFields)?requireFields:[]; const missingFields=req.filter((f)=>!pickedOut.some((it)=>{ const v=it&&it[f]; return !(v==null || String(v).trim()===''); })); const minN=Math.max(0, Number(minItems||0)); if(minN>0 && pickedOut.length<minN){ throw new Error('items below minItems: '+pickedOut.length+'/'+minN); } return { action:'list', items: pickedOut, nextCursor: obj.nextCursor||null, pageUrl: asText(obj.pageUrl||obj.pageURL||obj.url||''), missingFields, meta:{ targetPickApplied: !!picked.applied, targetPick: picked.pick } }; }",
+          "args": [
+            "${vars.rawListData}",
+            "${read.fields}",
+            "${read.minItems}",
+            "${read.requireFields}",
+            "${read.target}"
+          ]
+        },
+        "saveAs": "listData",
+        "next": {
+          "done": "done",
+          "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "done",
+        "desc": "返回 read.list 结果",
+        "action": {
+          "type": "done",
+          "reason": "read.list ok",
+          "conclusion": "${vars.listData}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_not_list",
+        "desc": "不支持的 read.action",
+        "action": {
+          "type": "abort",
+          "reason": "read_list_generic_ai only supports read.action=list"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_failed",
+        "desc": "提取失败",
+        "action": {
+          "type": "abort",
+          "reason": "read.list extraction failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "rawListData": {
+        "type": "any",
+        "desc": "run_js 原始结果",
+        "from": "extract_list.saveAs"
+      },
+      "listData": {
+        "type": "object",
+        "desc": "提取结果对象",
+        "from": "normalize_result.saveAs"
+      }
+    }
+  }
+}

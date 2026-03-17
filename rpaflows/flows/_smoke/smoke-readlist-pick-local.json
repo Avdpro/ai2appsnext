@@ -1,0 +1,72 @@
+{
+  "id": "smoke_readlist_pick_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/loadmore/next-page-load.html",
+        "waitBy": "css: .item",
+        "waitTimeoutMs": 10000
+      },
+      "next": { "done": "invoke_read", "failed": "abort" }
+    },
+    {
+      "id": "invoke_read",
+      "action": {
+        "type": "invoke",
+        "target": "read_list_on_current_page",
+        "args": {
+          "read.action": "list",
+          "read.minItems": 0,
+          "read.fields": ["url", "title", "summary"],
+          "read.target": {
+            "by": "query",
+            "query": "主列表中的条目卡片",
+            "pick": 3
+          },
+          "ensure.maxRounds": 1
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "listOut",
+      "next": { "done": "check_count", "failed": "abort" }
+    },
+    {
+      "id": "check_count",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(v){ const out=(v&&typeof v==='object')?v:{}; const items=Array.isArray(out.items)?out.items:[]; return { ok: items.length===1, count: items.length, first: items[0]||null, meta: out.meta||null }; }",
+        "args": ["${vars.listOut}"]
+      },
+      "saveAs": "checkOut",
+      "next": { "done": "route", "failed": "abort" }
+    },
+    {
+      "id": "route",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "checkOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke read.list pick local passed",
+        "conclusion": "${{ ({ check: vars.checkOut || {}, out: vars.listOut || {} }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "smoke read.list pick local failed" }
+    }
+  ]
+}

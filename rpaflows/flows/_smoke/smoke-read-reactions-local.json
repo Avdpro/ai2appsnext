@@ -1,0 +1,69 @@
+{
+  "id": "smoke_read_reactions_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/read/reactions/index.html",
+        "waitBy": "css: #reaction-panel",
+        "waitTimeoutMs": 10000
+      },
+      "next": { "done": "invoke_read", "failed": "abort" }
+    },
+    {
+      "id": "invoke_read",
+      "action": {
+        "type": "invoke",
+        "target": "read_reactions_generic",
+        "args": {
+          "read.action": "reactions",
+          "read.fields": ["likes", "comments", "shares", "favorites", "views"],
+          "read.requireFields": ["likes", "comments", "shares", "favorites", "views"]
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "reactionsOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ const o=(out&&typeof out==='object')?out:{}; const d=(o.data&&typeof o.data==='object')?o.data:{}; const missing=Array.isArray(o.missingFields)?o.missingFields:[]; const ok = String(o.action||'')==='reactions' && String(d.likes||'')==='1200' && String(d.comments||'')==='345' && String(d.shares||'')==='87' && String(d.favorites||'')==='56' && String(d.views||'')==='98000' && missing.length===0; return { ok, action:o.action||'', data:d, missing }; }",
+        "args": ["${vars.reactionsOut}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort"
+      }
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke read reactions local passed",
+        "conclusion": "${{ ({ ok:true, reactions: vars.reactionsOut || null, verify: vars.verifyOut || null }) }}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke read reactions local failed"
+      }
+    }
+  ]
+}
+

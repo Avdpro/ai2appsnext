@@ -1,0 +1,428 @@
+{
+  "capabilities": {
+    "must": [
+      "compose",
+      "compose.input"
+    ],
+    "prefer": [
+      "compose.action",
+      "compose.field",
+      "compose.text",
+      "compose.blocks",
+      "compose.to",
+      "compose.cc",
+      "compose.bcc",
+      "compose.subject",
+      "compose.fieldPolicy",
+      "compose.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 3,
+    "speed": 2
+  },
+  "flow": {
+    "id": "compose_input",
+    "start": "init_ctx",
+    "args": {
+      "compose": {
+        "type": "object",
+        "required": false,
+        "desc": "compose 参数，支持 action/field/text/blocks/to/cc/bcc/subject/fieldPolicy/type/visibility"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "desc": "标准化 compose.input 参数并生成输入目标 query",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tfunction hostFromUrl(u){\n\t\t\t\t\t\tconst s = t(u);\n\t\t\t\t\t\tif(!s) return \"\";\n\t\t\t\t\t\ttry { return String(new URL(s).hostname || \"\").toLowerCase(); } catch(_) { return \"\"; }\n\t\t\t\t\t}\n\t\t\t\t\tfunction hostMatches(host, base){\n\t\t\t\t\t\tconst h = t(host).toLowerCase();\n\t\t\t\t\t\tconst b = t(base).toLowerCase();\n\t\t\t\t\t\tif(!h || !b) return false;\n\t\t\t\t\t\tif(h === b) return true;\n\t\t\t\t\t\treturn h.endsWith(\".\" + b);\n\t\t\t\t\t}\n\t\t\t\t\tfunction normalizePolicy(v){\n\t\t\t\t\t\tconst s = t(v).toLowerCase();\n\t\t\t\t\t\tif(s === \"fallback\" || s === \"assist\" || s === \"strict\") return s;\n\t\t\t\t\t\treturn \"strict\";\n\t\t\t\t\t}\n\t\t\t\t\tfunction normalizeList(v){\n\t\t\t\t\t\tif(Array.isArray(v)) return v.map(t).filter(Boolean);\n\t\t\t\t\t\tconst s = t(v);\n\t\t\t\t\t\tif(!s) return [];\n\t\t\t\t\t\treturn s.split(/[;,\\n]/).map(t).filter(Boolean);\n\t\t\t\t\t}\n\t\t\t\t\tfunction normalizeBlocks(blocks){\n\t\t\t\t\t\tif(!Array.isArray(blocks)) return \"\";\n\t\t\t\t\t\tconst lines = [];\n\t\t\t\t\t\tfor(const b of blocks){\n\t\t\t\t\t\t\tif(b == null) continue;\n\t\t\t\t\t\t\tif(typeof b === \"string\"){ if(t(b)) lines.push(t(b)); continue; }\n\t\t\t\t\t\t\tif(typeof b === \"object\"){\n\t\t\t\t\t\t\t\tconst cands = [b.text, b.content, b.value, b.title, b.body];\n\t\t\t\t\t\t\t\tfor(const c of cands){\n\t\t\t\t\t\t\t\t\tconst s = t(c);\n\t\t\t\t\t\t\t\t\tif(s){ lines.push(s); break; }\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn lines.join(\"\\n\");\n\t\t\t\t\t}\n\t\t\t\t\tfunction queryByField(field){\n\t\t\t\t\t\tswitch(field){\n\t\t\t\t\t\t\tcase \"to\":\n\t\t\t\t\t\t\t\treturn \"收件人输入框（To/收件人），用于填写邮箱地址列表\";\n\t\t\t\t\t\t\tcase \"cc\":\n\t\t\t\t\t\t\t\treturn \"抄送输入框（Cc/抄送），用于填写邮箱地址列表\";\n\t\t\t\t\t\t\tcase \"bcc\":\n\t\t\t\t\t\t\t\treturn \"密送输入框（Bcc/密送），用于填写邮箱地址列表\";\n\t\t\t\t\t\t\tcase \"subject\":\n\t\t\t\t\t\t\t\treturn \"主题输入框（Subject/主题），用于输入邮件主题\";\n\t\t\t\t\t\t\tcase \"title\":\n\t\t\t\t\t\t\t\treturn \"撰写区域的标题输入框（title/headline），用于输入标题文本\";\n\t\t\t\t\t\t\tcase \"subtitle\":\n\t\t\t\t\t\t\t\treturn \"撰写区域的副标题输入框（subtitle/description），用于输入副标题文本\";\n\t\t\t\t\t\t\tcase \"tag\":\n\t\t\t\t\t\t\t\treturn \"撰写区域的标签输入框（tag/topic/hashtag），用于输入标签\";\n\t\t\t\t\t\t\tcase \"content\":\n\t\t\t\t\t\t\tdefault:\n\t\t\t\t\t\t\t\treturn \"撰写区域的正文输入区（textarea 或 contenteditable），用于输入正文内容，避免匹配搜索框\";\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tfunction withFallbackLabel(field, content){\n\t\t\t\t\t\tconst s = t(content);\n\t\t\t\t\t\tif(!s) return \"\";\n\t\t\t\t\t\tif(field === \"title\") return \"【标题】\" + s + \"\\n\\n---\\n\";\n\t\t\t\t\t\tif(field === \"subtitle\") return \"【副标题】\" + s + \"\\n\\n---\\n\";\n\t\t\t\t\t\treturn s;\n\t\t\t\t\t}\n\t\t\t\t\tconst compose = (input && input.compose) || {};\n\t\t\t\t\tconst host = hostFromUrl(input && input.url);\n\t\t\t\t\tconst action = t(compose.action || \"input\").toLowerCase() || \"input\";\n\t\t\t\t\tconst type = t(compose.type || \"post\").toLowerCase() || \"post\";\n\t\t\t\t\tconst requestedField = t(compose.field || \"content\").toLowerCase() || \"content\";\n\t\t\t\t\tconst fieldPolicy = normalizePolicy(compose.fieldPolicy || \"strict\");\n\t\t\t\t\tconst text = t(compose.text);\n\t\t\t\t\tconst textFromBlocks = normalizeBlocks(compose.blocks);\n\t\t\t\t\tconst toList = normalizeList(compose.to);\n\t\t\t\t\tconst ccList = normalizeList(compose.cc);\n\t\t\t\t\tconst bccList = normalizeList(compose.bcc);\n\t\t\t\t\tconst subject = t(compose.subject);\n\t\t\t\t\tconst fallbackEligible = requestedField === \"title\" || requestedField === \"subtitle\";\n\t\t\t\t\tconst autoFallbackHostHit = fallbackEligible && (\n\t\t\t\t\t\thostMatches(host, \"weibo.com\") ||\n\t\t\t\t\t\thostMatches(host, \"x.com\") ||\n\t\t\t\t\t\thostMatches(host, \"twitter.com\")\n\t\t\t\t\t);\n\t\t\t\t\tconst streamComposeHost = (\n\t\t\t\t\t\thostMatches(host, \"weibo.com\") ||\n\t\t\t\t\t\thostMatches(host, \"x.com\") ||\n\t\t\t\t\t\thostMatches(host, \"twitter.com\")\n\t\t\t\t\t);\n\t\t\t\t\tlet effectiveField = requestedField;\n\t\t\t\t\tlet fallbackApplied = false;\n\t\t\t\t\tlet fallbackReason = \"\";\n\t\t\t\t\tlet fallbackAuto = false;\n\t\t\t\t\tif(autoFallbackHostHit){\n\t\t\t\t\t\teffectiveField = \"content\";\n\t\t\t\t\t\tfallbackApplied = true;\n\t\t\t\t\t\tfallbackAuto = true;\n\t\t\t\t\t\tfallbackReason = \"auto-fallback-by-host\";\n\t\t\t\t\t}\n\t\t\t\t\tconst rawText = text || textFromBlocks;\n\t\t\t\t\tlet finalText = rawText;\n\t\t\t\t\tif(!finalText){\n\t\t\t\t\t\tif(requestedField === \"to\") finalText = toList.join(\", \");\n\t\t\t\t\t\telse if(requestedField === \"cc\") finalText = ccList.join(\", \");\n\t\t\t\t\t\telse if(requestedField === \"bcc\") finalText = bccList.join(\", \");\n\t\t\t\t\t\telse if(requestedField === \"subject\") finalText = subject;\n\t\t\t\t\t}\n\t\t\t\t\tif(fallbackApplied) finalText = withFallbackLabel(requestedField, finalText);\n\t\t\t\t\tconst contentLikeRequested = requestedField === \"content\" || requestedField === \"title\" || requestedField === \"subtitle\";\n\t\t\t\t\t// In stream-style editors (weibo/x/twitter), compose.start already clears draft.\n\t\t\t\t\t// Subsequent content-like writes should append to avoid wiping previous fallback sections.\n\t\t\t\t\tconst inputClear = !(streamComposeHost && contentLikeRequested);\n\t\t\t\t\tconst inputMode = (streamComposeHost && contentLikeRequested) ? \"type\" : \"paste\";\n\t\t\t\t\tconst deferWrite = !!(streamComposeHost && autoFallbackHostHit);\n\t\t\t\t\tconst hasText = !!finalText;\n\t\t\t\t\treturn {\n\t\t\t\t\t\taction,\n\t\t\t\t\t\tactionOk: action === \"input\",\n\t\t\t\t\t\ttype,\n\t\t\t\t\t\thost,\n\t\t\t\t\t\trequestedField,\n\t\t\t\t\t\teffectiveField,\n\t\t\t\t\t\tfield: effectiveField,\n\t\t\t\t\t\tfieldPolicy,\n\t\t\t\t\t\tfallbackEligible,\n\t\t\t\t\t\tfallbackApplied,\n\t\t\t\t\t\tfallbackAuto,\n\t\t\t\t\t\tfallbackReason,\n\t\t\t\t\t\tstreamComposeHost,\n\t\t\t\t\t\tinputClear,\n\t\t\t\t\t\tinputMode,\n\t\t\t\t\t\tdeferWrite,\n\t\t\t\t\t\trawText,\n\t\t\t\t\t\ttext: finalText,\n\t\t\t\t\t\thasText,\n\t\t\t\t\t\tto: toList,\n\t\t\t\t\t\tcc: ccList,\n\t\t\t\t\t\tbcc: bccList,\n\t\t\t\t\t\tsubject,\n\t\t\t\t\t\ttargetQuery: queryByField(effectiveField),\n\t\t\t\t\t\tvisibility: t(compose.visibility || \"\"),\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${{ ({ compose: args.compose || {}, url: opts.url || '' }) }}"
+          ]
+        },
+        "saveAs": "composeCtx",
+        "next": {
+          "done": "route_action",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_action",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.actionOk",
+                "value": true
+              },
+              "to": "route_has_text"
+            }
+          ],
+          "default": "abort_unsupported_action"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_has_text",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.hasText",
+                "value": true
+              },
+              "to": "route_defer_write"
+            }
+          ],
+          "default": "abort_empty_text"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_defer_write",
+        "desc": "流式站点 title/subtitle fallback：先暂存，等 content 步一次性写入",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.deferWrite",
+                "value": true
+              },
+              "to": "store_pending_section"
+            }
+          ],
+          "default": "check_target_ready"
+        },
+        "next": {}
+      },
+      {
+        "id": "store_pending_section",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(input){\n\t\t\t\t\tconst field = String(input && input.field || \"\").toLowerCase();\n\t\t\t\t\tconst text = String(input && input.text || \"\");\n\t\t\t\t\tconst cur = (globalThis.__rpaComposePending && typeof globalThis.__rpaComposePending === \"object\")\n\t\t\t\t\t\t? globalThis.__rpaComposePending\n\t\t\t\t\t\t: {};\n\t\t\t\t\tif (field === \"title\") cur.title = text;\n\t\t\t\t\tif (field === \"subtitle\") cur.subtitle = text;\n\t\t\t\t\tglobalThis.__rpaComposePending = cur;\n\t\t\t\t\treturn { deferred: true, pending: { title: String(cur.title || \"\"), subtitle: String(cur.subtitle || \"\") } };\n\t\t\t\t}",
+          "args": [
+            "${{ ({ field: vars.composeCtx.requestedField, text: vars.composeCtx.rawText || vars.composeCtx.text }) }}"
+          ]
+        },
+        "saveAs": "pendingWrite",
+        "next": {
+          "done": "done_deferred",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "done_deferred",
+        "action": {
+          "type": "done",
+          "reason": "compose.input deferred for stream fallback",
+          "conclusion": "${{ ({ action:'input', id:'', field: vars.composeCtx?.field || 'content', requestedField: vars.composeCtx?.requestedField || vars.composeCtx?.field || 'content', deferred:true, fallbackApplied:true, fallbackReason: vars.composeCtx?.fallbackReason || 'auto-fallback-deferred' }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "check_target_ready",
+        "desc": "检查当前页面是否已经有可输入目标",
+        "action": {
+          "type": "selector",
+          "query": "${vars.composeCtx.targetQuery}"
+        },
+        "saveAs": "targetSel",
+        "next": {
+          "done": "prepare_input_text",
+          "failed": "ensure_compose_started"
+        }
+      },
+      {
+        "id": "ensure_compose_started",
+        "desc": "若当前无可输入目标，则先启动 compose.start",
+        "action": {
+          "type": "invoke",
+          "target": "compose_start",
+          "args": {
+            "compose.action": "start",
+            "compose.type": "${vars.composeCtx.type}",
+            "compose.visibility": "${vars.composeCtx.visibility}"
+          },
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "saveAs": "composeStartOut",
+        "next": {
+          "done": "wait_target_ready",
+          "failed": "ask_assist_input"
+        }
+      },
+      {
+        "id": "wait_target_ready",
+        "desc": "等待输入目标出现",
+        "action": {
+          "type": "wait",
+          "query": "${vars.composeCtx.targetQuery}",
+          "timeoutMs": 10000
+        },
+        "saveAs": "targetSelWait",
+        "next": {
+          "done": "prepare_input_text",
+          "failed": "route_missing_field",
+          "timeout": "route_missing_field"
+        }
+      },
+      {
+        "id": "prepare_input_text",
+        "desc": "在流式站点 content 步合并暂存的 title/subtitle",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(input){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v); }\n\t\t\t\t\tconst req = String(input && input.requestedField || \"\").toLowerCase();\n\t\t\t\t\tconst isStream = !!(input && input.streamComposeHost);\n\t\t\t\t\tconst baseText = t(input && input.text);\n\t\t\t\t\tlet outText = baseText;\n\t\t\t\t\tlet clear = !!(input && input.inputClear);\n\t\t\t\t\tlet merged = false;\n\t\t\t\t\tif (isStream && req === \"content\") {\n\t\t\t\t\t\tconst p = (globalThis.__rpaComposePending && typeof globalThis.__rpaComposePending === \"object\")\n\t\t\t\t\t\t\t? globalThis.__rpaComposePending\n\t\t\t\t\t\t\t: {};\n\t\t\t\t\t\tconst parts = [];\n\t\t\t\t\t\tif (p.title) parts.push(\"【标题】\" + t(p.title) + \"\\n\\n---\\n\");\n\t\t\t\t\t\tif (p.subtitle) parts.push(\"【副标题】\" + t(p.subtitle) + \"\\n\\n---\\n\");\n\t\t\t\t\t\tparts.push(baseText);\n\t\t\t\t\t\toutText = parts.join(\"\");\n\t\t\t\t\t\tmerged = !!(p.title || p.subtitle);\n\t\t\t\t\t\tclear = merged ? true : clear;\n\t\t\t\t\t\tglobalThis.__rpaComposePending = null;\n\t\t\t\t\t}\n\t\t\t\t\treturn { text: outText, clear, merged };\n\t\t\t\t}",
+          "args": [
+            "${{ ({ requestedField: vars.composeCtx.requestedField, streamComposeHost: vars.composeCtx.streamComposeHost, text: vars.composeCtx.text, inputClear: vars.composeCtx.inputClear }) }}"
+          ]
+        },
+        "saveAs": "preparedInput",
+        "next": {
+          "done": "input_text",
+          "failed": "ask_assist_input"
+        }
+      },
+      {
+        "id": "route_missing_field",
+        "desc": "目标字段不存在时，按 fieldPolicy 处理",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "and",
+                "items": [
+                  {
+                    "op": "eq",
+                    "source": "vars",
+                    "path": "composeCtx.fieldPolicy",
+                    "value": "fallback"
+                  },
+                  {
+                    "op": "eq",
+                    "source": "vars",
+                    "path": "composeCtx.fallbackEligible",
+                    "value": true
+                  },
+                  {
+                    "op": "neq",
+                    "source": "vars",
+                    "path": "composeCtx.effectiveField",
+                    "value": "content"
+                  }
+                ]
+              },
+              "to": "build_fallback_ctx"
+            },
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.fieldPolicy",
+                "value": "assist"
+              },
+              "to": "ask_assist_input"
+            }
+          ],
+          "default": "abort_missing_field"
+        },
+        "next": {}
+      },
+      {
+        "id": "build_fallback_ctx",
+        "desc": "构造字段降级（title/subtitle -> content）上下文",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(ctx){\n\t\t\t\t\tfunction t(v){ return String(v == null ? \"\" : v).trim(); }\n\t\t\t\t\tfunction queryByField(field){\n\t\t\t\t\t\tif(field === \"content\"){\n\t\t\t\t\t\t\treturn \"撰写区域的正文输入区（textarea 或 contenteditable），用于输入正文内容，避免匹配搜索框\";\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn t(ctx && ctx.targetQuery);\n\t\t\t\t\t}\n\t\t\t\t\tfunction withFallbackLabel(field, content){\n\t\t\t\t\t\tconst s = t(content);\n\t\t\t\t\t\tif(!s) return \"\";\n\t\t\t\t\t\tif(field === \"title\") return \"【标题】\" + s + \"\\n\\n---\\n\";\n\t\t\t\t\t\tif(field === \"subtitle\") return \"【副标题】\" + s + \"\\n\\n---\\n\";\n\t\t\t\t\t\treturn s;\n\t\t\t\t\t}\n\t\t\t\t\tconst c = (ctx && typeof ctx === \"object\") ? ctx : {};\n\t\t\t\t\tconst req = t(c.requestedField || c.field || \"content\").toLowerCase();\n\t\t\t\t\treturn {\n\t\t\t\t\t\t...c,\n\t\t\t\t\t\teffectiveField: \"content\",\n\t\t\t\t\t\tfield: \"content\",\n\t\t\t\t\t\tfallbackApplied: true,\n\t\t\t\t\t\tfallbackReason: \"policy-fallback-to-content\",\n\t\t\t\t\t\ttargetQuery: queryByField(\"content\"),\n\t\t\t\t\t\ttext: withFallbackLabel(req, c.text),\n\t\t\t\t\t\thasText: !!withFallbackLabel(req, c.text),\n\t\t\t\t\t};\n\t\t\t\t}",
+          "args": [
+            "${vars.composeCtx}"
+          ]
+        },
+        "saveAs": "composeCtxFallback",
+        "next": {
+          "done": "wait_fallback_target",
+          "failed": "abort_missing_field"
+        }
+      },
+      {
+        "id": "wait_fallback_target",
+        "desc": "等待 fallback 后的 content 输入目标出现",
+        "action": {
+          "type": "wait",
+          "query": "${vars.composeCtxFallback.targetQuery}",
+          "timeoutMs": 10000
+        },
+        "saveAs": "targetSelFallback",
+        "next": {
+          "done": "input_text_fallback",
+          "failed": "ask_assist_input",
+          "timeout": "ask_assist_input"
+        }
+      },
+      {
+        "id": "input_text",
+        "desc": "写入 compose 文本",
+        "action": {
+          "type": "input",
+          "query": "${vars.composeCtx.targetQuery}",
+          "text": "${vars.preparedInput.text}",
+          "mode": "${vars.composeCtx.inputMode}",
+          "clear": "${vars.preparedInput.clear}"
+        },
+        "next": {
+          "done": "done",
+          "failed": "ask_assist_input"
+        }
+      },
+      {
+        "id": "input_text_fallback",
+        "desc": "按 fallback 策略写入 compose 文本",
+        "action": {
+          "type": "input",
+          "query": "${vars.composeCtxFallback.targetQuery}",
+          "text": "${vars.composeCtxFallback.text}",
+          "mode": "${vars.composeCtxFallback.inputMode}",
+          "clear": "${vars.composeCtxFallback.inputClear}"
+        },
+        "next": {
+          "done": "done",
+          "failed": "ask_assist_input"
+        }
+      },
+      {
+        "id": "ask_assist_input",
+        "desc": "自动输入失败时请求用户手动输入",
+        "action": {
+          "type": "ask_assist",
+          "reason": "请在当前撰写编辑器中手动输入内容，完成后点击“已处理，继续”。",
+          "waitUserAction": true,
+          "modal": false,
+          "mask": false
+        },
+        "next": {
+          "done": "done_after_assist",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "done",
+        "action": {
+          "type": "done",
+          "reason": "compose.input done",
+          "conclusion": "${{ ({ action:'input', id:'', field: (vars.composeCtxFallback?.field || vars.composeCtx?.field || 'content'), requestedField: vars.composeCtx?.requestedField || vars.composeCtx?.field || 'content', fieldPolicy: vars.composeCtx?.fieldPolicy || 'strict', fallbackApplied: !!(vars.composeCtxFallback || vars.composeCtx?.fallbackApplied), fallbackReason: vars.composeCtxFallback?.fallbackReason || vars.composeCtx?.fallbackReason || '', chars: String((vars.composeCtxFallback?.text || vars.preparedInput?.text || vars.composeCtx?.text || '')).length, by: vars.targetSel?.by || vars.targetSelWait?.by || vars.targetSelFallback?.by || null }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "done_after_assist",
+        "action": {
+          "type": "done",
+          "reason": "compose.input done by assist",
+          "conclusion": "${{ ({ action:'input', id:'', field: (vars.composeCtxFallback?.field || vars.composeCtx?.field || 'content'), requestedField: vars.composeCtx?.requestedField || vars.composeCtx?.field || 'content', fieldPolicy: vars.composeCtx?.fieldPolicy || 'strict', fallbackApplied: !!(vars.composeCtxFallback || vars.composeCtx?.fallbackApplied), fallbackReason: vars.composeCtxFallback?.fallbackReason || vars.composeCtx?.fallbackReason || '', chars: String((vars.composeCtxFallback?.text || vars.preparedInput?.text || vars.composeCtx?.text || '')).length, by: vars.targetSel?.by || vars.targetSelWait?.by || vars.targetSelFallback?.by || null, assisted: true }) }}"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_unsupported_action",
+        "action": {
+          "type": "abort",
+          "reason": "compose_input only supports compose.action=input"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_empty_text",
+        "action": {
+          "type": "abort",
+          "reason": "compose.input requires compose.text or compose.blocks"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_missing_field",
+        "action": {
+          "type": "abort",
+          "reason": "compose.input target field not available on current site (requested=${vars.composeCtx.requestedField}, policy=${vars.composeCtx.fieldPolicy})"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort",
+        "action": {
+          "type": "abort",
+          "reason": "compose.input failed"
+        },
+        "next": {}
+      }
+    ],
+    "vars": {
+      "composeCtx": {
+        "type": "object",
+        "desc": "标准化 compose.input 参数",
+        "from": "init_ctx.saveAs"
+      },
+      "composeCtxFallback": {
+        "type": "object",
+        "desc": "fallback 后的 compose 输入上下文",
+        "from": "build_fallback_ctx.saveAs"
+      },
+      "pendingWrite": {
+        "type": "object",
+        "desc": "title/subtitle fallback 暂存结果",
+        "from": "store_pending_section.saveAs"
+      },
+      "preparedInput": {
+        "type": "object",
+        "desc": "实际用于本次输入的文本/clear 参数",
+        "from": "prepare_input_text.saveAs"
+      },
+      "targetSel": {
+        "type": "object",
+        "desc": "输入目标 selector",
+        "from": "check_target_ready.saveAs"
+      },
+      "targetSelWait": {
+        "type": "object",
+        "desc": "wait_target_ready 命中的输入目标",
+        "from": "wait_target_ready.saveAs"
+      },
+      "targetSelFallback": {
+        "type": "object",
+        "desc": "wait_fallback_target 命中的输入目标",
+        "from": "wait_fallback_target.saveAs"
+      },
+      "composeStartOut": {
+        "type": "object",
+        "desc": "compose.start 结果",
+        "from": "ensure_compose_started.saveAs"
+      }
+    }
+  }
+}

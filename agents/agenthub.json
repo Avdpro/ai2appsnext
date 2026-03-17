@@ -1,0 +1,32 @@
+{
+    "user":"avdpro@me.com",
+    "devKey": "YOUR-DEV-KEY",
+    "host": "ws://localhost:3301",
+    "label": "Agent Hub",
+    "description": "",
+    "language": "CN",
+    "nodes": {
+    },
+    "globalContext":{
+        "models": {
+            "expert": {
+                "platform": "OpenAI",
+                "model": "gpt-4o"
+            },
+            "standard": {
+                "platform": "OpenAI",
+                "model": "gpt-4o"
+            },
+            "fast": {
+                "platform": "OpenAI",
+                "model": "gpt-4o-mini"
+            },
+            "lite": {
+                "platform": "OpenAI",
+                "model": "gpt-4o-mini"
+            }
+        }
+    },
+    "api_keys": {
+    }
+}

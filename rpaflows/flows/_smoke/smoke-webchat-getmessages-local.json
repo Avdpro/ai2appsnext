@@ -1,0 +1,125 @@
+{
+  "id": "smoke_webchat_getmessages_local",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": {
+        "type": "goto",
+        "url": "http://127.0.0.1:8787/webchat/chatgpt-mock.html",
+        "waitBy": "css: [data-role='chat-input']",
+        "waitTimeoutMs": 8000
+      },
+      "next": { "done": "new_session", "failed": "abort" }
+    },
+    {
+      "id": "new_session",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "newSession",
+          "webChat.session": { "kind": "ai", "title": "GetMessages Smoke Session" }
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "newOut",
+      "next": { "done": "send_msg_1", "failed": "abort" }
+    },
+    {
+      "id": "send_msg_1",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "send",
+          "webChat.session": { "kind": "ai" },
+          "webChat.text": "第一条用户消息：你好",
+          "webChat.sendMode": "button"
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "wait_reply", "failed": "abort" }
+    },
+    {
+      "id": "wait_reply",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "waitReply",
+          "webChat.session": { "kind": "ai" },
+          "webChat.timeoutMs": 12000,
+          "webChat.pollMs": 600,
+          "webChat.idleMs": 1200,
+          "webChat.minNew": 1
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "next": { "done": "get_messages", "failed": "abort" }
+    },
+    {
+      "id": "get_messages",
+      "action": {
+        "type": "invoke",
+        "target": "webchat_core",
+        "args": {
+          "webChat.action": "getMessages",
+          "webChat.session": { "kind": "ai" },
+          "webChat.limit": 20
+        },
+        "onError": "fail",
+        "returnTo": "caller"
+      },
+      "saveAs": "msgsOut",
+      "next": { "done": "verify", "failed": "abort" }
+    },
+    {
+      "id": "verify",
+      "action": {
+        "type": "run_js",
+        "scope": "agent",
+        "code": "function(out){ function asText(v){ return String(v==null?'':v).trim(); } const o=(out&&typeof out==='object')?out:{}; const items=Array.isArray(o.items)?o.items:[]; const hasUser=items.some((it)=>asText(it&&it.role)==='user'); const hasAssistant=items.some((it)=>asText(it&&it.role)==='assistant'); const hasTarget=items.some((it)=>asText(it&&it.text).includes('第一条用户消息')); const cursor=asText(o.cursor||''); const ok=asText(o.action)==='getMessages' && items.length>=2 && hasUser && hasAssistant && hasTarget; return { ok, action: asText(o.action), count: items.length, hasUser, hasAssistant, hasTarget, cursorLen: cursor.length, cursor, sample: items.slice(-3) }; }",
+        "args": ["${{ vars.msgsOut || {} }}"]
+      },
+      "saveAs": "verifyOut",
+      "next": { "done": "route_verify", "failed": "abort" }
+    },
+    {
+      "id": "route_verify",
+      "action": {
+        "type": "branch",
+        "cases": [
+          { "when": { "op": "eq", "source": "vars", "path": "verifyOut.ok", "value": true }, "to": "done" }
+        ],
+        "default": "abort_verify"
+      },
+      "next": {}
+    },
+    {
+      "id": "done",
+      "action": {
+        "type": "done",
+        "reason": "smoke webchat getMessages local passed",
+        "conclusion": "${{ ({ ok:true, verify:vars.verifyOut, out:vars.msgsOut }) }}"
+      }
+    },
+    {
+      "id": "abort_verify",
+      "action": {
+        "type": "abort",
+        "reason": "verify failed: action=${vars.verifyOut.action}, count=${vars.verifyOut.count}, hasUser=${vars.verifyOut.hasUser}, hasAssistant=${vars.verifyOut.hasAssistant}, hasTarget=${vars.verifyOut.hasTarget}"
+      }
+    },
+    {
+      "id": "abort",
+      "action": {
+        "type": "abort",
+        "reason": "smoke webchat getMessages local failed"
+      }
+    }
+  ]
+}

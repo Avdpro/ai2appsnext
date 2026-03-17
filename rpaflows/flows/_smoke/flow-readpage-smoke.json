@@ -1,0 +1,30 @@
+{
+  "id": "readpage_smoke",
+  "start": "go",
+  "steps": [
+    {
+      "id": "go",
+      "action": { "type": "goto", "url": "https://example.com" },
+      "next": { "done": "read", "failed": "abort" }
+    },
+    {
+      "id": "read",
+      "action": {
+        "type": "readPage",
+        "field": { "url": true, "title": true, "article": true }
+      },
+      "saveAs": "pageInfo",
+      "next": { "done": "done", "failed": "abort" }
+    },
+    {
+      "id": "done",
+      "action": { "type": "done", "reason": "ok", "conclusion": "readPage ok" },
+      "next": {}
+    },
+    {
+      "id": "abort",
+      "action": { "type": "abort", "reason": "readPage failed" },
+      "next": {}
+    }
+  ]
+}
