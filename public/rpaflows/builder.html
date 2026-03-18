@@ -1,0 +1,3687 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPA Flow Builder</title>
+  <style>
+    :root {
+      --bg: #eef3f9;
+      --panel: #ffffff;
+      --line: #d2dbe6;
+      --text: #132033;
+      --sub: #5a6b7f;
+      --blue: #0a63ff;
+      --blue-soft: #e8f1ff;
+      --green: #0d9863;
+      --orange: #b46400;
+      --red: #b42318;
+      --mono: "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 95% 0%, #dbe8ff 0%, var(--bg) 46%);
+      color: var(--text);
+      overflow: hidden;
+    }
+    .page {
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 340px minmax(420px, 1fr) 460px;
+      gap: 12px;
+      height: 100vh;
+      overflow: hidden;
+      align-items: stretch;
+    }
+    @media (max-width: 1220px) {
+      body { overflow: auto; }
+      .page {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
+      }
+    }
+    .col {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    @media (max-width: 1220px) {
+      .col {
+        height: auto;
+        min-height: 680px;
+      }
+    }
+    .head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fbfdff, #f5f9ff);
+    }
+    .title { margin: 0; font-size: 18px; font-weight: 700; }
+    .desc { margin-top: 5px; color: var(--sub); font-size: 12px; }
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 10px 10px 0;
+      border-bottom: 1px solid var(--line);
+      background: #f9fbff;
+    }
+    .tab {
+      border: 1px solid var(--line);
+      border-bottom: none;
+      border-top-left-radius: 9px;
+      border-top-right-radius: 9px;
+      padding: 7px 10px;
+      font-size: 12px;
+      color: var(--sub);
+      background: #f3f7fd;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tab.active {
+      color: var(--text);
+      background: #fff;
+      font-weight: 700;
+    }
+    .tab-content { display: none; padding: 12px; overflow: auto; flex: 1 1 auto; min-height: 0; }
+    .tab-content.active { display: block; }
+
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    @media (max-width: 1220px) { .grid, .grid-3 { grid-template-columns: 1fr; } }
+
+    label { display: block; margin-bottom: 4px; font-size: 12px; color: var(--sub); }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 9px;
+      font-size: 13px;
+      color: var(--text);
+      background: #fff;
+    }
+    textarea { resize: vertical; min-height: 88px; font-family: var(--mono); line-height: 1.38; }
+    .mono { font-family: var(--mono); }
+
+    .btn {
+      border: 0;
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      background: var(--blue);
+    }
+    .btn.secondary { background: #64748b; }
+    .btn.ok { background: var(--green); }
+    .btn.warn { background: var(--orange); }
+    .btn.danger { background: var(--red); }
+
+    .tag {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: var(--sub);
+      background: #fff;
+    }
+
+    .section {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      background: #fbfdff;
+    }
+    .section-title {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #23364d;
+    }
+
+    .step-list {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      max-height: none;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: auto;
+      background: #fff;
+    }
+    .step-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid #edf1f6;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .step-item:last-child { border-bottom: none; }
+    .step-item.active { background: var(--blue-soft); }
+    .step-item.dragging {
+      opacity: 0.5;
+    }
+    .step-item.drop-target {
+      box-shadow: inset 0 2px 0 #2563eb;
+      background: #eff6ff;
+    }
+    #left-steps.tab-content.active {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    #left-steps .section {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      margin-bottom: 0;
+    }
+
+    .graph-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      background: #f8fbff;
+      border-top: 1px solid var(--line);
+      position: relative;
+      cursor: grab;
+    }
+    .graph-wrap.panning,
+    .graph-wrap.panning * {
+      user-select: none !important;
+      -webkit-user-select: none !important;
+    }
+    .graph-canvas {
+      min-width: 680px;
+      min-height: 520px;
+      position: relative;
+      padding: 18px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .graph-canvas * {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .graph-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: auto;
+    }
+    .graph-svg-top {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 40;
+    }
+    .node {
+      position: absolute;
+      width: 230px;
+      border: 1px solid #93c5fd;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(16,32,51,0.08);
+      padding: 8px;
+      cursor: pointer;
+    }
+    .node.active { border-color: #2563eb; background: #eff6ff; }
+    .node-run-btn {
+      position: absolute;
+      right: 6px;
+      bottom: 6px;
+      border: 0;
+      border-radius: 7px;
+      background: #0d9863;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      cursor: pointer;
+      opacity: 0;
+      transform: translateY(2px);
+      pointer-events: none;
+      transition: opacity 120ms ease, transform 120ms ease;
+      z-index: 2;
+    }
+    .node:hover .node-run-btn,
+    .node.active .node-run-btn {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .node-run-btn[disabled] {
+      opacity: 0.65 !important;
+      cursor: default;
+    }
+    .node-id { font-size: 12px; font-weight: 700; color: #0f335f; }
+    .node-type { font-size: 11px; color: #355174; margin-top: 2px; }
+    .node-next {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #58738f;
+      white-space: normal;
+      word-break: break-word;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      line-clamp: 2;
+      max-height: 2.6em;
+    }
+    .graph-tip {
+      position: absolute;
+      left: 10px;
+      top: 8px;
+      font-size: 11px;
+      color: #475569;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(15,23,42,0.14);
+      border-radius: 999px;
+      padding: 2px 8px;
+      pointer-events: none;
+      z-index: 24;
+    }
+    .graph-hover-banner {
+      position: absolute;
+      left: 10px;
+      top: 34px;
+      max-width: min(680px, calc(100% - 20px));
+      font-size: 11px;
+      line-height: 1.35;
+      color: #1e293b;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid rgba(15,23,42,0.16);
+      border-radius: 8px;
+      padding: 4px 8px;
+      pointer-events: none;
+      z-index: 24;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .field-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .field-row { display: block; }
+    .field-row.hidden { display: none; }
+    .input-with-btn {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .input-with-add {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .btn.square {
+      width: 34px;
+      min-width: 34px;
+      height: 34px;
+      padding: 0;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .next-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      align-items: center;
+    }
+    @media (max-width: 1220px) {
+      .next-grid { grid-template-columns: 1fr; }
+    }
+    .kv-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .kv-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .arg-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .arg-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 7px;
+      display: grid;
+      gap: 6px;
+    }
+    .arg-card-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      align-items: center;
+    }
+    .arg-card-actions {
+      display: grid;
+      grid-template-columns: 140px auto auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .checkbox-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--sub);
+      font-size: 12px;
+      white-space: nowrap;
+      margin: 0;
+    }
+    .checkbox-inline input {
+      width: auto;
+      margin: 0;
+    }
+    .branch-cases-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .branch-case-row {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 7px;
+      display: grid;
+      gap: 6px;
+    }
+    .branch-case-head {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .branch-case-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      align-items: center;
+    }
+    @media (max-width: 1220px) {
+      .branch-case-body { grid-template-columns: 1fr; }
+    }
+    .picker-mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.28);
+      z-index: 14000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    .picker-mask.show { display: flex; }
+    .picker-card {
+      width: min(680px, 96vw);
+      height: min(640px, 86vh);
+      background: #fff;
+      border: 1px solid #b5c4d8;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(16,32,51,0.22);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      color: #132033;
+      opacity: 1;
+    }
+    .picker-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .picker-filter {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .picker-filter .checkbox-inline { margin-right: 8px; }
+    .picker-list {
+      flex: 1 1 auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      min-height: 0;
+      height: 100%;
+      overflow: auto;
+      padding: 6px;
+    }
+    .picker-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 6px 8px;
+      cursor: pointer;
+    }
+    .picker-item:hover {
+      background: #f5f9ff;
+      border-color: #d9e5f5;
+    }
+    .picker-item .mono {
+      font-size: 13px;
+      color: #132033;
+      word-break: break-all;
+    }
+    .picker-kind {
+      font-size: 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 1px 6px;
+      color: var(--sub);
+      background: #f8fbff;
+    }
+    .picker-empty {
+      color: var(--sub);
+      font-size: 12px;
+      padding: 10px 8px;
+    }
+    .picker-hint {
+      color: var(--sub);
+      font-size: 12px;
+    }
+
+    pre {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #f9fbff;
+      padding: 10px;
+      font-size: 12px;
+      line-height: 1.35;
+      font-family: var(--mono);
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .busy-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9, 16, 28, 0.38);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      pointer-events: auto;
+    }
+    .busy-mask.show { display: flex; }
+    .busy-card {
+      width: min(420px, calc(100vw - 28px));
+      border-radius: 12px;
+      border: 1px solid rgba(15, 23, 42, 0.22);
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 16px 38px rgba(15, 23, 42, 0.24);
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 12px;
+    }
+    .busy-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      border: 3px solid rgba(10, 99, 255, 0.25);
+      border-top-color: rgba(10, 99, 255, 0.95);
+      animation: busy-spin 1s linear infinite;
+    }
+    .busy-mask.success .busy-icon,
+    .busy-mask.error .busy-icon {
+      animation: none;
+      border: none;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .busy-mask.success .busy-icon { background: #0d9863; }
+    .busy-mask.success .busy-icon::before { content: "✓"; }
+    .busy-mask.error .busy-icon { background: #b42318; }
+    .busy-mask.error .busy-icon::before { content: "!"; }
+    .busy-text {
+      font-size: 14px;
+      line-height: 1.45;
+      color: #0f172a;
+      font-weight: 600;
+    }
+    @keyframes busy-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="col">
+      <div class="head">
+        <h1 class="title">Flow Builder</h1>
+        <div class="desc">独立控制台（Session / Flow / Steps）</div>
+      </div>
+      <div class="tabs" data-tab-group="left">
+        <div class="tab active" data-tab="left-session">Session</div>
+        <div class="tab" data-tab="left-flow">Flow</div>
+        <div class="tab" data-tab="left-steps">Steps</div>
+      </div>
+
+      <div id="left-session" class="tab-content active">
+        <div class="section">
+          <p class="section-title">Session 状态 <span id="sessionTag" class="tag">未启动</span></p>
+          <div class="grid-3">
+            <div><label>alias</label><input id="aliasInput" value="flow_builder"></div>
+            <div><label>launchMode</label><input id="launchModeInput" value="direct"></div>
+            <div><label>startUrl</label><input id="startUrlInput" value="about:blank"></div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn ok" id="startSessionBtn" type="button">启动 Session</button>
+            <button class="btn secondary" id="refreshSessionBtn" type="button">刷新</button>
+            <button class="btn danger" id="closeSessionBtn" type="button">关闭</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Context <span id="contextTag" class="tag">active: -</span></p>
+          <label>可调试页面</label>
+          <select id="contextSelect"></select>
+          <label style="margin-top:8px;">新开页面 URL</label>
+          <input id="openUrlInput" value="about:blank">
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="refreshContextsBtn" type="button">刷新页面列表</button>
+            <button class="btn" id="selectContextBtn" type="button">切到选中</button>
+            <button class="btn warn" id="openPageBtn" type="button">新开并设为 active</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <label id="status">Ready.</label>
+        </div>
+      </div>
+
+      <div id="left-flow" class="tab-content">
+        <div class="section">
+          <p class="section-title">Flow 文件</p>
+          <label>已保存 Flow（选择即加载）</label>
+          <select id="savedFlowSelect"></select>
+          <label style="margin-top:8px;">sourcePath（可选）</label>
+          <input id="savePathInput" placeholder="/abs/path/to/flow.json">
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="refreshFlowsBtn" type="button">刷新列表</button>
+            <button class="btn secondary" id="newFlowBtn" type="button">新建 Flow</button>
+            <button class="btn ok" id="saveFlowBtn" type="button">保存</button>
+            <button class="btn warn" id="saveAsFlowBtn" type="button">另存为</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Flow 外壳（说明 / 能力 / 参数）</p>
+          <label>Flow 说明 / 目标</label>
+          <textarea id="flowGoalInput" style="min-height:70px;" placeholder="例如：在当前页面搜索关键词并读取前 5 条结果"></textarea>
+          <label style="margin-top:8px;">Flow 描述（description）</label>
+          <textarea id="flowDescInput" style="min-height:70px;" placeholder="给流程使用者看的说明，可与目标不同"></textarea>
+          <div class="grid" style="margin-top:8px;">
+            <div><label>Flow ID</label><input id="flowIdInput" placeholder="flow_id"></div>
+            <div><label>Capabilities（逗号分隔）</label><input id="flowCapsInput" placeholder="search,read.list"></div>
+          </div>
+          <label style="margin-top:8px;">参数键（逗号分隔，用于批量补全）</label>
+          <input id="flowArgsInput" placeholder="search.query,read.minItems">
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="syncArgsBtn" type="button">按参数键补全定义</button>
+            <button class="btn secondary" id="addArgBtn" type="button">+ 添加参数定义</button>
+          </div>
+          <label style="margin-top:8px;">参数定义（args）</label>
+          <div id="flowArgsBox" class="arg-list"></div>
+          <label style="margin-top:8px;">Filters</label>
+          <div id="flowFiltersBox" class="kv-list"></div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="addFilterBtn" type="button">+ 添加 Filter</button>
+            <button class="btn" id="applyShellBtn" type="button">应用外壳到 Flow</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Flow JSON（高级编辑）</p>
+          <textarea id="flowJsonInput" style="min-height:320px;">{
+  "id": "flow_builder_demo",
+  "start": "step_1",
+  "args": {},
+  "steps": [
+    {
+      "id": "step_1",
+      "action": { "type": "goto", "url": "https://example.com" },
+      "next": { "done": "done_1", "failed": "abort_1" }
+    },
+    {
+      "id": "done_1",
+      "action": { "type": "done", "conclusion": "ok" },
+      "next": {}
+    },
+    {
+      "id": "abort_1",
+      "action": { "type": "abort", "reason": "failed" },
+      "next": {}
+    }
+  ]
+}</textarea>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="reparseFlowBtn" type="button">重新解析 Flow</button>
+            <span id="flowTag" class="tag">flow: -</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="left-steps" class="tab-content">
+        <div class="section">
+          <p class="section-title">步骤列表</p>
+          <div class="row" style="margin-bottom:8px;">
+            <button class="btn" id="addStepBtn" type="button">新增步骤</button>
+            <button class="btn danger" id="deleteStepBtn" type="button">删除当前</button>
+            <button class="btn secondary" id="setStartBtn" type="button">设为 start</button>
+            <span id="startTag" class="tag">start: -</span>
+          </div>
+          <div id="stepList" class="step-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="head">
+        <div class="row" style="justify-content:space-between;">
+          <h2 class="title" style="font-size:16px;">Flow Graph</h2>
+          <button class="btn secondary" id="activateBrowserBtn" type="button">激活浏览器</button>
+        </div>
+        <div class="desc">中间区展示流程图，点击节点会同步到右侧编辑器。</div>
+      </div>
+      <div class="graph-wrap" id="graphWrap">
+        <div class="graph-canvas" id="graphCanvas">
+          <svg class="graph-svg" id="graphSvg"></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="head">
+        <h2 class="title" style="font-size:16px;">Step Editor</h2>
+        <div class="desc">右侧：Action 编辑 / 测试 + 日志输出。</div>
+      </div>
+      <div class="tabs" data-tab-group="right">
+        <div class="tab active" data-tab="right-action">Action & Test</div>
+        <div class="tab" data-tab="right-log">Log</div>
+      </div>
+
+      <div id="right-action" class="tab-content active">
+        <div class="section">
+          <div class="grid">
+            <div><label>step.id</label><input id="stepIdInput" value="step_1"></div>
+            <div>
+              <label>action.type</label>
+              <select id="actionTypeSelect">
+                <option>goto</option>
+                <option>click</option>
+                <option>hover</option>
+                <option>input</option>
+                <option>press_key</option>
+                <option>wait</option>
+                <option>scroll</option>
+                <option>invoke</option>
+                <option>run_js</option>
+                <option>branch</option>
+                <option>ask_assist</option>
+                <option>done</option>
+                <option>abort</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-grid" style="margin-top:8px;">
+            <div class="field-row" data-types="click,input,hover">
+              <label>by</label>
+              <div class="input-with-btn">
+                <input id="fBy" placeholder="css: button.search">
+                <button class="btn secondary" id="pickByBtn" type="button">Pick 元素</button>
+                <button class="btn secondary" id="confirmPickBtn" type="button">选中确认</button>
+              </div>
+            </div>
+            <div class="field-row" data-types="click,input,hover"><label>query</label><input id="fQuery" placeholder="可见的搜索框"></div>
+            <div class="field-row" data-types="goto"><label>url</label><input id="fUrl" placeholder="https://..."></div>
+            <div class="field-row" data-types="input,done,abort,ask_assist"><label>text / conclusion / reason</label><textarea id="fText"></textarea></div>
+
+            <div class="field-row" data-types="press_key"><label>key</label><input id="fKey" placeholder="Enter"></div>
+            <div class="field-row" data-types="press_key"><label>modifiers (csv)</label><input id="fModifiers" placeholder="Ctrl,Shift"></div>
+            <div class="field-row" data-types="press_key"><label>times</label><input id="fTimes" placeholder="1"></div>
+
+            <div class="field-row" data-types="wait"><label>timeoutMs</label><input id="fTimeout" placeholder="1200"></div>
+
+            <div class="field-row" data-types="scroll"><label>deltaX</label><input id="fDeltaX" placeholder="0"></div>
+            <div class="field-row" data-types="scroll"><label>deltaY</label><input id="fDeltaY" placeholder="600"></div>
+            <div class="field-row" data-types="scroll"><label>behavior</label><input id="fBehavior" placeholder="smooth"></div>
+
+            <div class="field-row" data-types="invoke"><label>target</label><input id="fTarget" placeholder="flowId#entryId"></div>
+            <div class="field-row" data-types="invoke">
+              <label>invoke.find（结构化）</label>
+              <div class="grid">
+                <div><label>find.kind</label><input id="fInvokeFindKind" value="rpa" placeholder="例如：rpa"></div>
+                <div><label>find.rank（可选）</label><input id="fInvokeFindRank" placeholder="例如：cost 或 cost,speed"></div>
+              </div>
+              <label style="margin-top:6px;">find.must（逗号分隔）</label>
+              <div class="input-with-add">
+                <input id="fInvokeFindMust" placeholder="例如：blockers.clear,login.perform">
+                <button class="btn secondary square" id="pickInvokeMustBtn" type="button" title="从 RPA.js 选择 cap/arg">+</button>
+              </div>
+              <label style="margin-top:6px;">find.prefer（逗号分隔）</label>
+              <div class="input-with-add">
+                <input id="fInvokeFindPrefer" placeholder="例如：login.check">
+                <button class="btn secondary square" id="pickInvokePreferBtn" type="button" title="从 RPA.js 选择 cap/arg">+</button>
+              </div>
+              <label style="margin-top:6px;">find.filter（key/value）</label>
+              <div id="fInvokeFiltersBox" class="kv-list"></div>
+              <div class="row" style="margin-top:6px;">
+                <button class="btn secondary" id="addInvokeFilterBtn" type="button">+ 添加 Filter</button>
+              </div>
+              <label style="margin-top:8px;">invoke.find JSON（高级）</label>
+              <textarea id="fInvokeFind">{"kind":"rpa","must":[]}</textarea>
+            </div>
+            <div class="field-row" data-types="invoke">
+              <label>invoke.args（结构化）</label>
+              <div id="fInvokeArgsBox" class="kv-list"></div>
+              <div class="row" style="margin-top:6px;">
+                <button class="btn secondary" id="addInvokeArgBtn" type="button">+ 添加 Arg</button>
+              </div>
+              <label style="margin-top:8px;">invoke.args JSON（高级）</label>
+              <textarea id="fInvokeArgs">{}</textarea>
+            </div>
+
+            <div class="field-row" data-types="run_js"><label>run_js.code</label><textarea id="fRunJsCode"></textarea></div>
+            <div class="field-row" data-types="run_js"><label>run_js.query</label><input id="fRunJsQuery"></div>
+            <div class="field-row" data-types="run_js"><label>run_js.args JSON(Array)</label><textarea id="fRunJsArgs">[]</textarea></div>
+            <div class="field-row" data-types="run_js"><label>run_js.scope</label><select id="fRunJsScope"><option>page</option><option>agent</option></select></div>
+
+            <div class="field-row" data-types="branch"><label>branch.default</label><select id="fBranchDefault"></select></div>
+            <div class="field-row" data-types="branch">
+              <label>branch.cases（结构化编辑）</label>
+              <div id="fBranchCasesWrap" class="branch-cases-wrap"></div>
+              <div class="row" style="margin-top:6px;">
+                <button class="btn secondary" id="addBranchCaseBtn" type="button">+ 添加 Case</button>
+              </div>
+              <label style="margin-top:8px;">branch.cases JSON（高级）</label>
+              <textarea id="fBranchCases">[]</textarea>
+            </div>
+          </div>
+
+          <div class="section" style="margin-top:10px; margin-bottom:0; background:#fff;">
+            <label>Step Meta</label>
+            <div class="field-grid" style="margin-top:6px;">
+              <div><label>step.desc（可选）</label><input id="stepDescInput" placeholder="步骤说明，用于可读性"></div>
+              <div><label>step.saveAs（可选，字符串或 JSON）</label><input id="stepSaveAsInput" class="mono" placeholder="例如：searchCtx 或 {\"query\":\"result.query\"}"></div>
+            </div>
+            <div id="nextFieldsWrap">
+              <label>Step Next（结构化）</label>
+              <div class="next-grid">
+                <div><label>next.done</label><select id="nextDoneInput"></select></div>
+                <div><label>next.failed</label><select id="nextFailedInput"></select></div>
+                <div><label>next.skipped</label><select id="nextSkippedInput"></select></div>
+                <div><label>next.timeout</label><select id="nextTimeoutInput"></select></div>
+                <div style="grid-column:1/-1;"><label>next.default</label><select id="nextDefaultInput"></select></div>
+              </div>
+            </div>
+            <label style="margin-top:8px;">next JSON（高级）</label>
+            <textarea id="nextJsonInput">{"done":"step_2","failed":"abort"}</textarea>
+            <label style="margin-top:8px;">action JSON（实时同步，可手动改）</label>
+            <textarea id="actionJsonInput">{"url":"https://example.com"}</textarea>
+          </div>
+
+          <div class="row" style="margin-top:8px;">
+            <button class="btn" id="applyStepBtn" type="button">写入/更新当前步骤</button>
+            <button class="btn secondary" id="restoreStepBtn" type="button">还原</button>
+            <button class="btn ok" id="runStepBtn" type="button">执行本步骤</button>
+            <span id="stepTag" class="tag">step: -</span>
+          </div>
+
+          <div class="section" style="margin-top:10px; margin-bottom:0; background:#fff;">
+            <label>本次执行结果</label>
+            <pre id="actionRunResultPre">尚未执行步骤</pre>
+          </div>
+        </div>
+      </div>
+
+      <div id="right-log" class="tab-content">
+        <div class="section">
+          <label id="logPathText">日志文件：加载中...</label>
+          <div style="height:8px;"></div>
+          <p class="section-title">最近响应</p>
+          <pre id="outputPre">等待操作...</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="busyMask" class="busy-mask" aria-live="polite" aria-busy="false">
+    <div class="busy-card">
+      <div id="busyIcon" class="busy-icon"></div>
+      <div id="busyText" class="busy-text">处理中...</div>
+    </div>
+  </div>
+  <div id="invokeKeyPickerMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="invokeKeyPickerTitle">
+      <div class="row" style="justify-content:space-between;">
+        <h3 id="invokeKeyPickerTitle" class="picker-title">选择 invoke.find 键</h3>
+        <button class="btn secondary" id="invokeKeyPickerCloseBtn" type="button">关闭</button>
+      </div>
+      <input id="invokeKeyPickerSearch" class="mono" placeholder="过滤 key（支持关键字）">
+      <div class="picker-filter">
+        <label class="checkbox-inline"><input type="radio" name="invokeKeyKind" value="all" checked><span>全部</span></label>
+        <label class="checkbox-inline"><input type="radio" name="invokeKeyKind" value="cap"><span>cap</span></label>
+        <label class="checkbox-inline"><input type="radio" name="invokeKeyKind" value="arg"><span>arg</span></label>
+      </div>
+      <div id="invokeKeyPickerList" class="picker-list"></div>
+      <div class="row" style="justify-content:space-between;">
+        <div id="invokeKeyPickerHint" class="picker-hint">加载中...</div>
+        <div class="row">
+          <button class="btn secondary" id="invokeKeyPickerCancelBtn" type="button">取消</button>
+          <button class="btn" id="invokeKeyPickerApplyBtn" type="button">添加所选</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <datalist id="stepIdOptions"></datalist>
+  <datalist id="invokeArgKeyOptions"></datalist>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      sessionId: "",
+      activeContextId: "",
+      contexts: [],
+      flow: null,
+      selectedStepId: "",
+      actionJsonDirty: false,
+      draggingStepId: "",
+      suppressRowClickUntil: 0,
+      flowsBaseDir: "",
+      invokeFindKeys: [],
+      invokeFindKeysKind: "rpa",
+      invokeArgDefs: {},
+      invokeFindKeysFetchedAt: 0,
+      invokeKeyPickerTargetId: "",
+      invokeKeyPickerFilterKind: "all",
+      invokeKeyPickerSelected: new Set(),
+    };
+
+    const actionTypes = ["goto","click","hover","input","press_key","wait","scroll","invoke","run_js","branch","ask_assist","done","abort"];
+    let graphPanning = false;
+    let graphPanStartX = 0;
+    let graphPanStartY = 0;
+    let graphPanStartLeft = 0;
+    let graphPanStartTop = 0;
+
+    function sleepMs(ms) {
+      const n = Number(ms);
+      if (!Number.isFinite(n) || n <= 0) return Promise.resolve();
+      return new Promise((resolve) => setTimeout(resolve, n));
+    }
+
+    function showBusyMask(text, tone = "working") {
+      const mask = $("busyMask");
+      if (!mask) return;
+      const msg = String(text || "处理中...");
+      $("busyText").textContent = msg;
+      mask.classList.add("show");
+      mask.classList.remove("success", "error");
+      if (tone === "success") mask.classList.add("success");
+      if (tone === "error") mask.classList.add("error");
+      mask.setAttribute("aria-busy", tone === "working" ? "true" : "false");
+    }
+
+    function hideBusyMask() {
+      const mask = $("busyMask");
+      if (!mask) return;
+      mask.classList.remove("show", "success", "error");
+      mask.setAttribute("aria-busy", "false");
+    }
+
+    function setStatus(text) { $("status").textContent = String(text || ""); }
+    function setOutput(data, opts = {}) {
+      $("outputPre").textContent = (typeof data === "string") ? data : JSON.stringify(data, null, 2);
+      if (opts && opts.toLog === true) activateTab("right", "right-log");
+    }
+    function setActionRunResult(data) {
+      $("actionRunResultPre").textContent = (typeof data === "string") ? data : JSON.stringify(data, null, 2);
+    }
+
+    function parseJsonText(text, fallback = null) {
+      const raw = String(text || "").trim();
+      if (!raw) return fallback;
+      return JSON.parse(raw);
+    }
+
+    function normalizePathForUi(raw) {
+      return String(raw || "").replace(/\\/g, "/").trim();
+    }
+
+    function toDisplayFlowPathUi(rawPath) {
+      const p = normalizePathForUi(rawPath);
+      if (!p) return "";
+      const base = normalizePathForUi(state.flowsBaseDir || "");
+      if (!base) return p;
+      const withSlash = base.endsWith("/") ? base : `${base}/`;
+      if (p === base) return "";
+      if (p.startsWith(withSlash)) return p.slice(withSlash.length);
+      return p;
+    }
+
+    function safeJson(text, fallback) {
+      try { return parseJsonText(text, fallback); } catch (_) { return fallback; }
+    }
+
+    function requireSession() {
+      if (!state.sessionId) throw new Error("请先启动 Session");
+    }
+
+    async function api(method, path, body) {
+      const init = { method, headers: { "content-type": "application/json" } };
+      if (body !== undefined) init.body = JSON.stringify(body);
+      const res = await fetch(path, init);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.reason || `HTTP ${res.status}`);
+      return data.data;
+    }
+
+    function activateTab(group, tabId) {
+      document.querySelectorAll(`.tabs[data-tab-group="${group}"] .tab`).forEach((el) => {
+        el.classList.toggle("active", el.dataset.tab === tabId);
+      });
+      document.querySelectorAll(`[id^="${group}-"].tab-content`).forEach((el) => {
+        el.classList.toggle("active", el.id === tabId);
+      });
+    }
+
+    function bindTabs() {
+      document.querySelectorAll(".tabs .tab").forEach((el) => {
+        el.addEventListener("click", () => {
+          const parent = el.closest(".tabs");
+          const group = parent ? parent.dataset.tabGroup : "";
+          const tabId = el.dataset.tab;
+          if (group && tabId) activateTab(group, tabId);
+        });
+      });
+    }
+
+    function bindGraphPan() {
+      const viewport = $("graphWrap");
+      if (!viewport || viewport.dataset.panBound === "1") return;
+      viewport.dataset.panBound = "1";
+      viewport.addEventListener("pointerdown", (ev) => {
+        if (!ev || ev.button !== 0) return;
+        const tgt = ev.target;
+        if (tgt && typeof tgt.closest === "function" && (tgt.closest(".node") || tgt.closest("button") || tgt.closest("input") || tgt.closest("textarea") || tgt.closest("select"))) return;
+        graphPanning = true;
+        graphPanStartX = ev.clientX;
+        graphPanStartY = ev.clientY;
+        graphPanStartLeft = viewport.scrollLeft;
+        graphPanStartTop = viewport.scrollTop;
+        viewport.classList.add("panning");
+        viewport.style.cursor = "grabbing";
+        try {
+          ev.preventDefault();
+          const sel = window.getSelection && window.getSelection();
+          if (sel && typeof sel.removeAllRanges === "function") sel.removeAllRanges();
+        } catch (_) {}
+      });
+      window.addEventListener("pointermove", (ev) => {
+        if (!graphPanning) return;
+        try { ev.preventDefault(); } catch (_) {}
+        const dx = ev.clientX - graphPanStartX;
+        const dy = ev.clientY - graphPanStartY;
+        viewport.scrollLeft = graphPanStartLeft - dx;
+        viewport.scrollTop = graphPanStartTop - dy;
+      }, true);
+      window.addEventListener("pointerup", () => {
+        if (!graphPanning) return;
+        graphPanning = false;
+        viewport.classList.remove("panning");
+        viewport.style.cursor = "grab";
+      }, true);
+    }
+
+    function renderSessionTag(extra = "") {
+      const label = state.sessionId ? `session=${state.sessionId}${extra ? ` | ${extra}` : ""}` : "未启动";
+      $("sessionTag").textContent = label;
+    }
+
+    function renderContextTag() { $("contextTag").textContent = `active: ${state.activeContextId || "-"}`; }
+
+    function renderContexts() {
+      const sel = $("contextSelect");
+      sel.innerHTML = "";
+      for (const c of state.contexts) {
+        const op = document.createElement("option");
+        op.value = c.contextId;
+        op.textContent = `${c.active ? "[*] " : ""}${c.title || "(untitled)"} | ${c.url || ""} | ${c.contextId}`;
+        sel.appendChild(op);
+      }
+      if (state.activeContextId) sel.value = state.activeContextId;
+      renderContextTag();
+    }
+
+    function refreshStepIdOptions() {
+      const steps = Array.isArray(state.flow?.steps) ? state.flow.steps : [];
+      const ids = [];
+      const seen = new Set();
+      for (const s of steps) {
+        const sid = String(s?.id || "").trim();
+        if (!sid || seen.has(sid)) continue;
+        seen.add(sid);
+        ids.push(sid);
+      }
+
+      const fillSelect = (el, emptyText = "（空）", forceValue = null) => {
+        if (!el) return;
+        const cur = String((forceValue == null ? el.value : forceValue) || "").trim();
+        el.innerHTML = "";
+        const emptyOp = document.createElement("option");
+        emptyOp.value = "";
+        emptyOp.textContent = emptyText;
+        el.appendChild(emptyOp);
+        for (const sid of ids) {
+          const op = document.createElement("option");
+          op.value = sid;
+          op.textContent = sid;
+          el.appendChild(op);
+        }
+        if (cur && !ids.includes(cur)) {
+          const customOp = document.createElement("option");
+          customOp.value = cur;
+          customOp.textContent = `${cur} (custom)`;
+          el.appendChild(customOp);
+        }
+        el.value = cur || "";
+      };
+
+      fillSelect($("fBranchDefault"), "（无 default）");
+      fillSelect($("nextDoneInput"), "（空）");
+      fillSelect($("nextFailedInput"), "（空）");
+      fillSelect($("nextSkippedInput"), "（空）");
+      fillSelect($("nextTimeoutInput"), "（空）");
+      fillSelect($("nextDefaultInput"), "（空）");
+      const wrap = $("fBranchCasesWrap");
+      if (wrap) {
+        for (const row of Array.from(wrap.children || [])) {
+          const cur = String(row.__toInput?.value || row.__seedTo || "").trim();
+          fillSelect(row.__toInput, "选择 to step", cur);
+          row.__seedTo = "";
+        }
+      }
+
+      const dl = $("stepIdOptions");
+      if (dl) {
+        dl.innerHTML = "";
+        for (const sid of ids) {
+          const op = document.createElement("option");
+          op.value = sid;
+          dl.appendChild(op);
+        }
+      }
+    }
+
+    function setSelectValueKeepCustom(id, value) {
+      const el = $(id);
+      if (!el) return;
+      const v = String(value || "");
+      if (el.tagName !== "SELECT") {
+        el.value = v;
+        return;
+      }
+      if (v && !Array.from(el.options || []).some((op) => String(op.value || "") === v)) {
+        const customOp = document.createElement("option");
+        customOp.value = v;
+        customOp.textContent = `${v} (custom)`;
+        el.appendChild(customOp);
+      }
+      el.value = v;
+    }
+
+    function parseCsv(raw) {
+      return Array.from(new Set(
+        String(raw || "").split(",").map((x) => String(x || "").trim()).filter(Boolean),
+      ));
+    }
+
+    function normalizeInvokeFindKeysPayload(data) {
+      const out = [];
+      const argDefs = {};
+      const rawItems = Array.isArray(data?.items) ? data.items : [];
+      for (const it of rawItems) {
+        const key = String(it?.key || "").trim();
+        const kind = String(it?.kind || "").trim().toLowerCase();
+        if (!key) continue;
+        if (kind !== "cap" && kind !== "arg") continue;
+        const values = Array.isArray(it?.values) ? it.values : [];
+        const type = String(it?.type || "").trim();
+        const item = { key, kind, type, values };
+        out.push(item);
+        if (kind === "arg") {
+          argDefs[key] = { type, values };
+        }
+      }
+      out.sort((a, b) => a.key.localeCompare(b.key, "zh-CN"));
+      return { items: out, argDefs };
+    }
+
+    function currentInvokeFindKind() {
+      const v = String($("fInvokeFindKind")?.value || "").trim().toLowerCase();
+      return v || "rpa";
+    }
+
+    async function fetchInvokeFindKeys(kindOverride = "") {
+      const kind = String(kindOverride || currentInvokeFindKind() || "rpa").trim().toLowerCase() || "rpa";
+      const data = await api("GET", `/rpaflows/api/builder/invoke-find-keys?kind=${encodeURIComponent(kind)}`);
+      const parsed = normalizeInvokeFindKeysPayload(data);
+      state.invokeFindKeys = Array.isArray(parsed?.items) ? parsed.items : [];
+      state.invokeArgDefs = (parsed?.argDefs && typeof parsed.argDefs === "object") ? parsed.argDefs : {};
+      state.invokeFindKeysKind = String(data?.kind || kind || "rpa");
+      state.invokeFindKeysFetchedAt = Date.now();
+      refreshInvokeArgKeyOptions();
+      return state.invokeFindKeys;
+    }
+
+    function refreshInvokeArgKeyOptions() {
+      const dl = $("invokeArgKeyOptions");
+      if (!dl) return;
+      const keys = Array.isArray(state.invokeFindKeys) ? state.invokeFindKeys : [];
+      const argKeys = keys.filter((x) => x.kind === "arg").map((x) => x.key);
+      dl.innerHTML = "";
+      for (const key of argKeys) {
+        const op = document.createElement("option");
+        op.value = key;
+        dl.appendChild(op);
+      }
+      const box = $("fInvokeArgsBox");
+      if (box) {
+        for (const row of Array.from(box.children || [])) {
+          refreshInvokeArgRowValueMode(row);
+        }
+      }
+    }
+
+    async function ensureInvokeArgKeyOptionsLoaded() {
+      const kind = currentInvokeFindKind();
+      if (state.invokeFindKeysKind === kind && Array.isArray(state.invokeFindKeys) && state.invokeFindKeys.length) {
+        refreshInvokeArgKeyOptions();
+        return;
+      }
+      try {
+        await fetchInvokeFindKeys(kind);
+      } catch (_) {
+      }
+    }
+
+    function renderInvokeKeyPickerList() {
+      const box = $("invokeKeyPickerList");
+      if (!box) return;
+      const kw = String($("invokeKeyPickerSearch").value || "").trim().toLowerCase();
+      const filterKind = String(state.invokeKeyPickerFilterKind || "all");
+      const src = Array.isArray(state.invokeFindKeys) ? state.invokeFindKeys : [];
+      let list = src;
+      if (filterKind === "cap" || filterKind === "arg") list = list.filter((x) => x.kind === filterKind);
+      if (kw) list = list.filter((x) => x.key.toLowerCase().includes(kw));
+      box.innerHTML = "";
+      if (!list.length) {
+        const empty = document.createElement("div");
+        empty.className = "picker-empty";
+        empty.textContent = "没有匹配项";
+        box.appendChild(empty);
+        return;
+      }
+      const selected = (state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected : new Set();
+      for (const item of list) {
+        const row = document.createElement("label");
+        row.className = "picker-item";
+        const ck = document.createElement("input");
+        ck.type = "checkbox";
+        ck.checked = selected.has(item.key);
+        ck.addEventListener("change", () => {
+          if (ck.checked) selected.add(item.key);
+          else selected.delete(item.key);
+          updateInvokeKeyPickerHint();
+        });
+        const keyEl = document.createElement("span");
+        keyEl.className = "mono";
+        keyEl.textContent = item.key;
+        const kindEl = document.createElement("span");
+        kindEl.className = "picker-kind";
+        kindEl.textContent = item.kind;
+        row.appendChild(ck);
+        row.appendChild(keyEl);
+        row.appendChild(kindEl);
+        box.appendChild(row);
+      }
+    }
+
+    function updateInvokeKeyPickerHint(extra = "") {
+      const hintEl = $("invokeKeyPickerHint");
+      if (!hintEl) return;
+      const total = Array.isArray(state.invokeFindKeys) ? state.invokeFindKeys.length : 0;
+      const selectedSize = (state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected.size : 0;
+      const suffix = String(extra || "").trim();
+      hintEl.textContent = suffix || `共 ${total} 项，已选 ${selectedSize} 项`;
+      const applyBtn = $("invokeKeyPickerApplyBtn");
+      if (applyBtn) applyBtn.disabled = selectedSize <= 0;
+    }
+
+    function hideInvokeKeyPicker() {
+      const mask = $("invokeKeyPickerMask");
+      if (!mask) return;
+      mask.classList.remove("show");
+      mask.setAttribute("aria-hidden", "true");
+      state.invokeKeyPickerTargetId = "";
+      state.invokeKeyPickerFilterKind = "all";
+      state.invokeKeyPickerSelected = new Set();
+    }
+
+    async function openInvokeKeyPicker(targetFieldId) {
+      const id = String(targetFieldId || "").trim();
+      if (id !== "fInvokeFindMust" && id !== "fInvokeFindPrefer") {
+        throw new Error("未知目标字段，无法打开选择器");
+      }
+      state.invokeKeyPickerTargetId = id;
+      state.invokeKeyPickerFilterKind = "all";
+      const existing = parseCsv($(id).value || "");
+      state.invokeKeyPickerSelected = new Set(existing);
+      $("invokeKeyPickerTitle").textContent = id === "fInvokeFindMust"
+        ? "选择并添加到 find.must"
+        : "选择并添加到 find.prefer";
+      $("invokeKeyPickerSearch").value = "";
+      document.querySelectorAll('input[name="invokeKeyKind"]').forEach((el) => { el.checked = el.value === "all"; });
+      const mask = $("invokeKeyPickerMask");
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      updateInvokeKeyPickerHint("正在加载 RPA.js 能力键...");
+      renderInvokeKeyPickerList();
+      try {
+        await fetchInvokeFindKeys(currentInvokeFindKind());
+        renderInvokeKeyPickerList();
+        updateInvokeKeyPickerHint(`kind=${state.invokeFindKeysKind}，共 ${state.invokeFindKeys.length} 项，已选 ${(state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected.size : 0} 项`);
+      } catch (err) {
+        renderInvokeKeyPickerList();
+        updateInvokeKeyPickerHint(`加载失败：${String(err?.message || err)}`);
+        setOutput({ ok: false, info: "invoke-find-keys-load-failed", error: String(err?.message || err) }, { toLog: true });
+        setStatus("加载 invoke.find 可选项失败");
+      }
+      try { $("invokeKeyPickerSearch").focus(); } catch (_) {}
+    }
+
+    function applyInvokeKeyPickerSelection() {
+      const targetId = String(state.invokeKeyPickerTargetId || "").trim();
+      if (!targetId) return;
+      const src = parseCsv($(targetId).value || "");
+      const picked = Array.from((state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected : []);
+      const merged = Array.from(new Set([...src, ...picked]));
+      $(targetId).value = merged.join(",");
+      syncInvokeFindJsonFromFields(false);
+      syncActionJsonFromFields(false);
+      hideInvokeKeyPicker();
+      setStatus(`已更新 ${targetId === "fInvokeFindMust" ? "find.must" : "find.prefer"}（+${Math.max(0, merged.length - src.length)}）`);
+    }
+
+    function normalizeArgDefs(raw) {
+      const src = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+      const out = {};
+      for (const key of Object.keys(src)) {
+        const k = String(key || "").trim();
+        if (!k) continue;
+        const v = src[key];
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          out[k] = {
+            type: String(v.type || "string").trim() || "string",
+            required: v.required === true,
+            desc: String(v.desc || "").trim(),
+            default: v.default,
+          };
+        } else {
+          out[k] = { type: "string", required: false, desc: "", default: undefined };
+        }
+      }
+      return out;
+    }
+
+    function mkArgCard(seed = {}) {
+      const card = document.createElement("div");
+      card.className = "arg-card";
+      const keyRow = document.createElement("div");
+      keyRow.className = "arg-card-row";
+      const actions = document.createElement("div");
+      actions.className = "arg-card-actions";
+      const descRow = document.createElement("div");
+      descRow.className = "arg-card-row";
+      const defaultRow = document.createElement("div");
+      defaultRow.className = "arg-card-row";
+
+      const keyInput = document.createElement("input");
+      keyInput.placeholder = "arg key（例如 search.query）";
+      keyInput.className = "mono";
+      keyInput.value = String(seed.key || "");
+
+      const typeSelect = document.createElement("select");
+      for (const t of ["string", "number", "boolean", "object", "array"]) {
+        const op = document.createElement("option");
+        op.value = t;
+        op.textContent = t;
+        typeSelect.appendChild(op);
+      }
+      typeSelect.value = String(seed.type || "string");
+
+      const reqLabel = document.createElement("label");
+      reqLabel.className = "checkbox-inline";
+      const reqInput = document.createElement("input");
+      reqInput.type = "checkbox";
+      reqInput.checked = seed.required === true;
+      const reqText = document.createElement("span");
+      reqText.textContent = "required";
+      reqLabel.appendChild(reqInput);
+      reqLabel.appendChild(reqText);
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn danger";
+      delBtn.textContent = "删";
+
+      const descInput = document.createElement("input");
+      descInput.placeholder = "desc（参数说明）";
+      descInput.value = String(seed.desc || "");
+
+      const defaultInput = document.createElement("input");
+      defaultInput.placeholder = "default（JSON，可留空）";
+      defaultInput.className = "mono";
+      defaultInput.value = seed.default === undefined ? "" : JSON.stringify(seed.default);
+
+      delBtn.addEventListener("click", () => {
+        const box = $("flowArgsBox");
+        card.remove();
+        if (!box.children.length) box.appendChild(mkArgCard({ key: "", type: "string", required: false, desc: "" }));
+      });
+
+      keyRow.appendChild(keyInput);
+      actions.appendChild(typeSelect);
+      actions.appendChild(reqLabel);
+      actions.appendChild(delBtn);
+      descRow.appendChild(descInput);
+      defaultRow.appendChild(defaultInput);
+      card.appendChild(keyRow);
+      card.appendChild(actions);
+      card.appendChild(descRow);
+      card.appendChild(defaultRow);
+
+      card.__keyInput = keyInput;
+      card.__typeSelect = typeSelect;
+      card.__reqInput = reqInput;
+      card.__descInput = descInput;
+      card.__defaultInput = defaultInput;
+      return card;
+    }
+
+    function normalizeFilters(raw) {
+      return (Array.isArray(raw) ? raw : []).map((x) => {
+        const key = String(x?.key || "").trim();
+        const value = String(x?.value || "").trim();
+        return (key && value) ? { key, value } : null;
+      }).filter(Boolean);
+    }
+
+    function normalizeInvokeFind(raw) {
+      const src = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+      const out = {};
+      const kind = String(src.kind || "").trim();
+      if (kind) out.kind = kind;
+      const must = Array.isArray(src.must) ? src.must.map((x) => String(x || "").trim()).filter(Boolean) : [];
+      const prefer = Array.isArray(src.prefer) ? src.prefer.map((x) => String(x || "").trim()).filter(Boolean) : [];
+      const filter = normalizeFilters(src.filter);
+      const rank = String(src.rank || "").trim();
+      if (must.length) out.must = must;
+      if (prefer.length) out.prefer = prefer;
+      if (filter.length) out.filter = filter;
+      if (rank) out.rank = rank;
+      if (!out.kind) out.kind = "rpa";
+      return out;
+    }
+
+    function renderShellFiltersRows(filters) {
+      const box = $("flowFiltersBox");
+      box.innerHTML = "";
+      const rows = normalizeFilters(filters);
+      const useRows = rows.length ? rows : [{ key: "", value: "" }];
+      for (const seed of useRows) {
+        const row = document.createElement("div");
+        row.className = "kv-row";
+        const keyInput = document.createElement("input");
+        keyInput.placeholder = "key（例如 domain）";
+        keyInput.value = String(seed?.key || "");
+        keyInput.className = "mono";
+        const valueInput = document.createElement("input");
+        valueInput.placeholder = "value（例如 weibo.com）";
+        valueInput.value = String(seed?.value || "");
+        valueInput.className = "mono";
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn danger";
+        delBtn.textContent = "删";
+        delBtn.addEventListener("click", () => {
+          row.remove();
+          if (!box.children.length) renderShellFiltersRows([]);
+        });
+        row.appendChild(keyInput);
+        row.appendChild(valueInput);
+        row.appendChild(delBtn);
+        box.appendChild(row);
+      }
+    }
+
+    function createInvokeFilterRow(seed = {}) {
+      const row = document.createElement("div");
+      row.className = "kv-row";
+      const keyInput = document.createElement("input");
+      keyInput.placeholder = "key（例如 domain）";
+      keyInput.value = String(seed?.key || "");
+      keyInput.className = "mono";
+      const valueInput = document.createElement("input");
+      valueInput.placeholder = "value（例如 x.ai 或 *）";
+      valueInput.value = String(seed?.value || "");
+      valueInput.className = "mono";
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn danger";
+      delBtn.textContent = "删";
+      const sync = () => {
+        syncInvokeFindJsonFromFields(false);
+        syncActionJsonFromFields(false);
+      };
+      keyInput.addEventListener("input", sync);
+      valueInput.addEventListener("input", sync);
+      delBtn.addEventListener("click", () => {
+        row.remove();
+        if (!$("fInvokeFiltersBox").children.length) {
+          $("fInvokeFiltersBox").appendChild(createInvokeFilterRow({ key: "", value: "" }));
+        }
+        sync();
+      });
+      row.__keyInput = keyInput;
+      row.__valueInput = valueInput;
+      row.appendChild(keyInput);
+      row.appendChild(valueInput);
+      row.appendChild(delBtn);
+      return row;
+    }
+
+    function renderInvokeFilterRows(filters) {
+      const box = $("fInvokeFiltersBox");
+      if (!box) return;
+      box.innerHTML = "";
+      const rows = normalizeFilters(filters);
+      const useRows = rows.length ? rows : [{ key: "", value: "" }];
+      for (const seed of useRows) box.appendChild(createInvokeFilterRow(seed));
+    }
+
+    function readInvokeFilterRows() {
+      const box = $("fInvokeFiltersBox");
+      if (!box) return [];
+      const out = [];
+      for (const row of Array.from(box.children || [])) {
+        const key = String(row.__keyInput?.value || "").trim();
+        const value = String(row.__valueInput?.value || "").trim();
+        if (!key || !value) continue;
+        out.push({ key, value });
+      }
+      return out;
+    }
+
+    function normalizeInvokeArgs(raw) {
+      const src = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+      const out = {};
+      for (const key of Object.keys(src)) {
+        const k = String(key || "").trim();
+        if (!k) continue;
+        out[k] = src[key];
+      }
+      return out;
+    }
+
+    function isPlainObject(v) {
+      return !!v && typeof v === "object" && !Array.isArray(v);
+    }
+
+    function mergeInvokeArgsDotted(rawObj) {
+      const src = normalizeInvokeArgs(rawObj);
+      const out = {};
+      for (const rawKey of Object.keys(src)) {
+        const key = String(rawKey || "").trim();
+        if (!key) continue;
+        const value = src[key];
+        if (!key.includes(".")) {
+          out[key] = value;
+          continue;
+        }
+        const parts = key.split(".").map((x) => String(x || "").trim()).filter(Boolean);
+        if (!parts.length) continue;
+        let cur = out;
+        for (let i = 0; i < parts.length; i += 1) {
+          const part = parts[i];
+          const leaf = i === parts.length - 1;
+          if (leaf) {
+            cur[part] = value;
+          } else {
+            if (!isPlainObject(cur[part])) cur[part] = {};
+            cur = cur[part];
+          }
+        }
+      }
+      return out;
+    }
+
+    function flattenInvokeArgsForRows(rawObj, prefix = "", out = {}) {
+      const src = (rawObj && typeof rawObj === "object" && !Array.isArray(rawObj)) ? rawObj : {};
+      for (const key of Object.keys(src)) {
+        const k = String(key || "").trim();
+        if (!k) continue;
+        const path = prefix ? `${prefix}.${k}` : k;
+        const value = src[k];
+        if (isPlainObject(value) && Object.keys(value).length) {
+          flattenInvokeArgsForRows(value, path, out);
+        } else {
+          out[path] = value;
+        }
+      }
+      return out;
+    }
+
+    function stringifyInvokeArgValue(v) {
+      if (typeof v === "string") return v;
+      try { return JSON.stringify(v); } catch (_) { return String(v); }
+    }
+
+    function parseInvokeArgValue(raw) {
+      const text = String(raw == null ? "" : raw).trim();
+      if (!text) return { has: true, value: "" };
+      try {
+        return { has: true, value: JSON.parse(text) };
+      } catch (_) {
+        return { has: true, value: text };
+      }
+    }
+
+    function invokeArgDefForKey(key) {
+      const k = String(key || "").trim();
+      if (!k) return null;
+      const defs = (state.invokeArgDefs && typeof state.invokeArgDefs === "object") ? state.invokeArgDefs : {};
+      const def = defs[k];
+      if (!def || typeof def !== "object") return null;
+      return {
+        type: String(def.type || "").trim(),
+        values: Array.isArray(def.values) ? def.values : [],
+      };
+    }
+
+    function invokeArgValueToOptionValue(v) {
+      try { return JSON.stringify(v); } catch (_) { return String(v); }
+    }
+
+    function refreshInvokeArgRowValueMode(row) {
+      if (!row) return;
+      const key = String(row.__keyInput?.value || "").trim();
+      const def = invokeArgDefForKey(key);
+      const values = Array.isArray(def?.values) ? def.values : [];
+      const useSelect = values.length > 0;
+      if (!useSelect) {
+        if (row.__valueSelect) row.__valueSelect.style.display = "none";
+        if (row.__valueInput) row.__valueInput.style.display = "";
+        return;
+      }
+      const sel = row.__valueSelect;
+      if (!sel) return;
+      const currentRaw = String(row.__valueInput?.value || "").trim();
+      sel.innerHTML = "";
+      const emptyOp = document.createElement("option");
+      emptyOp.value = "";
+      emptyOp.textContent = "选择 value";
+      sel.appendChild(emptyOp);
+      for (const v of values) {
+        const op = document.createElement("option");
+        op.value = invokeArgValueToOptionValue(v);
+        op.textContent = String(v);
+        sel.appendChild(op);
+      }
+      if (currentRaw && !Array.from(sel.options || []).some((op) => String(op.value || "") === currentRaw)) {
+        const customOp = document.createElement("option");
+        customOp.value = currentRaw;
+        customOp.textContent = `${currentRaw} (custom)`;
+        sel.appendChild(customOp);
+      }
+      sel.value = currentRaw || "";
+      sel.style.display = "";
+      if (row.__valueInput) row.__valueInput.style.display = "none";
+    }
+
+    function createInvokeArgRow(seed = {}) {
+      const row = document.createElement("div");
+      row.className = "kv-row";
+      const keyInput = document.createElement("input");
+      keyInput.placeholder = "arg key（例如 blockers.clear）";
+      keyInput.className = "mono";
+      keyInput.setAttribute("list", "invokeArgKeyOptions");
+      keyInput.value = String(seed?.key || "");
+      const valueInput = document.createElement("input");
+      valueInput.placeholder = "value（JSON 或字符串）";
+      valueInput.className = "mono";
+      valueInput.value = stringifyInvokeArgValue(seed?.value);
+      const valueSelect = document.createElement("select");
+      valueSelect.className = "mono";
+      valueSelect.style.display = "none";
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn danger";
+      delBtn.textContent = "删";
+      const sync = () => {
+        syncInvokeArgsJsonFromRows(false);
+        syncActionJsonFromFields(false);
+      };
+      keyInput.addEventListener("input", () => {
+        refreshInvokeArgRowValueMode(row);
+        sync();
+      });
+      keyInput.addEventListener("focus", () => ensureInvokeArgKeyOptionsLoaded());
+      valueInput.addEventListener("input", sync);
+      valueSelect.addEventListener("change", () => {
+        const selected = String(valueSelect.value || "");
+        valueInput.value = selected;
+        sync();
+      });
+      delBtn.addEventListener("click", () => {
+        row.remove();
+        if (!$("fInvokeArgsBox").children.length) {
+          $("fInvokeArgsBox").appendChild(createInvokeArgRow({ key: "", value: "" }));
+        }
+        sync();
+      });
+      row.__keyInput = keyInput;
+      row.__valueInput = valueInput;
+      row.__valueSelect = valueSelect;
+      row.appendChild(keyInput);
+      row.appendChild(valueInput);
+      row.appendChild(valueSelect);
+      row.appendChild(delBtn);
+      refreshInvokeArgRowValueMode(row);
+      return row;
+    }
+
+    function renderInvokeArgRows(argsObj) {
+      const box = $("fInvokeArgsBox");
+      if (!box) return;
+      box.innerHTML = "";
+      const obj = flattenInvokeArgsForRows(normalizeInvokeArgs(argsObj));
+      const keys = Object.keys(obj);
+      if (!keys.length) {
+        box.appendChild(createInvokeArgRow({ key: "", value: "" }));
+        return;
+      }
+      for (const key of keys) {
+        box.appendChild(createInvokeArgRow({ key, value: obj[key] }));
+      }
+    }
+
+    function readInvokeArgRows() {
+      const box = $("fInvokeArgsBox");
+      if (!box) return {};
+      const out = {};
+      for (const row of Array.from(box.children || [])) {
+        const key = String(row.__keyInput?.value || "").trim();
+        if (!key) continue;
+        const parsed = parseInvokeArgValue(row.__valueInput?.value);
+        if (!parsed.has) continue;
+        out[key] = parsed.value;
+      }
+      return out;
+    }
+
+    function syncInvokeArgsJsonFromRows(force = false) {
+      if (state.actionJsonDirty && !force) return;
+      const argsObj = mergeInvokeArgsDotted(readInvokeArgRows());
+      $("fInvokeArgs").value = JSON.stringify(argsObj, null, 2);
+    }
+
+    function syncInvokeArgsRowsFromJson() {
+      const parsed = parseJsonText($("fInvokeArgs").value, null);
+      const obj = normalizeInvokeArgs(parsed);
+      renderInvokeArgRows(obj);
+      refreshInvokeArgKeyOptions();
+    }
+
+    function buildInvokeFindFromFields() {
+      const out = {};
+      const kind = String($("fInvokeFindKind").value || "").trim();
+      out.kind = kind || "rpa";
+      const must = parseCsv($("fInvokeFindMust").value);
+      const prefer = parseCsv($("fInvokeFindPrefer").value);
+      const filter = readInvokeFilterRows();
+      const rank = String($("fInvokeFindRank").value || "").trim();
+      if (must.length) out.must = must;
+      if (prefer.length) out.prefer = prefer;
+      if (filter.length) out.filter = filter;
+      if (rank) out.rank = rank;
+      return out;
+    }
+
+    function applyInvokeFindToFields(findObj) {
+      const f = normalizeInvokeFind(findObj);
+      $("fInvokeFindKind").value = String(f.kind || "rpa");
+      $("fInvokeFindMust").value = Array.isArray(f.must) ? f.must.join(",") : "";
+      $("fInvokeFindPrefer").value = Array.isArray(f.prefer) ? f.prefer.join(",") : "";
+      $("fInvokeFindRank").value = String(f.rank || "");
+      renderInvokeFilterRows(Array.isArray(f.filter) ? f.filter : []);
+      $("fInvokeFind").value = JSON.stringify(f, null, 2);
+    }
+
+    function syncInvokeFindJsonFromFields(force = false) {
+      if (state.actionJsonDirty && !force) return;
+      const find = normalizeInvokeFind(buildInvokeFindFromFields());
+      $("fInvokeFind").value = JSON.stringify(find, null, 2);
+    }
+
+    function syncInvokeFindFieldsFromJson() {
+      const parsed = parseJsonText($("fInvokeFind").value, null);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+      applyInvokeFindToFields(parsed);
+    }
+
+    function renderArgDefRows(argDefs) {
+      const defs = normalizeArgDefs(argDefs);
+      const keys = Object.keys(defs);
+      const box = $("flowArgsBox");
+      box.innerHTML = "";
+      if (!keys.length) {
+        box.appendChild(mkArgCard({ key: "", type: "string", required: false, desc: "" }));
+        return;
+      }
+      for (const key of keys) {
+        const d = defs[key] || {};
+        box.appendChild(mkArgCard({
+          key,
+          type: d.type || "string",
+          required: d.required === true,
+          desc: d.desc || "",
+          default: d.default,
+        }));
+      }
+    }
+
+    function readArgDefRows() {
+      const box = $("flowArgsBox");
+      const out = {};
+      for (const card of Array.from(box.children || [])) {
+        const key = String(card.__keyInput?.value || "").trim();
+        if (!key) continue;
+        const type = String(card.__typeSelect?.value || "string").trim() || "string";
+        const required = card.__reqInput?.checked === true;
+        const desc = String(card.__descInput?.value || "").trim();
+        const defaultRaw = String(card.__defaultInput?.value || "").trim();
+        let defaultValue;
+        if (defaultRaw) {
+          try {
+            defaultValue = JSON.parse(defaultRaw);
+          } catch (_) {
+            defaultValue = defaultRaw;
+          }
+        }
+        const def = { type, required, desc };
+        if (defaultRaw) def.default = defaultValue;
+        out[key] = def;
+      }
+      return out;
+    }
+
+    function readShellFiltersRows() {
+      const box = $("flowFiltersBox");
+      const out = [];
+      for (const row of Array.from(box.children || [])) {
+        const key = String(row.children?.[0]?.value || "").trim();
+        const value = String(row.children?.[1]?.value || "").trim();
+        if (key && value) out.push({ key, value });
+      }
+      return out;
+    }
+
+    function mergeArgDefsFromKeys(keys, baseArgs = {}) {
+      const defs = normalizeArgDefs(baseArgs);
+      for (const k of keys) {
+        const key = String(k || "").trim();
+        if (!key) continue;
+        const prev = defs?.[key];
+        if (prev && typeof prev === "object" && !Array.isArray(prev)) {
+          defs[key] = prev;
+        } else {
+          defs[key] = { type: "string", required: false, desc: `from flow shell: ${key}` };
+        }
+      }
+      return defs;
+    }
+
+    function applyShellEditorFromFlow(flow) {
+      const f = (flow && typeof flow === "object") ? flow : {};
+      $("flowGoalInput").value = String(f?.meta?.goal || f.goal || f.description || "");
+      $("flowDescInput").value = String(f.description || "");
+      $("flowIdInput").value = String(f.id || "");
+      $("flowCapsInput").value = (Array.isArray(f.capabilities) ? f.capabilities : []).join(", ");
+      const argKeys = Object.keys((f.args && typeof f.args === "object" && !Array.isArray(f.args)) ? f.args : {});
+      $("flowArgsInput").value = argKeys.join(", ");
+      renderArgDefRows((f.args && typeof f.args === "object" && !Array.isArray(f.args)) ? f.args : {});
+      renderShellFiltersRows(Array.isArray(f.filters) ? f.filters : []);
+    }
+
+    function syncArgDefsFromKeyInput() {
+      const keyList = parseCsv($("flowArgsInput").value);
+      const curDefs = readArgDefRows();
+      const merged = mergeArgDefsFromKeys(keyList, curDefs);
+      renderArgDefRows(merged);
+      const outKeys = Object.keys(merged);
+      $("flowArgsInput").value = outKeys.join(", ");
+      setStatus(`参数定义已同步（${outKeys.length}）`);
+    }
+
+    function applyShellToFlow() {
+      const flow = state.flow ? normalizeFlow(state.flow) : getFlowFromTextarea();
+      const goal = String($("flowGoalInput").value || "").trim();
+      const desc = String($("flowDescInput").value || "").trim();
+      const flowId = String($("flowIdInput").value || "").trim();
+      const caps = parseCsv($("flowCapsInput").value);
+      const argKeys = parseCsv($("flowArgsInput").value);
+      const filters = normalizeFilters(readShellFiltersRows());
+      const oldArgs = (flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {};
+      const rowArgs = readArgDefRows();
+
+      if (flowId) flow.id = flowId;
+      flow.capabilities = caps;
+      flow.args = mergeArgDefsFromKeys(argKeys, { ...oldArgs, ...rowArgs });
+      $("flowArgsInput").value = Object.keys(flow.args || {}).join(", ");
+      if (filters.length) flow.filters = filters;
+      else delete flow.filters;
+
+      if (goal) {
+        flow.goal = goal;
+        flow.meta = (flow.meta && typeof flow.meta === "object" && !Array.isArray(flow.meta)) ? { ...flow.meta, goal } : { goal };
+      } else {
+        delete flow.goal;
+        if (flow.meta && typeof flow.meta === "object" && !Array.isArray(flow.meta)) {
+          const nextMeta = { ...flow.meta };
+          delete nextMeta.goal;
+          flow.meta = nextMeta;
+        }
+      }
+      if (desc) flow.description = desc;
+      else delete flow.description;
+
+      setFlow(flow);
+      setOutput({ ok: true, info: "Flow 外壳已应用", id: flow.id, capabilities: flow.capabilities, args: Object.keys(flow.args || {}) });
+      setStatus("外壳已应用到当前 Flow");
+    }
+
+    function normalizeFlow(raw) {
+      const flow = (raw && typeof raw === "object") ? raw : {};
+      const steps = Array.isArray(flow.steps) ? flow.steps : [];
+      return {
+        ...flow,
+        id: String(flow.id || "flow_builder_demo").trim() || "flow_builder_demo",
+        start: String(flow.start || steps[0]?.id || "").trim(),
+        args: (flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {},
+        steps: steps
+          .filter((s) => s && typeof s === "object")
+          .map((s) => {
+            const id = String(s.id || "").trim();
+            const out = {
+              ...s,
+              id,
+              action: (s.action && typeof s.action === "object" && !Array.isArray(s.action)) ? s.action : {},
+              next: (s.next && typeof s.next === "object" && !Array.isArray(s.next)) ? s.next : {},
+            };
+            if (!String(out.desc || "").trim()) delete out.desc;
+            if (out.saveAs === undefined) delete out.saveAs;
+            return out;
+          })
+          .filter((s) => s.id),
+      };
+    }
+
+    function setFlow(flowObj) {
+      state.flow = normalizeFlow(flowObj);
+      refreshStepIdOptions();
+      if (!state.selectedStepId || !state.flow.steps.some((s) => s.id === state.selectedStepId)) {
+        state.selectedStepId = state.flow.start || state.flow.steps[0]?.id || "";
+      }
+      applyShellEditorFromFlow(state.flow);
+      $("flowJsonInput").value = JSON.stringify(state.flow, null, 2);
+      $("flowTag").textContent = `flow: ${state.flow.id || "-"}`;
+      $("startTag").textContent = `start: ${state.flow.start || "-"}`;
+      renderStepList();
+      renderGraph();
+      if (state.selectedStepId) loadStepToEditor(state.selectedStepId);
+    }
+
+    function getFlowFromTextarea() {
+      const parsed = parseJsonText($("flowJsonInput").value, null);
+      if (!parsed || typeof parsed !== "object") throw new Error("Flow JSON 无效");
+      return normalizeFlow(parsed);
+    }
+
+    function renderStepList() {
+      const box = $("stepList");
+      box.innerHTML = "";
+      const steps = Array.isArray(state.flow?.steps) ? state.flow.steps : [];
+      const clearDropMarkers = () => {
+        box.querySelectorAll(".step-item.drop-target").forEach((el) => el.classList.remove("drop-target"));
+      };
+      box.ondragover = (ev) => {
+        if (!state.draggingStepId) return;
+        ev.preventDefault();
+      };
+      box.ondrop = (ev) => {
+        if (!state.draggingStepId) return;
+        const targetRow = ev.target && typeof ev.target.closest === "function" ? ev.target.closest(".step-item") : null;
+        if (targetRow) return;
+        ev.preventDefault();
+        clearDropMarkers();
+        const fromId = String(state.draggingStepId || "").trim();
+        const arr = Array.isArray(state.flow?.steps) ? state.flow.steps : [];
+        const fromIdx = arr.findIndex((x) => x && x.id === fromId);
+        if (fromIdx < 0) return;
+        const [moving] = arr.splice(fromIdx, 1);
+        arr.push(moving);
+        setFlow(state.flow);
+        state.selectedStepId = fromId;
+        renderStepList();
+        renderGraph();
+        loadStepToEditor(fromId);
+        setStatus(`步骤顺序已调整：${fromId} -> 列表末尾`);
+        state.suppressRowClickUntil = Date.now() + 180;
+      };
+      for (const s of steps) {
+        const row = document.createElement("div");
+        row.className = `step-item ${state.selectedStepId === s.id ? "active" : ""}`;
+        row.draggable = true;
+        row.dataset.stepId = s.id;
+        const left = document.createElement("div");
+        left.textContent = `${s.id} (${String(s?.action?.type || "-")})`;
+        left.className = "mono";
+        row.addEventListener("click", () => {
+          if (Date.now() < Number(state.suppressRowClickUntil || 0)) return;
+          state.selectedStepId = s.id;
+          renderStepList();
+          renderGraph();
+          loadStepToEditor(s.id);
+          activateTab("right", "right-action");
+        });
+        const runBtn = document.createElement("button");
+        runBtn.type = "button";
+        runBtn.className = "btn ok";
+        runBtn.textContent = "测";
+        runBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          runStepById(s.id).catch((err) => failUi(err));
+        });
+        row.addEventListener("dragstart", (ev) => {
+          state.draggingStepId = s.id;
+          row.classList.add("dragging");
+          try { ev.dataTransfer?.setData("text/plain", s.id); } catch (_) {}
+          if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
+        });
+        row.addEventListener("dragover", (ev) => {
+          if (!state.draggingStepId) return;
+          ev.preventDefault();
+          if (state.draggingStepId === s.id) return;
+          clearDropMarkers();
+          row.classList.add("drop-target");
+          if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+        });
+        row.addEventListener("dragleave", () => {
+          row.classList.remove("drop-target");
+        });
+        row.addEventListener("drop", (ev) => {
+          ev.preventDefault();
+          const fromId = String(state.draggingStepId || "").trim();
+          const toId = String(s.id || "").trim();
+          clearDropMarkers();
+          if (!fromId || !toId || fromId === toId) return;
+          const arr = Array.isArray(state.flow?.steps) ? state.flow.steps : [];
+          const fromIdx = arr.findIndex((x) => x && x.id === fromId);
+          if (fromIdx < 0) return;
+          const [moving] = arr.splice(fromIdx, 1);
+          const toIdx = arr.findIndex((x) => x && x.id === toId);
+          if (toIdx < 0) arr.push(moving);
+          else arr.splice(toIdx, 0, moving);
+          setFlow(state.flow);
+          state.selectedStepId = fromId;
+          renderStepList();
+          renderGraph();
+          loadStepToEditor(fromId);
+          setStatus(`步骤顺序已调整：${fromId} -> ${toId} 前`);
+          state.suppressRowClickUntil = Date.now() + 180;
+        });
+        row.addEventListener("dragend", () => {
+          row.classList.remove("dragging");
+          clearDropMarkers();
+          state.draggingStepId = "";
+          state.suppressRowClickUntil = Date.now() + 180;
+        });
+        row.appendChild(left);
+        row.appendChild(runBtn);
+        box.appendChild(row);
+      }
+    }
+
+    function getGraphEdgesFromStep(step) {
+      const one = (step && typeof step === "object") ? step : {};
+      const action = (one.action && typeof one.action === "object") ? one.action : {};
+      const t = String(action.type || "").trim().toLowerCase();
+      const out = [];
+      if (t === "branch") {
+        const cases = Array.isArray(action.cases) ? action.cases : [];
+        for (let i = 0; i < cases.length; i += 1) {
+          const c = (cases[i] && typeof cases[i] === "object") ? cases[i] : {};
+          const to = String(c.to || "").trim();
+          if (!to) continue;
+          const when = (c.when && typeof c.when === "object") ? c.when : {};
+          const op = String(when.op || "").trim();
+          const path = String(when.path || "").trim();
+          const tag = path ? `${op}(${path})` : (op || `case${i + 1}`);
+          out.push({
+            to,
+            label: `C${i + 1}`,
+            detail: `case${i + 1}: ${tag} -> ${to}`,
+            routeKind: "branch_case",
+          });
+        }
+        const defTo = String(action.default || "").trim();
+        if (defTo) {
+          out.push({ to: defTo, label: "D", detail: `default -> ${defTo}`, routeKind: "default" });
+        }
+        return out;
+      }
+      const next = (one.next && typeof one.next === "object") ? one.next : {};
+      for (const k of ["done", "failed", "skipped", "timeout", "default"]) {
+        const to = String(next[k] || "").trim();
+        if (!to) continue;
+        out.push({ to, label: k, detail: `${k} -> ${to}`, routeKind: k });
+      }
+      return out;
+    }
+
+    function graphRouteStyle(edge, { missing = false, useDash = false, isBack = false } = {}) {
+      if (missing) return { stroke: "#dc2626", label: "#b91c1c", dash: "4 3" };
+      const dash = useDash ? "4 4" : "";
+      if (isBack) return { stroke: "#7c3aed", label: "#6d28d9", dash };
+      const k = String(edge?.routeKind || edge?.label || "").toLowerCase();
+      if (k === "failed") return { stroke: "#ef4444", label: "#b91c1c", dash };
+      if (k === "timeout") return { stroke: "#f97316", label: "#c2410c", dash };
+      if (k === "default") return { stroke: "#64748b", label: "#475569", dash };
+      if (k === "skipped") return { stroke: "#a855f7", label: "#6d28d9", dash };
+      if (k === "branch_case") return { stroke: "#0ea5e9", label: "#0369a1", dash };
+      if (k === "done") return { stroke: "#22c55e", label: "#15803d", dash };
+      return { stroke: "#64748b", label: "#475569", dash };
+    }
+
+    function shortText(v, n = 56) {
+      const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
+      if (!s) return "";
+      return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+    }
+
+    function buildActionSummaryForNode(step) {
+      const action = (step && step.action && typeof step.action === "object") ? step.action : {};
+      const t = String(action.type || "").trim().toLowerCase();
+      if (!t) return "";
+      if (t === "goto") return action.url ? `url: ${shortText(action.url, 64)}` : "";
+      if (t === "click") {
+        const q = shortText(action.query || "");
+        const by = shortText(action.by || "");
+        return [q ? `query: ${q}` : "", by ? `by: ${by}` : ""].filter(Boolean).join(" | ");
+      }
+      if (t === "hover") {
+        const q = shortText(action.query || "");
+        const by = shortText(action.by || "");
+        return [q ? `query: ${q}` : "", by ? `by: ${by}` : ""].filter(Boolean).join(" | ");
+      }
+      if (t === "input") {
+        const q = shortText(action.query || "");
+        const by = shortText(action.by || "");
+        const txt = shortText(action.text || "", 34);
+        return [q ? `query: ${q}` : "", by ? `by: ${by}` : "", txt ? `text: ${txt}` : ""].filter(Boolean).join(" | ");
+      }
+      if (t === "press_key") {
+        const key = shortText(action.key || "");
+        const mod = Array.isArray(action.modifiers) ? action.modifiers.join("+") : shortText(action.modifiers || "");
+        const times = action.times == null ? "" : String(action.times);
+        return [`key: ${key || "-"}`, mod ? `mod: ${mod}` : "", times ? `times: ${times}` : ""].filter(Boolean).join(" | ");
+      }
+      if (t === "wait") return action.timeoutMs ? `timeoutMs: ${action.timeoutMs}` : "";
+      if (t === "scroll") {
+        const dy = action.deltaY == null ? "" : String(action.deltaY);
+        const dx = action.deltaX == null ? "" : String(action.deltaX);
+        const behavior = shortText(action.behavior || "");
+        return [dy ? `dy: ${dy}` : "", dx ? `dx: ${dx}` : "", behavior ? `behavior: ${behavior}` : ""].filter(Boolean).join(" | ");
+      }
+      if (t === "invoke") {
+        const target = shortText(action.target || "");
+        const kind = shortText(action.find?.kind || "");
+        return [target ? `target: ${target}` : "", kind ? `find.kind: ${kind}` : ""].filter(Boolean).join(" | ");
+      }
+      if (t === "run_js") {
+        const q = shortText(action.query || "", 40);
+        const code = shortText(action.code || "", 40);
+        return q ? `query: ${q}` : (code ? `code: ${code}` : "");
+      }
+      if (t === "branch") {
+        const cases = Array.isArray(action.cases) ? action.cases.length : 0;
+        const def = shortText(action.default || "");
+        return `cases: ${cases}${def ? ` | default: ${def}` : ""}`;
+      }
+      if (t === "done") return action.conclusion ? `conclusion: ${shortText(action.conclusion, 52)}` : "";
+      if (t === "abort") return action.reason ? `reason: ${shortText(action.reason, 52)}` : "";
+      if (t === "ask_assist") return action.reason ? `reason: ${shortText(action.reason, 52)}` : "";
+      return "";
+    }
+
+    function renderGraph() {
+      const canvas = $("graphCanvas");
+      const svg = $("graphSvg");
+      canvas.querySelectorAll(".node, .graph-tip, .graph-hover-banner, .graph-svg-top").forEach((n) => n.remove());
+      svg.innerHTML = "";
+
+      const steps = Array.isArray(state.flow?.steps) ? state.flow.steps : [];
+      if (!steps.length) {
+        canvas.style.width = "680px";
+        canvas.style.height = "520px";
+        svg.setAttribute("viewBox", "0 0 680 520");
+        svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
+        return;
+      }
+
+      const nodeW = 220;
+      const nodeH = 74;
+      const xGap = 290;
+      const yGap = 108;
+      const marginX = 24;
+      const marginY = 52;
+      const indexById = new Map();
+      for (let i = 0; i < steps.length; i += 1) {
+        const sid = String(steps[i]?.id || "").trim();
+        if (sid) indexById.set(sid, i);
+      }
+      const startId = String(state.flow?.start || steps[0]?.id || "").trim();
+
+      const levelById = new Map();
+      const queue = [];
+      if (startId && indexById.has(startId)) {
+        levelById.set(startId, 0);
+        queue.push(startId);
+      }
+      while (queue.length) {
+        const cur = String(queue.shift() || "");
+        const curLevel = Number(levelById.get(cur) || 0);
+        const idx = indexById.get(cur);
+        const step = (typeof idx === "number") ? steps[idx] : null;
+        for (const e of getGraphEdgesFromStep(step)) {
+          if (!indexById.has(e.to)) continue;
+          if (!levelById.has(e.to)) {
+            levelById.set(e.to, curLevel + 1);
+            queue.push(e.to);
+          }
+        }
+      }
+      const reachableSet = new Set(levelById.keys());
+      let maxLevel = -1;
+      for (const v of levelById.values()) maxLevel = Math.max(maxLevel, Number(v || 0));
+      for (const step of steps) {
+        const sid = String(step?.id || "").trim();
+        if (!sid || levelById.has(sid)) continue;
+        maxLevel += 1;
+        levelById.set(sid, maxLevel);
+      }
+
+      const rowsByLevel = new Map();
+      for (let i = 0; i < steps.length; i += 1) {
+        const sid = String(steps[i]?.id || "").trim();
+        if (!sid) continue;
+        const lv = Number(levelById.get(sid) || 0);
+        if (!rowsByLevel.has(lv)) rowsByLevel.set(lv, []);
+        rowsByLevel.get(lv).push(sid);
+      }
+
+      const posById = new Map();
+      let maxX = marginX + nodeW + marginX;
+      let maxY = marginY + nodeH + marginY;
+      const sortedLevels = Array.from(rowsByLevel.keys()).sort((a, b) => a - b);
+      for (const lv of sortedLevels) {
+        const sids = rowsByLevel.get(lv) || [];
+        for (let r = 0; r < sids.length; r += 1) {
+          const sid = sids[r];
+          const x = marginX + lv * xGap;
+          const y = marginY + r * yGap;
+          posById.set(sid, { x, y });
+          maxX = Math.max(maxX, x + nodeW + marginX);
+          maxY = Math.max(maxY, y + nodeH + marginY);
+        }
+      }
+      maxX = Math.max(maxX, 680);
+      maxY = Math.max(maxY, 520);
+
+      canvas.style.width = `${maxX}px`;
+      canvas.style.height = `${maxY}px`;
+      svg.setAttribute("viewBox", `0 0 ${maxX} ${maxY}`);
+      svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
+      const svgTop = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svgTop.classList.add("graph-svg-top");
+      svgTop.setAttribute("viewBox", `0 0 ${maxX} ${maxY}`);
+      svgTop.setAttribute("preserveAspectRatio", "xMinYMin meet");
+
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      marker.setAttribute("id", "flowEdgeArrow");
+      marker.setAttribute("viewBox", "0 0 10 10");
+      marker.setAttribute("refX", "9");
+      marker.setAttribute("refY", "5");
+      marker.setAttribute("markerWidth", "8");
+      marker.setAttribute("markerHeight", "8");
+      marker.setAttribute("orient", "auto-start-reverse");
+      const tri = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      tri.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+      tri.setAttribute("fill", "context-stroke");
+      marker.appendChild(tri);
+      defs.appendChild(marker);
+
+      const markerSmall = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      markerSmall.setAttribute("id", "flowEdgeArrowSmall");
+      markerSmall.setAttribute("viewBox", "0 0 10 10");
+      markerSmall.setAttribute("refX", "9");
+      markerSmall.setAttribute("refY", "5");
+      markerSmall.setAttribute("markerWidth", "4");
+      markerSmall.setAttribute("markerHeight", "4");
+      markerSmall.setAttribute("orient", "auto-start-reverse");
+      const triSmall = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      triSmall.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+      triSmall.setAttribute("fill", "context-stroke");
+      markerSmall.appendChild(triSmall);
+      defs.appendChild(markerSmall);
+      svg.appendChild(defs);
+
+      const hoverBanner = document.createElement("div");
+      hoverBanner.className = "graph-hover-banner";
+      canvas.appendChild(hoverBanner);
+      const setHoverBanner = (text) => {
+        const s = String(text || "").trim();
+        if (!s) {
+          hoverBanner.style.display = "none";
+          hoverBanner.textContent = "";
+          return;
+        }
+        hoverBanner.textContent = s;
+        hoverBanner.style.display = "block";
+      };
+
+      const edgeLabelShort = (raw) => {
+        const s = String(raw || "");
+        return s.length > 24 ? `${s.slice(0, 23)}…` : s;
+      };
+      const mkEdge = (x1, y1, x2, y2, stroke, dash = "", useSmallArrow = false) => {
+        const mx = Math.round((x1 + x2) / 2);
+        const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        p.setAttribute("d", `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`);
+        p.setAttribute("fill", "none");
+        p.setAttribute("stroke", stroke);
+        p.setAttribute("stroke-width", dash ? "2.2" : "2");
+        if (dash) p.setAttribute("stroke-dasharray", dash);
+        p.setAttribute("marker-end", useSmallArrow ? "url(#flowEdgeArrowSmall)" : "url(#flowEdgeArrow)");
+        p.style.pointerEvents = "stroke";
+        p.style.cursor = "pointer";
+        svg.appendChild(p);
+        return { path: p, lx: mx, ly: Math.round((y1 + y2) / 2) - 4 };
+      };
+      const mkDashedCurve = (srcNode, dstNode, stroke, dash = "4 4") => {
+        const stub = 24;
+        const x1 = srcNode.x + Math.round(nodeW / 2);
+        const y1 = srcNode.y + nodeH;
+        const srcCenterY = srcNode.y + Math.round(nodeH / 2);
+        const dstCenterY = dstNode.y + Math.round(nodeH / 2);
+        const endAtTop = dstCenterY > srcCenterY;
+        const endDir = endAtTop ? 1 : -1;
+        const x2 = dstNode.x + Math.round(nodeW / 2);
+        const y2 = endAtTop ? dstNode.y : (dstNode.y + nodeH);
+        const y1s = y1 + stub;
+        const y2s = y2 - (endDir * stub);
+        const c1x = x1;
+        const c1y = y1s + 36;
+        const c2x = x2;
+        const c2y = y2s - (endDir * 36);
+        const d = [
+          `M ${x1} ${y1}`,
+          `L ${x1} ${y1s}`,
+          `C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2s}`,
+          `L ${x2} ${y2}`,
+        ].join(" ");
+        const pBase = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        pBase.setAttribute("d", d);
+        pBase.setAttribute("fill", "none");
+        pBase.setAttribute("stroke", stroke);
+        pBase.setAttribute("stroke-width", "3.4");
+        pBase.setAttribute("stroke-opacity", "0.28");
+        pBase.setAttribute("stroke-linecap", "round");
+        pBase.setAttribute("stroke-linejoin", "round");
+        pBase.style.pointerEvents = "stroke";
+        pBase.style.cursor = "pointer";
+        svg.appendChild(pBase);
+
+        const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        p.setAttribute("d", d);
+        p.setAttribute("fill", "none");
+        p.setAttribute("stroke", stroke);
+        p.setAttribute("stroke-width", "3.0");
+        p.setAttribute("stroke-linecap", "butt");
+        p.setAttribute("stroke-linejoin", "round");
+        p.setAttribute("stroke-dasharray", dash || "4 4");
+        p.setAttribute("marker-end", "url(#flowEdgeArrowSmall)");
+        p.style.pointerEvents = "stroke";
+        p.style.cursor = "pointer";
+        svg.appendChild(p);
+
+        return {
+          path: p,
+          hoverPaths: [pBase, p],
+          lx: Math.round((x1 + (3 * c1x) + (3 * c2x) + x2) / 8),
+          ly: Math.round((y1s + (3 * c1y) + (3 * c2y) + y2s) / 8) - 10,
+        };
+      };
+      const mkEdgeLabel = (x, y, text, color, detail) => {
+        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        t.setAttribute("x", String(x));
+        t.setAttribute("y", String(y));
+        t.setAttribute("font-size", "11");
+        t.setAttribute("text-anchor", "middle");
+        t.setAttribute("fill", color);
+        t.style.pointerEvents = "auto";
+        t.style.cursor = "pointer";
+        t.textContent = edgeLabelShort(text);
+        const tt = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        tt.textContent = String(text || "");
+        t.appendChild(tt);
+        t.addEventListener("mouseenter", () => setHoverBanner(detail));
+        t.addEventListener("mouseleave", () => setHoverBanner(""));
+        svg.appendChild(t);
+      };
+      const mkTopEdgeLabel = (x, y, text, color, detail) => {
+        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        t.setAttribute("x", String(x));
+        t.setAttribute("y", String(y));
+        t.setAttribute("font-size", "10");
+        t.setAttribute("text-anchor", "middle");
+        t.setAttribute("fill", color);
+        t.textContent = edgeLabelShort(text);
+        const tt = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        tt.textContent = String(text || "");
+        t.appendChild(tt);
+        t.addEventListener("mouseenter", () => setHoverBanner(detail));
+        t.addEventListener("mouseleave", () => setHoverBanner(""));
+        svgTop.appendChild(t);
+      };
+
+      const selectedSourceId = String(state.selectedStepId || "").trim();
+      for (const step of steps) {
+        const sid = String(step?.id || "").trim();
+        const src = posById.get(sid);
+        if (!src) continue;
+        const sx = src.x + nodeW;
+        const sy = src.y + Math.round(nodeH / 2);
+        const srcLevel = Number(levelById.get(sid) || 0);
+        for (const e of getGraphEdgesFromStep(step)) {
+          const dst = posById.get(e.to);
+          if (!dst) {
+            const ex = sx + 110;
+            const ey = sy;
+            const st = graphRouteStyle(e, { missing: true });
+            const drawn = mkEdge(sx, sy, ex, ey, st.stroke, st.dash, true);
+            const detail = `${String(e.detail || e.label || "")} (missing:${e.to})`;
+            drawn.path.addEventListener("mouseenter", () => setHoverBanner(detail));
+            drawn.path.addEventListener("mouseleave", () => setHoverBanner(""));
+            mkEdgeLabel(drawn.lx, drawn.ly, String(e.label || ""), st.label, detail);
+            continue;
+          }
+          const tx = dst.x;
+          const ty = dst.y + Math.round(nodeH / 2);
+          const dstLevel = Number(levelById.get(e.to) || 0);
+          const isBack = dstLevel <= srcLevel;
+          const isFarRight = dstLevel > (srcLevel + 1);
+          const useDash = isBack || isFarRight;
+          if (useDash && sid !== selectedSourceId) continue;
+          const st = graphRouteStyle(e, { useDash, isBack });
+          const drawn = useDash
+            ? mkDashedCurve(src, dst, st.stroke, st.dash)
+            : mkEdge(sx, sy, tx, ty, st.stroke, st.dash, false);
+          const dirArrow = (tx < sx) ? "←" : "→";
+          const labelText = `${e.label} ${dirArrow}${isBack ? "*" : ""}`;
+          const detail = `${String(e.detail || e.label || "")}${isBack ? " (loop)" : ""}`;
+          const hoverTargets = Array.isArray(drawn.hoverPaths) && drawn.hoverPaths.length ? drawn.hoverPaths : [drawn.path];
+          for (const hp of hoverTargets) {
+            hp.addEventListener("mouseenter", () => setHoverBanner(detail));
+            hp.addEventListener("mouseleave", () => setHoverBanner(""));
+          }
+          mkEdgeLabel(drawn.lx, drawn.ly, labelText, st.label, detail);
+          if (useDash) mkTopEdgeLabel(drawn.lx, drawn.ly, labelText, st.label, detail);
+        }
+      }
+
+      const graphTip = document.createElement("div");
+      graphTip.className = "graph-tip";
+      graphTip.textContent = "点击节点进入编辑；拖拽空白区域可平移";
+      canvas.appendChild(graphTip);
+      const hasSession = !!String(state.sessionId || "").trim();
+
+      for (let i = 0; i < steps.length; i += 1) {
+        const step = steps[i];
+        const sid = String(step?.id || "").trim();
+        const p = posById.get(sid);
+        if (!p) continue;
+        const type = String(step?.action?.type || "-");
+        const isReachable = reachableSet.has(sid);
+        const node = document.createElement("div");
+        node.className = `node ${state.selectedStepId === sid ? "active" : ""}`;
+        node.style.left = `${p.x}px`;
+        node.style.top = `${p.y}px`;
+        node.style.width = `${nodeW}px`;
+        node.style.height = `${nodeH}px`;
+        if (!isReachable) {
+          node.style.background = "#fffbeb";
+          node.style.border = "1px solid #f59e0b";
+        }
+        if (type === "done") node.style.border = "1px solid #10b981";
+        if (type === "abort") node.style.border = "1px solid #ef4444";
+        if (sid && sid === startId) node.style.boxShadow = "inset 0 0 0 2px rgba(16,185,129,0.45)";
+
+        const line1 = document.createElement("div");
+        line1.className = "node-id mono";
+        line1.textContent = sid || `step_${i + 1}`;
+        const line2 = document.createElement("div");
+        line2.className = "node-type";
+        line2.textContent = `action: ${type}`;
+        const actionSummary = buildActionSummaryForNode(step);
+        const line3 = document.createElement("div");
+        line3.className = "node-next mono";
+        line3.textContent = actionSummary || (isReachable ? "" : "未从 start 可达");
+        node.appendChild(line1);
+        node.appendChild(line2);
+        if (line3.textContent) node.appendChild(line3);
+
+        const runNodeBtn = document.createElement("button");
+        runNodeBtn.type = "button";
+        runNodeBtn.className = "node-run-btn";
+        runNodeBtn.textContent = "执行";
+        runNodeBtn.disabled = !hasSession;
+        runNodeBtn.title = hasSession ? `执行步骤：${sid}` : "请先启动 Session";
+        runNodeBtn.addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          if (!String(state.sessionId || "").trim()) {
+            setStatus("请先启动 Session");
+            setOutput({ ok: false, reason: "请先启动 Session 才能执行步骤" }, { toLog: true });
+            return;
+          }
+          const prevText = runNodeBtn.textContent;
+          runNodeBtn.disabled = true;
+          runNodeBtn.textContent = "执行中";
+          try {
+            await runStepById(sid);
+          } finally {
+            runNodeBtn.disabled = false;
+            runNodeBtn.textContent = prevText;
+          }
+        });
+        node.appendChild(runNodeBtn);
+        if (sid && sid === startId) {
+          const startBadge = document.createElement("div");
+          startBadge.textContent = "S";
+          startBadge.style.position = "absolute";
+          startBadge.style.right = "6px";
+          startBadge.style.top = "4px";
+          startBadge.style.fontSize = "10px";
+          startBadge.style.fontWeight = "700";
+          startBadge.style.color = "#047857";
+          startBadge.style.background = "rgba(16,185,129,0.12)";
+          startBadge.style.borderRadius = "999px";
+          startBadge.style.padding = "1px 6px";
+          node.appendChild(startBadge);
+        }
+
+        node.addEventListener("click", () => {
+          state.selectedStepId = sid;
+          renderStepList();
+          renderGraph();
+          loadStepToEditor(sid);
+          activateTab("right", "right-action");
+        });
+        canvas.appendChild(node);
+      }
+      canvas.appendChild(svgTop);
+    }
+
+    function stepById(stepId) {
+      const steps = Array.isArray(state.flow?.steps) ? state.flow.steps : [];
+      return steps.find((s) => s.id === stepId) || null;
+    }
+
+    function parseBranchValueText(text) {
+      const raw = String(text || "").trim();
+      if (!raw) return { has: false, value: undefined };
+      try {
+        return { has: true, value: JSON.parse(raw) };
+      } catch (_) {
+        return { has: true, value: raw };
+      }
+    }
+
+    function branchValueToText(v) {
+      if (v === undefined) return "";
+      if (typeof v === "string") return v;
+      try { return JSON.stringify(v); } catch (_) { return String(v); }
+    }
+
+    function syncBranchCasesJsonFromRows(strict = false) {
+      const ret = readBranchCasesRows(strict);
+      if (!ret.ok) {
+        if (strict) throw new Error(ret.reason || "branch cases 无效");
+        return;
+      }
+      $("fBranchCases").value = JSON.stringify(ret.cases, null, 2);
+    }
+
+    function createBranchCaseRow(seed = {}) {
+      const row = document.createElement("div");
+      row.className = "branch-case-row";
+      const head = document.createElement("div");
+      head.className = "branch-case-head";
+      const body = document.createElement("div");
+      body.className = "branch-case-body";
+
+      const sourceSel = document.createElement("select");
+      for (const one of ["args", "opts", "vars", "result"]) {
+        const op = document.createElement("option");
+        op.value = one;
+        op.textContent = `source=${one}`;
+        sourceSel.appendChild(op);
+      }
+      sourceSel.value = String(seed.source || "args");
+
+      const opSel = document.createElement("select");
+      for (const one of ["exists", "truthy", "eq", "neq", "in", "contains", "match"]) {
+        const op = document.createElement("option");
+        op.value = one;
+        op.textContent = `op=${one}`;
+        opSel.appendChild(op);
+      }
+      opSel.value = String(seed.op || "exists");
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn danger";
+      delBtn.textContent = "删";
+
+      const pathInput = document.createElement("input");
+      pathInput.placeholder = "path（如 publish 或 cover.data）";
+      pathInput.value = String(seed.path || "");
+
+      const valueInput = document.createElement("input");
+      valueInput.placeholder = "value/values/regex（JSON 或文本）";
+      valueInput.value = String(seed.valueText || "");
+
+      const toInput = document.createElement("select");
+
+      const sync = () => {
+        syncBranchCasesJsonFromRows(false);
+        syncActionJsonFromFields(false);
+      };
+      sourceSel.addEventListener("change", sync);
+      opSel.addEventListener("change", sync);
+      pathInput.addEventListener("input", sync);
+      valueInput.addEventListener("input", sync);
+      toInput.addEventListener("change", sync);
+      delBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        row.remove();
+        if (!$("fBranchCasesWrap").children.length) {
+          $("fBranchCasesWrap").appendChild(createBranchCaseRow({ source: "args", op: "exists" }));
+        }
+        refreshStepIdOptions();
+        sync();
+      });
+
+      row.__sourceSel = sourceSel;
+      row.__opSel = opSel;
+      row.__pathInput = pathInput;
+      row.__valueInput = valueInput;
+      row.__toInput = toInput;
+      row.__seedTo = String(seed.to || "");
+
+      head.appendChild(sourceSel);
+      head.appendChild(opSel);
+      head.appendChild(delBtn);
+      body.appendChild(pathInput);
+      body.appendChild(valueInput);
+      body.appendChild(toInput);
+      row.appendChild(head);
+      row.appendChild(body);
+      refreshStepIdOptions();
+      return row;
+    }
+
+    function setBranchCasesRows(rows) {
+      const wrap = $("fBranchCasesWrap");
+      wrap.innerHTML = "";
+      const list = Array.isArray(rows) ? rows : [];
+      for (const one of list) {
+        const when = (one && typeof one.when === "object") ? one.when : {};
+        const seed = {
+          source: String(when.source || "args"),
+          op: String(when.op || "exists"),
+          path: String(when.path || ""),
+          valueText: "",
+          to: String(one?.to || ""),
+        };
+        if ("value" in when) seed.valueText = branchValueToText(when.value);
+        else if ("values" in when) seed.valueText = branchValueToText(when.values);
+        else if ("regex" in when) seed.valueText = String(when.regex || "");
+        wrap.appendChild(createBranchCaseRow(seed));
+      }
+      if (!wrap.children.length) {
+        wrap.appendChild(createBranchCaseRow({ source: "args", op: "exists" }));
+      }
+      refreshStepIdOptions();
+    }
+
+    function readBranchCasesRows(strict = true) {
+      const wrap = $("fBranchCasesWrap");
+      const rows = Array.from(wrap.children || []);
+      const cases = [];
+      for (const row of rows) {
+        const source = String(row.__sourceSel?.value || "args").trim() || "args";
+        const op = String(row.__opSel?.value || "").trim().toLowerCase();
+        const path = String(row.__pathInput?.value || "").trim();
+        const to = String(row.__toInput?.value || "").trim();
+        if (!op && !path && !to) continue;
+        if (!op || !path || !to) {
+          if (strict) return { ok: false, reason: "branch case 需填写 op/path/to", cases: [] };
+          continue;
+        }
+        const when = { op, path };
+        if (source && source !== "args") when.source = source;
+        const pv = parseBranchValueText(row.__valueInput?.value);
+        if (op === "eq" || op === "neq" || op === "contains") {
+          if (!pv.has) {
+            if (strict) return { ok: false, reason: `branch case(${op}) 缺少 value`, cases: [] };
+            continue;
+          }
+          when.value = pv.value;
+        } else if (op === "in") {
+          if (!pv.has) {
+            if (strict) return { ok: false, reason: "branch case(in) 缺少 values", cases: [] };
+            continue;
+          }
+          when.values = Array.isArray(pv.value) ? pv.value : [pv.value];
+        } else if (op === "match") {
+          if (!pv.has) {
+            if (strict) return { ok: false, reason: "branch case(match) 缺少 regex", cases: [] };
+            continue;
+          }
+          when.regex = String(pv.value || "");
+        }
+        cases.push({ when, to });
+      }
+      return { ok: true, reason: "", cases };
+    }
+
+    function normalizeNextMap(raw) {
+      const obj = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+      const out = {};
+      for (const k of ["done", "failed", "skipped", "timeout", "default"]) {
+        const v = String(obj[k] || "").trim();
+        if (v) out[k] = v;
+      }
+      return out;
+    }
+
+    function setNextFields(nextObj) {
+      const n = normalizeNextMap(nextObj);
+      setSelectValueKeepCustom("nextDoneInput", String(n.done || ""));
+      setSelectValueKeepCustom("nextFailedInput", String(n.failed || ""));
+      setSelectValueKeepCustom("nextSkippedInput", String(n.skipped || ""));
+      setSelectValueKeepCustom("nextTimeoutInput", String(n.timeout || ""));
+      setSelectValueKeepCustom("nextDefaultInput", String(n.default || ""));
+    }
+
+    function readNextFromFields() {
+      return normalizeNextMap({
+        done: $("nextDoneInput").value,
+        failed: $("nextFailedInput").value,
+        skipped: $("nextSkippedInput").value,
+        timeout: $("nextTimeoutInput").value,
+        default: $("nextDefaultInput").value,
+      });
+    }
+
+    function syncNextJsonFromFields() {
+      const next = readNextFromFields();
+      $("nextJsonInput").value = JSON.stringify(next, null, 2);
+    }
+
+    function syncNextFieldsFromJson() {
+      const parsed = parseJsonText($("nextJsonInput").value, {});
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+      setNextFields(parsed);
+      syncNextJsonFromFields();
+    }
+
+    function setActionFieldVisibility() {
+      const t = String($("actionTypeSelect").value || "").toLowerCase();
+      let shown = 0;
+      document.querySelectorAll(".field-row").forEach((row) => {
+        const types = String(row.dataset.types || "").split(",").map((x) => x.trim()).filter(Boolean);
+        const hit = types.includes(t);
+        row.classList.toggle("hidden", !hit);
+        if (hit) shown += 1;
+      });
+      if (!shown) {
+        document.querySelectorAll(".field-row").forEach((row) => row.classList.remove("hidden"));
+      }
+      const branch = t === "branch";
+      $("nextFieldsWrap").style.display = branch ? "none" : "block";
+      $("nextJsonInput").disabled = branch;
+      if (branch) {
+        setNextFields({});
+        $("nextJsonInput").value = "{}";
+      }
+    }
+
+    function applyActionToFields(action) {
+      const a = (action && typeof action === "object") ? action : {};
+      const t = String(a.type || "goto").toLowerCase();
+      $("actionTypeSelect").value = actionTypes.includes(t) ? t : "goto";
+      $("fBy").value = String(a.by || "");
+      $("fQuery").value = String(a.query || "");
+      $("fUrl").value = String(a.url || "");
+      $("fText").value = String(a.text || a.reason || a.conclusion || "");
+      $("fKey").value = String(a.key || "");
+      $("fModifiers").value = Array.isArray(a.modifiers) ? a.modifiers.join(",") : String(a.modifiers || "");
+      $("fTimes").value = (a.times == null) ? "" : String(a.times);
+      $("fTimeout").value = (a.timeoutMs == null) ? "" : String(a.timeoutMs);
+      $("fDeltaX").value = (a.deltaX == null) ? "" : String(a.deltaX);
+      $("fDeltaY").value = (a.deltaY == null) ? "" : String(a.deltaY);
+      $("fBehavior").value = String(a.behavior || "");
+      $("fTarget").value = String(a.target || "");
+      applyInvokeFindToFields((a.find && typeof a.find === "object" && !Array.isArray(a.find)) ? a.find : { kind: "rpa", must: [] });
+      const invokeArgs = (a.args && typeof a.args === "object" && !Array.isArray(a.args)) ? a.args : {};
+      renderInvokeArgRows(invokeArgs);
+      $("fInvokeArgs").value = JSON.stringify(normalizeInvokeArgs(invokeArgs), null, 2);
+      $("fRunJsCode").value = String(a.code || "");
+      $("fRunJsQuery").value = String(a.query || "");
+      $("fRunJsArgs").value = JSON.stringify(Array.isArray(a.args) ? a.args : [], null, 2);
+      $("fRunJsScope").value = (String(a.scope || "page") === "agent") ? "agent" : "page";
+      setSelectValueKeepCustom("fBranchDefault", String(a.default || ""));
+      const branchCases = Array.isArray(a.cases) ? a.cases : [];
+      setBranchCasesRows(branchCases);
+      $("fBranchCases").value = JSON.stringify(branchCases, null, 2);
+      setActionFieldVisibility();
+      syncActionJsonFromFields(true);
+    }
+
+    function buildActionFromFields(strict = true) {
+      const t = String($("actionTypeSelect").value || "").toLowerCase();
+      const action = { type: t };
+      const by = String($("fBy").value || "").trim();
+      const query = String($("fQuery").value || "").trim();
+      if (t === "goto") {
+        const url = String($("fUrl").value || "").trim();
+        if (strict && !url) throw new Error("goto 需要 url");
+        if (url) action.url = url;
+      }
+      if (t === "click") {
+        if (by) action.by = by;
+        if (query) action.query = query;
+        const timeoutMs = Number($("fTimeout").value || 0);
+        if (timeoutMs > 0) action.timeoutMs = timeoutMs;
+      }
+      if (t === "hover") {
+        if (by) action.by = by;
+        if (query) action.query = query;
+      }
+      if (t === "input") {
+        if (by) action.by = by;
+        if (query) action.query = query;
+        const text = String($("fText").value || "");
+        if (strict && !text) throw new Error("input 需要 text");
+        if (text) action.text = text;
+      }
+      if (t === "press_key") {
+        const key = String($("fKey").value || "").trim();
+        if (strict && !key) throw new Error("press_key 需要 key");
+        if (key) action.key = key;
+        const mods = String($("fModifiers").value || "").split(",").map((x) => x.trim()).filter(Boolean);
+        if (mods.length) action.modifiers = mods;
+        const times = Number($("fTimes").value || 0);
+        if (times > 0) action.times = Math.floor(times);
+      }
+      if (t === "wait") {
+        const timeoutMs = Number($("fTimeout").value || 0);
+        if (strict && !(timeoutMs > 0)) throw new Error("wait 需要 timeoutMs");
+        if (timeoutMs > 0) action.timeoutMs = Math.floor(timeoutMs);
+      }
+      if (t === "scroll") {
+        const dx = Number($("fDeltaX").value || 0);
+        const dy = Number($("fDeltaY").value || 0);
+        if (Number.isFinite(dx)) action.deltaX = dx;
+        if (Number.isFinite(dy)) action.deltaY = dy || 600;
+        const behavior = String($("fBehavior").value || "").trim();
+        if (behavior) action.behavior = behavior;
+      }
+      if (t === "invoke") {
+        const target = String($("fTarget").value || "").trim();
+        let find = null;
+        try {
+          if (state.actionJsonDirty) {
+            find = parseJsonText($("fInvokeFind").value, null);
+          } else {
+            find = buildInvokeFindFromFields();
+          }
+        } catch (_) {
+          find = parseJsonText($("fInvokeFind").value, null);
+        }
+        find = (find && typeof find === "object" && !Array.isArray(find)) ? normalizeInvokeFind(find) : null;
+        let argsObj = null;
+        try {
+          argsObj = parseJsonText($("fInvokeArgs").value, null);
+        } catch (_) {
+          argsObj = null;
+        }
+        if (!argsObj || typeof argsObj !== "object" || Array.isArray(argsObj)) {
+          argsObj = mergeInvokeArgsDotted(readInvokeArgRows());
+        }
+        argsObj = normalizeInvokeArgs(argsObj);
+        if (target) action.target = target;
+        if (find) action.find = find;
+        if (Object.keys(argsObj).length) action.args = argsObj;
+        if (strict && !target && !action.find) throw new Error("invoke 需要 target 或 find");
+      }
+      if (t === "run_js") {
+        const code = String($("fRunJsCode").value || "").trim();
+        const q = String($("fRunJsQuery").value || "").trim();
+        const argsArr = parseJsonText($("fRunJsArgs").value, []);
+        if (code) action.code = code;
+        if (q) action.query = q;
+        if (Array.isArray(argsArr) && argsArr.length) action.args = argsArr;
+        action.scope = String($("fRunJsScope").value || "page");
+        if (strict && !action.code && !action.query) throw new Error("run_js 需要 code 或 query");
+      }
+      if (t === "branch") {
+        const def = String($("fBranchDefault").value || "").trim();
+        const ret = readBranchCasesRows(strict);
+        if (!ret.ok) throw new Error(ret.reason || "branch cases 无效");
+        action.cases = Array.isArray(ret.cases) ? ret.cases : [];
+        $("fBranchCases").value = JSON.stringify(action.cases, null, 2);
+        if (def) action.default = def;
+        if (strict && (!action.default || !action.cases.length)) throw new Error("branch action 需要 default + 至少 1 条 cases（不是 step.next.default）");
+      }
+      if (t === "ask_assist") {
+        const text = String($("fText").value || "").trim();
+        if (strict && !text) throw new Error("ask_assist 需要 text");
+        if (text) action.text = text;
+      }
+      if (t === "done") {
+        const conclusion = String($("fText").value || "").trim();
+        if (conclusion) action.conclusion = conclusion;
+      }
+      if (t === "abort") {
+        const reason = String($("fText").value || "").trim();
+        if (reason) action.reason = reason;
+      }
+      return action;
+    }
+
+    function syncActionJsonFromFields(force = false) {
+      if (state.actionJsonDirty && !force) return;
+      try {
+        const action = buildActionFromFields(false);
+        $("actionJsonInput").value = JSON.stringify(action, null, 2);
+      } catch (_) {
+      }
+    }
+
+    function loadStepToEditor(stepId) {
+      const step = stepById(stepId);
+      if (!step) return;
+      $("stepIdInput").value = step.id;
+      $("stepDescInput").value = String(step?.desc || "");
+      const saveAs = step?.saveAs;
+      if (saveAs && typeof saveAs === "object") {
+        $("stepSaveAsInput").value = JSON.stringify(saveAs);
+      } else {
+        $("stepSaveAsInput").value = String(saveAs || "");
+      }
+      applyActionToFields(step.action || {});
+      setNextFields(step.next || {});
+      syncNextJsonFromFields();
+      $("stepTag").textContent = `step: ${step.id} (${String(step?.action?.type || "-")})`;
+      state.actionJsonDirty = false;
+    }
+
+    function buildStepFromEditor() {
+      const stepId = String($("stepIdInput").value || "").trim();
+      if (!stepId) throw new Error("step.id 不能为空");
+      let action;
+      try {
+        if (state.actionJsonDirty) {
+          action = parseJsonText($("actionJsonInput").value, null);
+          if (!action || typeof action !== "object" || Array.isArray(action)) throw new Error("action JSON 无效");
+          action.type = String(action.type || $("actionTypeSelect").value || "").trim();
+          if (!action.type) throw new Error("action.type 不能为空");
+        } else {
+          action = buildActionFromFields(true);
+        }
+      } catch (err) {
+        throw new Error(`action 构建失败: ${String(err.message || err)}`);
+      }
+      const type = String(action?.type || "").toLowerCase();
+      const next = (type === "branch") ? {} : readNextFromFields();
+      syncNextJsonFromFields();
+      const step = { id: stepId, action, next };
+      const descRaw = String($("stepDescInput").value || "").trim();
+      step.desc = descRaw || "";
+      const saveAsRaw = String($("stepSaveAsInput").value || "").trim();
+      if (!saveAsRaw) {
+        step.saveAs = null;
+      } else {
+        try {
+          const obj = JSON.parse(saveAsRaw);
+          step.saveAs = (obj && typeof obj === "object") ? obj : saveAsRaw;
+        } catch (_) {
+          step.saveAs = saveAsRaw;
+        }
+      }
+      return step;
+    }
+
+    function mergeStepKeepMeta(existing, incoming) {
+      const base = (existing && typeof existing === "object") ? existing : {};
+      const next = (incoming && typeof incoming === "object") ? incoming : {};
+      const merged = {
+        ...base,
+        ...next,
+        id: String(next.id || base.id || "").trim(),
+        action: (next.action && typeof next.action === "object" && !Array.isArray(next.action))
+          ? next.action
+          : ((base.action && typeof base.action === "object" && !Array.isArray(base.action)) ? base.action : {}),
+        next: (next.next && typeof next.next === "object" && !Array.isArray(next.next))
+          ? next.next
+          : ((base.next && typeof base.next === "object" && !Array.isArray(base.next)) ? base.next : {}),
+      };
+      if (merged.desc === "") delete merged.desc;
+      if (merged.saveAs === null) delete merged.saveAs;
+      return merged;
+    }
+
+    function rewriteStepIdRefs(flow, fromId, toId) {
+      const from = String(fromId || "").trim();
+      const to = String(toId || "").trim();
+      if (!from || !to || from === to) return 0;
+      let changed = 0;
+      if (String(flow.start || "").trim() === from) {
+        flow.start = to;
+        changed += 1;
+      }
+      const steps = Array.isArray(flow.steps) ? flow.steps : [];
+      for (const s of steps) {
+        const next = (s.next && typeof s.next === "object" && !Array.isArray(s.next)) ? s.next : {};
+        for (const k of Object.keys(next)) {
+          if (String(next[k] || "").trim() === from) {
+            next[k] = to;
+            changed += 1;
+          }
+        }
+        s.next = next;
+        const action = (s.action && typeof s.action === "object" && !Array.isArray(s.action)) ? s.action : null;
+        if (!action) continue;
+        if (String(action.type || "").toLowerCase() === "branch") {
+          if (String(action.default || "").trim() === from) {
+            action.default = to;
+            changed += 1;
+          }
+          const cases = Array.isArray(action.cases) ? action.cases : [];
+          for (const c of cases) {
+            if (!c || typeof c !== "object") continue;
+            if (String(c.to || "").trim() === from) {
+              c.to = to;
+              changed += 1;
+            }
+          }
+          action.cases = cases;
+        }
+      }
+      return changed;
+    }
+
+    function applyStepToFlow(step, opts = {}) {
+      const flow = state.flow || normalizeFlow({ id: "flow_builder_demo", start: step.id, steps: [] });
+      const editedFromId = String(opts.editedFromId || "").trim();
+      let renameRefsChanged = 0;
+      if (editedFromId && editedFromId !== step.id) {
+        const oldIdx = flow.steps.findIndex((s) => s.id === editedFromId);
+        const conflictIdx = flow.steps.findIndex((s) => s.id === step.id);
+        if (conflictIdx >= 0 && conflictIdx !== oldIdx) {
+          throw new Error(`step.id 冲突：${step.id} 已存在`);
+        }
+        if (oldIdx >= 0) {
+          flow.steps[oldIdx] = mergeStepKeepMeta(flow.steps[oldIdx], step);
+          renameRefsChanged = rewriteStepIdRefs(flow, editedFromId, step.id);
+        } else {
+          const idx = flow.steps.findIndex((s) => s.id === step.id);
+          if (idx >= 0) flow.steps[idx] = mergeStepKeepMeta(flow.steps[idx], step);
+          else flow.steps.push(step);
+        }
+      } else {
+        const idx = flow.steps.findIndex((s) => s.id === step.id);
+        if (idx >= 0) flow.steps[idx] = mergeStepKeepMeta(flow.steps[idx], step);
+        else flow.steps.push(step);
+      }
+      if (!flow.start) flow.start = step.id;
+      setFlow(flow);
+      state.selectedStepId = step.id;
+      renderStepList();
+      renderGraph();
+      loadStepToEditor(step.id);
+      return { renamed: !!(editedFromId && editedFromId !== step.id), renameRefsChanged };
+    }
+
+    async function refreshSession() {
+      requireSession();
+      setStatus("刷新 Session...");
+      const data = await api("GET", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}`);
+      renderSessionTag(`status=${data.status || "-"}`);
+      setOutput(data);
+      setStatus("Session 已刷新");
+    }
+
+    async function refreshContexts() {
+      requireSession();
+      setStatus("刷新页面列表...");
+      const data = await api("GET", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/contexts`);
+      state.contexts = Array.isArray(data.contexts) ? data.contexts : [];
+      state.activeContextId = String(data.activeContextId || "");
+      renderContexts();
+      setOutput(data);
+      setStatus(`已加载 ${state.contexts.length} 个页面`);
+    }
+
+    async function refreshFlows() {
+      setStatus("加载 Flow 列表...");
+      const data = await api("GET", "/rpaflows/api/builder/flows");
+      state.flowsBaseDir = String(data.baseDir || state.flowsBaseDir || "");
+      const sel = $("savedFlowSelect");
+      const currentPath = toDisplayFlowPathUi(String($("savePathInput").value || "").trim());
+      sel.innerHTML = "";
+      const emptyOp = document.createElement("option");
+      emptyOp.value = "";
+      emptyOp.textContent = "请选择 Flow...";
+      sel.appendChild(emptyOp);
+      for (const one of (data.flows || [])) {
+        const rawPath = String(one.path || one.absPath || "");
+        const displayPath = toDisplayFlowPathUi(rawPath);
+        const op = document.createElement("option");
+        op.value = displayPath;
+        op.textContent = `${one.file || ""} | ${one.id || ""}`;
+        if (currentPath && op.value === currentPath) op.selected = true;
+        sel.appendChild(op);
+      }
+      setOutput(data);
+      setStatus(`已加载 ${Array.isArray(data.flows) ? data.flows.length : 0} 个 Flow`);
+    }
+
+    async function loadLogMeta() {
+      try {
+        const data = await api("GET", "/rpaflows/api/builder/log-meta");
+        $("logPathText").textContent = `日志文件：${data.filePath || "-"}`;
+      } catch (err) {
+        $("logPathText").textContent = `日志文件：获取失败 (${String(err?.message || err)})`;
+      }
+    }
+
+    async function startSession() {
+      setStatus("启动 Session...");
+      showBusyMask("正在启动 Session，请稍候...", "working");
+      try {
+        const data = await api("POST", "/rpaflows/api/builder/session/start", {
+          alias: $("aliasInput").value,
+          launchMode: $("launchModeInput").value,
+          startUrl: $("startUrlInput").value,
+        });
+        state.sessionId = String(data.id || data.sessionId || "");
+        renderSessionTag(`status=${data.status || "-"}`);
+        setOutput(data);
+        setStatus("Session 已启动");
+        await refreshContexts();
+        renderGraph();
+        showBusyMask("Session 启动成功", "success");
+        await sleepMs(900);
+      } catch (err) {
+        showBusyMask(`Session 启动失败：${String(err?.message || err)}`, "error");
+        await sleepMs(1300);
+        throw err;
+      } finally {
+        hideBusyMask();
+      }
+    }
+
+    async function closeSession() {
+      requireSession();
+      setStatus("关闭 Session...");
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/close`, {});
+      setOutput(data);
+      state.sessionId = "";
+      state.activeContextId = "";
+      state.contexts = [];
+      renderSessionTag();
+      renderContexts();
+      renderGraph();
+      setStatus("Session 已关闭");
+    }
+
+    async function selectContext() {
+      requireSession();
+      const contextId = $("contextSelect").value;
+      setStatus("切换 active context...");
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/contexts/select`, { contextId });
+      state.activeContextId = String(data.activeContextId || contextId || "");
+      renderContextTag();
+      setOutput(data);
+      setStatus("切换完成");
+    }
+
+    async function openPage() {
+      requireSession();
+      setStatus("新开页面...");
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/open`, {
+        url: $("openUrlInput").value,
+        setActive: true,
+      });
+      state.activeContextId = String(data.activeContextId || data.contextId || "");
+      renderContextTag();
+      setOutput(data);
+      setStatus("页面已打开");
+      await refreshContexts();
+    }
+
+    async function activateSessionBrowser() {
+      requireSession();
+      setStatus("激活 Session 浏览器...");
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/activate`, {
+        contextId: String(state.activeContextId || ""),
+      });
+      setOutput({ ok: true, info: "session browser activated", data });
+      setStatus(`浏览器已激活（context=${data.contextId || "-"})`);
+    }
+
+    async function pickSelectorForAction() {
+      requireSession();
+      const actionType = String($("actionTypeSelect").value || "").toLowerCase();
+      if (!["click", "input", "hover"].includes(actionType)) {
+        throw new Error("当前 action.type 不支持 Pick（仅 click / input / hover）");
+      }
+      const btn = $("pickByBtn");
+      btn.disabled = true;
+      btn.textContent = "Picking...";
+      setStatus("请在 Session 浏览器中点击目标元素（Esc 取消）...");
+      try {
+        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/pick-selector`, {
+          contextId: String(state.activeContextId || ""),
+          actionType,
+        });
+        if (data && data.cancelled) {
+          setStatus("已取消 Pick");
+          setOutput({ ok: true, info: "pick cancelled", data });
+          return;
+        }
+        const selector = String(data?.selector || "").trim();
+        if (!selector) throw new Error("Pick 失败：未返回 selector");
+        $("fBy").value = selector;
+        const query = String(data?.query || "").trim();
+        if (query && !String($("fQuery").value || "").trim()) {
+          $("fQuery").value = query;
+        }
+        state.actionJsonDirty = false;
+        syncActionJsonFromFields(true);
+        setOutput({
+          ok: true,
+          info: "pick done",
+          aiUsed: !!data?.aiUsed,
+          aiReason: String(data?.aiReason || ""),
+          data,
+        });
+        const aiNote = data?.aiUsed ? "AI已参与" : "AI未参与";
+        setStatus(`Pick 完成（${aiNote}），已回填 by/query`);
+        try { window.focus(); } catch (_) {}
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Pick 元素";
+      }
+    }
+
+    async function confirmPickElement() {
+      requireSession();
+      const selector = String($("fBy").value || "").trim();
+      if (!selector) throw new Error("请先填写 by（css:/xpath:）后再做选中确认");
+      const btn = $("confirmPickBtn");
+      btn.disabled = true;
+      btn.textContent = "确认中...";
+      setStatus("正在页面高亮当前 selector，并等待确认...");
+      try {
+        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/pick-element`, {
+          contextId: String(state.activeContextId || ""),
+          selector,
+        });
+        if (data?.matched === false) {
+          const msg = String(data?.message || "没有选中任何元素");
+          setOutput({ ok: true, info: "selector-confirm-empty", message: msg, data });
+          setStatus(msg);
+          try { window.focus(); } catch (_) {}
+          return;
+        }
+        const matchedCount = Number(data?.matchedCount || 0);
+        if (data?.cancelled) {
+          setStatus(`已取消确认（匹配 ${matchedCount} 个）`);
+        } else if (data?.confirmed) {
+          setStatus(`已确认 selector（匹配 ${matchedCount} 个）`);
+        } else {
+          setStatus(`未确认 selector（匹配 ${matchedCount} 个）`);
+        }
+        setOutput({ ok: true, info: "selector-confirm", data });
+        try { window.focus(); } catch (_) {}
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "选中确认";
+      }
+    }
+
+    async function runStep() {
+      requireSession();
+      const step = buildStepFromEditor();
+      applyStepToFlow(step, { editedFromId: state.selectedStepId });
+      setStatus("执行步骤...");
+      setActionRunResult({ running: true, stepId: step.id, actionType: step?.action?.type || "" });
+      showBusyMask(`正在执行步骤：${step.id}...`, "working");
+      try {
+        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-step`, { step });
+        setActionRunResult(data);
+        setOutput(data);
+        setStatus(`执行完成：${data.status || "-"}`);
+        showBusyMask(`步骤执行完成：${data.status || "done"}`, "success");
+        await sleepMs(700);
+      } catch (err) {
+        setActionRunResult({ ok: false, error: String(err?.message || err), stepId: step.id });
+        showBusyMask(`步骤执行失败：${String(err?.message || err)}`, "error");
+        await sleepMs(1300);
+        throw err;
+      } finally {
+        hideBusyMask();
+      }
+    }
+
+    async function runStepById(stepId) {
+      const sid = String(stepId || "").trim();
+      if (!sid) throw new Error("缺少 stepId");
+      const step = stepById(sid);
+      if (!step) throw new Error(`flow 中不存在 step: ${sid}`);
+      state.selectedStepId = sid;
+      renderStepList();
+      renderGraph();
+      loadStepToEditor(sid);
+      activateTab("right", "right-action");
+      await runStep();
+    }
+
+    async function loadFlow(pathIn = "") {
+      const path = String(pathIn || $("savedFlowSelect").value || "").trim();
+      if (!path) throw new Error("请先选择 Flow");
+      setStatus("加载 Flow...");
+      const data = await api("POST", "/rpaflows/api/builder/flows/load", { path });
+      state.flowsBaseDir = String(data.baseDir || state.flowsBaseDir || "");
+      const flow = data.flow || {};
+      const shownPath = toDisplayFlowPathUi(String(flow.sourcePath || flow.sourcePathAbs || path));
+      $("savePathInput").value = shownPath;
+      $("savedFlowSelect").value = shownPath;
+      setFlow(flow);
+      setOutput(data);
+      setStatus("Flow 已加载");
+    }
+
+    function createNewFlowTemplate() {
+      const ts = Date.now().toString(36);
+      return {
+        id: `flow_builder_${ts}`,
+        start: "step_1",
+        args: {},
+        steps: [
+          {
+            id: "step_1",
+            action: { type: "goto", url: "about:blank" },
+            next: { done: "done_1", failed: "abort_1" },
+          },
+          {
+            id: "done_1",
+            action: { type: "done", conclusion: "ok" },
+            next: {},
+          },
+          {
+            id: "abort_1",
+            action: { type: "abort", reason: "failed" },
+            next: {},
+          },
+        ],
+      };
+    }
+
+    function newFlow() {
+      const flow = createNewFlowTemplate();
+      $("savePathInput").value = "";
+      $("savedFlowSelect").value = "";
+      setFlow(flow);
+      setOutput({ ok: true, info: "new flow created", flowId: flow.id });
+      setStatus("已新建 Flow");
+    }
+
+    async function saveFlow() {
+      setStatus("保存 Flow...");
+      const flow = getFlowFromTextarea();
+      const sourcePath = String($("savePathInput").value || "").trim();
+      const data = await api("POST", "/rpaflows/api/builder/flows/save", {
+        flow,
+        sourcePath: sourcePath || undefined,
+      });
+      state.flowsBaseDir = String(data.baseDir || state.flowsBaseDir || "");
+      $("savePathInput").value = toDisplayFlowPathUi(String(data.path || sourcePath));
+      setOutput(data);
+      setStatus(`Flow 已保存：${data.path || "-"}`);
+      await refreshFlows();
+    }
+
+    async function saveFlowAs() {
+      const cur = String($("savePathInput").value || "").trim();
+      const defaultName = `${String(state.flow?.id || "flow_builder").trim() || "flow_builder"}.json`;
+      const input = window.prompt("请输入另存为路径（绝对路径，或留空按 flows/<id>.json）", cur || defaultName);
+      if (input == null) return;
+      const sourcePath = String(input || "").trim();
+      if (sourcePath) $("savePathInput").value = sourcePath;
+      await saveFlow();
+    }
+
+    function addStep() {
+      if (!state.flow) setFlow(getFlowFromTextarea());
+      let i = 1;
+      while (state.flow.steps.some((s) => s.id === `step_${i}`)) i += 1;
+      const step = { id: `step_${i}`, action: { type: "goto", url: "about:blank" }, next: {} };
+      applyStepToFlow(step);
+      state.selectedStepId = step.id;
+      loadStepToEditor(step.id);
+      activateTab("right", "right-action");
+    }
+
+    function deleteCurrentStep() {
+      if (!state.flow || !state.selectedStepId) return;
+      if (!window.confirm(`确认删除步骤 ${state.selectedStepId} 吗？`)) return;
+      const idx = state.flow.steps.findIndex((s) => s.id === state.selectedStepId);
+      if (idx < 0) return;
+      const removedId = state.flow.steps[idx].id;
+      state.flow.steps.splice(idx, 1);
+      if (state.flow.start === removedId) state.flow.start = state.flow.steps[0]?.id || "";
+      state.selectedStepId = state.flow.steps[Math.max(0, idx - 1)]?.id || state.flow.steps[0]?.id || "";
+      setFlow(state.flow);
+    }
+
+    function setStartFromCurrent() {
+      if (!state.flow || !state.selectedStepId) return;
+      state.flow.start = state.selectedStepId;
+      setFlow(state.flow);
+    }
+
+    function applyEditorStep() {
+      const step = buildStepFromEditor();
+      const ret = applyStepToFlow(step, { editedFromId: state.selectedStepId });
+      const renameMsg = (ret && ret.renamed) ? `，并重写 ${Number(ret.renameRefsChanged || 0)} 处跳转引用` : "";
+      setOutput({ ok: true, info: `step ${step.id} 已写入 flow${renameMsg}` });
+      setStatus(`step ${step.id} 已写入${renameMsg}`);
+    }
+
+    function restoreEditorStep() {
+      const stepId = String($("stepIdInput").value || state.selectedStepId || "").trim();
+      if (!stepId) throw new Error("当前没有可还原的 step");
+      const step = stepById(stepId);
+      if (!step) throw new Error(`flow 中不存在 step: ${stepId}`);
+      state.selectedStepId = stepId;
+      loadStepToEditor(stepId);
+      renderStepList();
+      renderGraph();
+      setStatus(`已还原 step：${stepId}`);
+      setOutput({ ok: true, info: "step restored from flow", stepId });
+    }
+
+    function reparseFlow() {
+      setFlow(getFlowFromTextarea());
+      setStatus("Flow 解析完成");
+      setOutput({ ok: true, info: "flow re-parsed" });
+    }
+
+    function failUi(err) {
+      setOutput(String(err?.stack || err), { toLog: true });
+      setStatus("失败");
+      activateTab("right", "right-log");
+    }
+
+    function bindActionEditorEvents() {
+      [
+        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fText","fKey","fModifiers","fTimes","fTimeout",
+        "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
+        "fRunJsScope","fBranchDefault","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput",
+        "fInvokeFindKind","fInvokeFindMust","fInvokeFindPrefer","fInvokeFindRank"
+      ].forEach((id) => {
+        const el = $(id);
+        const ev = (el.tagName === "SELECT") ? "change" : "input";
+        el.addEventListener(ev, () => {
+          if (id === "actionTypeSelect") {
+            setActionFieldVisibility();
+          }
+          if (id === "nextDoneInput" || id === "nextFailedInput" || id === "nextSkippedInput" || id === "nextTimeoutInput" || id === "nextDefaultInput") {
+            syncNextJsonFromFields();
+          }
+          if (id === "fInvokeFindKind" || id === "fInvokeFindMust" || id === "fInvokeFindPrefer" || id === "fInvokeFindRank") {
+            syncInvokeFindJsonFromFields(false);
+            if (id === "fInvokeFindKind") {
+              state.invokeFindKeysKind = "";
+              ensureInvokeArgKeyOptionsLoaded();
+            }
+          }
+          if (id !== "actionJsonInput") syncActionJsonFromFields(false);
+        });
+      });
+      $("nextJsonInput").addEventListener("change", () => {
+        syncNextFieldsFromJson();
+        syncActionJsonFromFields(false);
+      });
+      $("actionJsonInput").addEventListener("input", () => {
+        state.actionJsonDirty = true;
+      });
+      $("actionTypeSelect").addEventListener("change", () => {
+        state.actionJsonDirty = false;
+      });
+      $("addBranchCaseBtn").addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        $("fBranchCasesWrap").appendChild(createBranchCaseRow({ source: "args", op: "exists" }));
+        refreshStepIdOptions();
+        syncBranchCasesJsonFromRows(false);
+        syncActionJsonFromFields(false);
+      });
+      $("fBranchCases").addEventListener("change", () => {
+        const raw = String($("fBranchCases").value || "").trim();
+        const parsed = parseJsonText(raw, null);
+        if (!Array.isArray(parsed)) return;
+        setBranchCasesRows(parsed);
+        syncActionJsonFromFields(false);
+      });
+      $("fInvokeFind").addEventListener("change", () => {
+        syncInvokeFindFieldsFromJson();
+        syncActionJsonFromFields(false);
+      });
+      $("fInvokeArgs").addEventListener("change", () => {
+        syncInvokeArgsRowsFromJson();
+        syncActionJsonFromFields(false);
+      });
+      $("addInvokeFilterBtn").addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        $("fInvokeFiltersBox").appendChild(createInvokeFilterRow({ key: "", value: "" }));
+        syncInvokeFindJsonFromFields(false);
+        syncActionJsonFromFields(false);
+      });
+      $("addInvokeArgBtn").addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        $("fInvokeArgsBox").appendChild(createInvokeArgRow({ key: "", value: "" }));
+        syncInvokeArgsJsonFromRows(false);
+        syncActionJsonFromFields(false);
+      });
+      $("pickInvokeMustBtn").addEventListener("click", () => openInvokeKeyPicker("fInvokeFindMust").catch(failUi));
+      $("pickInvokePreferBtn").addEventListener("click", () => openInvokeKeyPicker("fInvokeFindPrefer").catch(failUi));
+      $("invokeKeyPickerCloseBtn").addEventListener("click", () => hideInvokeKeyPicker());
+      $("invokeKeyPickerCancelBtn").addEventListener("click", () => hideInvokeKeyPicker());
+      $("invokeKeyPickerApplyBtn").addEventListener("click", () => applyInvokeKeyPickerSelection());
+      $("invokeKeyPickerSearch").addEventListener("input", () => renderInvokeKeyPickerList());
+      document.querySelectorAll('input[name="invokeKeyKind"]').forEach((el) => {
+        el.addEventListener("change", () => {
+          if (!el.checked) return;
+          state.invokeKeyPickerFilterKind = String(el.value || "all");
+          renderInvokeKeyPickerList();
+        });
+      });
+      $("invokeKeyPickerMask").addEventListener("click", (ev) => {
+        if (ev.target === $("invokeKeyPickerMask")) hideInvokeKeyPicker();
+      });
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Escape") return;
+        const mask = $("invokeKeyPickerMask");
+        if (mask && mask.classList.contains("show")) hideInvokeKeyPicker();
+      });
+      renderInvokeFilterRows([]);
+      syncInvokeFindJsonFromFields(true);
+      renderInvokeArgRows({});
+      syncInvokeArgsJsonFromRows(true);
+      ensureInvokeArgKeyOptionsLoaded();
+      setBranchCasesRows([]);
+      syncBranchCasesJsonFromRows(false);
+      syncNextJsonFromFields();
+    }
+
+    bindTabs();
+    bindGraphPan();
+    bindActionEditorEvents();
+
+    $("startSessionBtn").addEventListener("click", () => startSession().catch(failUi));
+    $("refreshSessionBtn").addEventListener("click", () => refreshSession().catch(failUi));
+    $("closeSessionBtn").addEventListener("click", () => closeSession().catch(failUi));
+    $("refreshContextsBtn").addEventListener("click", () => refreshContexts().catch(failUi));
+    $("selectContextBtn").addEventListener("click", () => selectContext().catch(failUi));
+    $("openPageBtn").addEventListener("click", () => openPage().catch(failUi));
+    $("activateBrowserBtn").addEventListener("click", () => activateSessionBrowser().catch(failUi));
+
+    $("refreshFlowsBtn").addEventListener("click", () => refreshFlows().catch(failUi));
+    $("savedFlowSelect").addEventListener("change", () => {
+      const path = String($("savedFlowSelect").value || "").trim();
+      if (!path) return;
+      loadFlow(path).catch(failUi);
+    });
+    $("newFlowBtn").addEventListener("click", () => { try { newFlow(); } catch (err) { failUi(err); } });
+    $("saveFlowBtn").addEventListener("click", () => saveFlow().catch(failUi));
+    $("saveAsFlowBtn").addEventListener("click", () => saveFlowAs().catch(failUi));
+    $("reparseFlowBtn").addEventListener("click", () => { try { reparseFlow(); } catch (err) { failUi(err); } });
+    $("syncArgsBtn").addEventListener("click", () => { try { syncArgDefsFromKeyInput(); } catch (err) { failUi(err); } });
+    $("addArgBtn").addEventListener("click", () => {
+      const cur = readArgDefRows();
+      let idx = 1;
+      let key = `arg_${idx}`;
+      while (cur[key]) { idx += 1; key = `arg_${idx}`; }
+      cur[key] = { type: "string", required: false, desc: "" };
+      renderArgDefRows(cur);
+      $("flowArgsInput").value = Object.keys(cur).join(", ");
+    });
+    $("addFilterBtn").addEventListener("click", () => {
+      const cur = readShellFiltersRows();
+      cur.push({ key: "", value: "" });
+      renderShellFiltersRows(cur);
+    });
+    $("applyShellBtn").addEventListener("click", () => { try { applyShellToFlow(); } catch (err) { failUi(err); } });
+
+    $("addStepBtn").addEventListener("click", () => { try { addStep(); } catch (err) { failUi(err); } });
+    $("deleteStepBtn").addEventListener("click", () => { try { deleteCurrentStep(); } catch (err) { failUi(err); } });
+    $("setStartBtn").addEventListener("click", () => { try { setStartFromCurrent(); } catch (err) { failUi(err); } });
+
+    $("applyStepBtn").addEventListener("click", () => { try { applyEditorStep(); } catch (err) { failUi(err); } });
+    $("restoreStepBtn").addEventListener("click", () => { try { restoreEditorStep(); } catch (err) { failUi(err); } });
+    $("runStepBtn").addEventListener("click", () => runStep().catch(failUi));
+    $("pickByBtn").addEventListener("click", () => pickSelectorForAction().catch(failUi));
+    $("confirmPickBtn").addEventListener("click", () => confirmPickElement().catch(failUi));
+
+    renderSessionTag();
+    renderContextTag();
+    setFlow(getFlowFromTextarea());
+    setActionFieldVisibility();
+    loadLogMeta();
+    refreshFlows().catch(failUi);
+  </script>
+</body>
+</html>

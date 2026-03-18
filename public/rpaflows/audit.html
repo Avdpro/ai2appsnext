@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>RPA Flow 审计</title>
+	<style>
+		:root {
+			--bg: #f6f8fb;
+			--card: #ffffff;
+			--line: #d9e0ea;
+			--text: #1a2433;
+			--sub: #5a687d;
+			--btn: #0b5cff;
+			--btnText: #ffffff;
+			--danger: #af2338;
+			--mono: "SFMono-Regular", Menlo, Consolas, monospace;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			padding: 24px;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			color: var(--text);
+			background: radial-gradient(circle at top right, #e9f0ff 0%, var(--bg) 45%);
+		}
+		.wrap { max-width: 1080px; margin: 0 auto; }
+		.card {
+			background: var(--card);
+			border: 1px solid var(--line);
+			border-radius: 12px;
+			padding: 16px;
+			margin-bottom: 14px;
+		}
+		h1 { font-size: 22px; margin: 0 0 6px; }
+		p { margin: 0; color: var(--sub); }
+		.grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 12px;
+		}
+		@media (max-width: 900px) {
+			.grid { grid-template-columns: 1fr; }
+		}
+		label {
+			display: block;
+			font-size: 13px;
+			margin: 0 0 6px;
+			color: var(--sub);
+		}
+		label.inline-option {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			margin: 0;
+			color: var(--text);
+			white-space: nowrap;
+		}
+		label.inline-option input[type="checkbox"] {
+			width: auto;
+			margin: 0;
+		}
+		select, textarea, input {
+			width: 100%;
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			padding: 9px 10px;
+			font-size: 14px;
+			color: var(--text);
+			background: #fff;
+		}
+		textarea {
+			min-height: 120px;
+			resize: vertical;
+			font-family: var(--mono);
+			line-height: 1.35;
+		}
+		.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+		button {
+			border: 0;
+			border-radius: 8px;
+			padding: 9px 14px;
+			cursor: pointer;
+			background: var(--btn);
+			color: var(--btnText);
+			font-size: 14px;
+		}
+		button.secondary { background: #7a8597; }
+		.tag {
+			display: inline-block;
+			padding: 2px 8px;
+			border-radius: 999px;
+			font-size: 12px;
+			border: 1px solid var(--line);
+			color: var(--sub);
+		}
+		.tag.risk-high { color: #fff; background: var(--danger); border-color: var(--danger); }
+		pre {
+			margin: 0;
+			padding: 12px;
+			border-radius: 8px;
+			border: 1px solid var(--line);
+			background: #f9fbff;
+			overflow: auto;
+			font-size: 12px;
+			font-family: var(--mono);
+		}
+		#status { color: var(--sub); }
+	</style>
+</head>
+<body>
+	<div class="wrap">
+		<div class="card">
+			<h1>RPA Flow 审计</h1>
+			<p>支持从本地 flows 选择，或直接粘贴 flow JSON，再执行审计。</p>
+		</div>
+
+		<div class="card">
+			<div class="grid">
+				<div>
+					<label for="flowSelect">选择本地 flow</label>
+					<div class="row">
+						<select id="flowSelect"></select>
+						<button id="reloadBtn" class="secondary" type="button">刷新</button>
+					</div>
+				</div>
+				<div>
+					<label for="auditMode">审计模式</label>
+					<select id="auditMode">
+						<option value="warn" selected>warn</option>
+						<option value="enforce">enforce</option>
+						<option value="off">off</option>
+					</select>
+				</div>
+			</div>
+			<div class="grid" style="margin-top:12px;">
+				<div>
+					<label for="flowText">粘贴 flow JSON（有内容时优先于选择）</label>
+					<textarea id="flowText" placeholder='{"id":"demo","start":"step_1","steps":[...]}'></textarea>
+				</div>
+				<div>
+					<label for="argsText">args JSON（可选）</label>
+					<textarea id="argsText" placeholder='{"q":"hello"}'>{}</textarea>
+				</div>
+			</div>
+			<div class="grid" style="margin-top:12px;">
+				<div>
+					<label for="allowActions">allowActions（逗号分隔，可选）</label>
+					<input id="allowActions" placeholder="click,scroll,goto">
+				</div>
+				<div>
+					<label for="denyActions">denyActions（逗号分隔，可选）</label>
+					<input id="denyActions" placeholder="run_js,uploadFile">
+				</div>
+			</div>
+			<div class="row" style="margin-top:12px;">
+				<label class="inline-option"><input id="aiEnabled" type="checkbox"> 开启 AI 审计（总开关）</label>
+				<label class="inline-option"><input id="aiIncludeRunJsWithCode" type="checkbox" checked> 审计 run_js code（默认开）</label>
+				<select id="aiTier">
+					<option value="">AI 档位（默认）</option>
+					<option value="fast">fast</option>
+					<option value="balanced">balanced</option>
+					<option value="quality">quality</option>
+				</select>
+				<button id="runBtn" type="button">开始审计</button>
+				<span id="status"></span>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="row" style="margin-bottom:8px;">
+				<strong>结果</strong>
+				<span id="summaryTag" class="tag">未执行</span>
+				<span id="aiTag" class="tag">AI: -</span>
+			</div>
+			<pre id="resultText">等待执行...</pre>
+		</div>
+	</div>
+
+	<script>
+		const $ = (id) => document.getElementById(id);
+		const flowSelect = $("flowSelect");
+		const statusEl = $("status");
+		const resultText = $("resultText");
+		const summaryTag = $("summaryTag");
+		const aiTag = $("aiTag");
+
+		async function loadFlowList() {
+			statusEl.textContent = "加载 flow 列表...";
+			const res = await fetch("/rpaflows/api/flows");
+			const data = await res.json();
+			if (!data.ok) throw new Error(data.reason || "加载 flow 列表失败");
+			flowSelect.innerHTML = "";
+			for (const p of data.flows || []) {
+				const op = document.createElement("option");
+				op.value = p;
+				op.textContent = p;
+				flowSelect.appendChild(op);
+			}
+			statusEl.textContent = `已加载 ${data.flows?.length || 0} 个 flow`;
+		}
+
+		function parseJsonText(text, fallback = {}) {
+			const raw = String(text || "").trim();
+			if (!raw) return fallback;
+			return JSON.parse(raw);
+		}
+
+		function updateSummary(report) {
+			const result = report?.result || {};
+			const maxRisk = result?.overview?.maxRiskLevel || "info";
+			const findings = Number(result?.findings?.length || 0);
+			const wouldBlock = !!result?.wouldBlock;
+			const blockedText = wouldBlock ? "wouldBlock=true" : "wouldBlock=false";
+			summaryTag.textContent = `${maxRisk} | findings=${findings} | ${blockedText}`;
+			summaryTag.className = `tag ${["critical", "high"].includes(maxRisk) ? "risk-high" : ""}`;
+			const ai = result?.ai || {};
+			const aiEnabled = !!ai.enabled;
+			const aiCalls = Number(ai.calls || 0);
+			const aiFailures = Number(ai.failures || 0);
+			aiTag.textContent = `AI: enabled=${aiEnabled} calls=${aiCalls} failures=${aiFailures}`;
+			aiTag.className = `tag ${(aiEnabled && aiCalls > 0 && aiFailures === 0) ? "" : "risk-high"}`;
+		}
+
+		async function runAudit() {
+			statusEl.textContent = "正在审计...";
+			summaryTag.textContent = "运行中";
+			summaryTag.className = "tag";
+			aiTag.textContent = "AI: 运行中";
+			aiTag.className = "tag";
+			resultText.textContent = "";
+
+			const body = {
+				flowPath: flowSelect.value,
+				flowText: $("flowText").value,
+				args: parseJsonText($("argsText").value, {}),
+					audit: {
+						mode: $("auditMode").value,
+						allowActions: $("allowActions").value,
+						denyActions: $("denyActions").value,
+						aiEnabled: $("aiEnabled").checked,
+						aiIncludeRunJsWithCode: $("aiIncludeRunJsWithCode").checked,
+						aiTier: $("aiTier").value,
+					},
+				};
+
+			const res = await fetch("/rpaflows/api/audit", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			const data = await res.json();
+			if (!res.ok || !data.ok) throw new Error(data.reason || "审计失败");
+			updateSummary(data.report);
+			resultText.textContent = JSON.stringify(data.report, null, 2);
+			statusEl.textContent = "审计完成";
+		}
+
+		$("reloadBtn").addEventListener("click", () => {
+			loadFlowList().catch((err) => {
+				statusEl.textContent = err.message || String(err);
+			});
+		});
+
+			$("runBtn").addEventListener("click", () => {
+				runAudit().catch((err) => {
+					summaryTag.textContent = "失败";
+					summaryTag.className = "tag risk-high";
+					aiTag.textContent = "AI: 失败";
+					aiTag.className = "tag risk-high";
+					resultText.textContent = String(err?.stack || err?.message || err);
+					statusEl.textContent = "执行失败";
+				});
+			});
+
+		loadFlowList().catch((err) => {
+			statusEl.textContent = err.message || String(err);
+		});
+	</script>
+</body>
+</html>
