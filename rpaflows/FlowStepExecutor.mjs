@@ -31,6 +31,17 @@ function normalizePickValue(raw) {
 	return s;
 }
 
+function parseFlowBool(raw, fallback = false) {
+	if (raw === undefined || raw === null || raw === "") return !!fallback;
+	if (typeof raw === "boolean") return raw;
+	if (typeof raw === "number") return Number.isFinite(raw) ? raw !== 0 : !!fallback;
+	const s = String(raw).trim().toLowerCase();
+	if (!s) return !!fallback;
+	if (["1", "true", "yes", "y", "on"].includes(s)) return true;
+	if (["0", "false", "no", "n", "off"].includes(s)) return false;
+	return !!fallback;
+}
+
 function parseSelectorReviewResult(ret) {
 	const out = { action: "abort", feedback: "" };
 	if (!Array.isArray(ret)) return out;
@@ -756,8 +767,9 @@ async function executeStepAction(runtime) {
 				return { status: "done", value: { by: sel, byBase: selBase, pick: normalizePickValue(pick), pickApplied: picked.pickApplied, pickCount: picked.count || null, pickIndex: picked.index || null } };
 			}
 			case "goto": {
-				const activePage = requireActivePage(action.type);
 				const url = parseFlowVal(action.url, args, opts, vars, lastResult);
+				const newPageRaw = action.newPage === undefined ? false : parseFlowVal(action.newPage, args, opts, vars, lastResult);
+				const useNewPage = parseFlowBool(newPageRaw, false);
 				const timeoutMs = Number(action.timeoutMs || 0);
 				const retryOnAbort = Math.max(0, Number(action.retryOnAbort ?? 1));
 				const postWaitMs = Math.max(0, Number(action.postWaitMs || 0));
@@ -768,6 +780,16 @@ async function executeStepAction(runtime) {
 				const waitBy = waitByRaw ? parseFlowVal(waitByRaw, args, opts, vars, lastResult) : "";
 				const waitTimeoutMs = Math.max(0, Number(action.waitTimeoutMs ?? 8000));
 				const acceptAbortIfNavigated = action.acceptAbortIfNavigated !== false;
+				let activePage = getActivePage();
+				if (useNewPage) {
+					if (!webRpa?.browser || typeof webRpa.openPage !== "function") {
+						throw new Error("goto.newPage requires an active webRpa browser session");
+					}
+					activePage = await webRpa.openPage(webRpa.browser);
+				}
+				if (!activePage) {
+					throw new Error(`${action.type}: no active page (webRpa.currentPage/page missing)`);
+				}
 				let navError = null;
 
 				for (let attempt = 0; attempt <= retryOnAbort; attempt++) {
@@ -806,7 +828,7 @@ async function executeStepAction(runtime) {
 				}
 				await waitUrlStable(activePage, stableMs, settleTimeoutMs, settlePollMs);
 				if (postWaitMs > 0) await sleep(postWaitMs);
-				return { status: "done", value: { url: await activePage.url() } };
+				return { status: "done", value: { url: await activePage.url(), newPage: useNewPage, pageId: activePage.context || null } };
 			}
 			case "press_key": {
 				const activePage = requireActivePage(action.type);

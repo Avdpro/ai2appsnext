@@ -7,7 +7,7 @@ const FLOW_PROMPT_SPEC_VERSION = "0.55";
 const NEXT_ACTION_CTX_VERSION = 1;
 
 const KNOWN_ACTIONS = {
-	goto: `{ type: "goto", url: string, postWaitMs?: number }`,
+	goto: `{ type: "goto", url: string, newPage?: boolean, postWaitMs?: number }`,
 	click: `{ type: "click", query: string, by?: string, pick?: number | string, intent?: "open"|"dismiss"|"submit", expectInputFocus?: boolean, postWaitMs?: number }`,
 	hover: `{ type: "hover", query: string, by?: string, pick?: number | string, postWaitMs?: number }`,
 	input: `{ type: "input", text: string, mode?: "fill"|"type"|"paste", clear?: boolean, pressEnter?: boolean, postWaitMs?: number }`,
@@ -382,7 +382,7 @@ ${nextTypes.join(" | ") || "(none)"}
 - scroll:
   { "type":"scroll", "x"?: number, "y"?: number, "query"?: string, "by"?: string, "postWaitMs"?: number }
 - goto:
-  { "type":"goto", "url": string, "postWaitMs"?: number }
+  { "type":"goto", "url": string, "newPage"?: boolean, "postWaitMs"?: number }
 
 ────────────────────────────────────────────────────────
 【决策要求】

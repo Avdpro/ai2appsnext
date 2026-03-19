@@ -11,6 +11,7 @@ import {
 } from "../rpaflows/FlowBuilderCore.mjs";
 import { resolveSelectorByAI } from "../rpaflows/FlowAIResolver.mjs";
 import rpaKindSpec from "../agentspec/kinds/rpa.mjs";
+import { execRunJsAction, parseFlowVal } from "../rpaflows/FlowExpr.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathLib.dirname(__filename);
@@ -319,6 +320,37 @@ async function verifySelectorHitsPicked(page, selector, pickAttrKey, pickToken) 
 	return (out && typeof out === "object") ? out : { ok: false, reason: "invalid verify result", count: 0, hit: false };
 }
 
+async function countSelectorMatches(page, selector) {
+	const out = await page.callFunction(
+		function (rawSelector) {
+			const sel = String(rawSelector || "").trim();
+			if (!sel) return { ok: false, count: 0, reason: "empty selector" };
+			const parseSelector = (s) => {
+				if (!s) return { mode: "css", expr: "" };
+				if (/^css:/i.test(s)) return { mode: "css", expr: s.replace(/^css:/i, "").trim() };
+				if (/^xpath:/i.test(s)) return { mode: "xpath", expr: s.replace(/^xpath:/i, "").trim() };
+				if (/^(\/\/|\/|\(|\.\/|\.\.\/)/.test(s)) return { mode: "xpath", expr: s };
+				return { mode: "css", expr: s };
+			};
+			const parsed = parseSelector(sel);
+			if (!parsed.expr) return { ok: false, count: 0, reason: "empty selector expr" };
+			try {
+				if (parsed.mode === "xpath") {
+					const r = document.evaluate(parsed.expr, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+					return { ok: true, count: Number(r.snapshotLength || 0), reason: "" };
+				}
+				const arr = document.querySelectorAll(parsed.expr);
+				return { ok: true, count: Number(arr?.length || 0), reason: "" };
+			} catch (err) {
+				return { ok: false, count: 0, reason: String(err?.message || err || "selector parse failed") };
+			}
+		},
+		[selector],
+		{ awaitPromise: true }
+	);
+	return (out && typeof out === "object") ? out : { ok: false, count: 0, reason: "invalid count result" };
+}
+
 async function verifySelectorByWebRpa({ webRpa, page, selector, pickAttrKey, pickToken }) {
 	const s = asText(selector);
 	if (!s) return { ok: false, reason: "empty selector", count: 0, hit: false };
@@ -421,6 +453,7 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 				alias: data?.alias || "",
 				launchMode: data?.launchMode || "",
 				startUrl: data?.startUrl || "",
+				reused: data?.reused === true,
 				elapsedMs: Date.now() - t0,
 			});
 			res.json({ ok: true, data });
@@ -794,6 +827,223 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			if (runtimeForCleanup?.page) {
 				await clearPickedMarker(runtimeForCleanup.page, pickAttrKey, pickToken);
 			}
+		}
+	});
+
+	router.post("/api/builder/session/:id/query-selector", async (req, res) => {
+		const t0 = Date.now();
+		const sessionId = asText(req.params.id);
+		try {
+			const body = toObject(req.body, {});
+			const contextId = asText(body.contextId || "");
+			const actionType = asText(body.actionType || "click").toLowerCase();
+			const query = asText(body.query || "");
+			if (!query) throw new Error("query is required");
+			const mgr = getMgr();
+			if (contextId) {
+				try { mgr.selectContext(sessionId, contextId); } catch (_) {}
+			}
+			const runtime = getActivePageRuntime(mgr, sessionId);
+			if (contextId && runtime.activeContextId !== contextId) {
+				throw new Error(`context not active: ${contextId}`);
+			}
+			runtime.webRpa.setCurrentPage(runtime.page);
+			try { await runtime.webRpa.browser?.activate?.(); } catch (_) {}
+			try { await runtime.page?.bringToFront?.({ focusBrowser: true }); } catch (_) {}
+
+			const tipId = `__builder_query_ai_${Date.now()}__`;
+			await showTipSafe(runtime.webRpa, runtime.page, "AI 正在根据 query 生成 selector，请稍候...", tipId);
+			let ai = null;
+			try {
+				const logger = await getBuilderLogger();
+				ai = await resolveSelectorByAI({
+					query,
+					webRpa: runtime.webRpa,
+					page: runtime.page,
+					session: runtime.session,
+					expectedMulti: false,
+					logger,
+				});
+			} finally {
+				await dismissTipSafe(runtime.webRpa, runtime.page, tipId);
+			}
+			const cands = Array.isArray(ai?.selectors) ? ai.selectors.map((x) => asText(x)).filter(Boolean) : [];
+			let selector = "";
+			let matchedCount = 0;
+			const checks = [];
+			for (let i = 0; i < cands.length; i += 1) {
+				const cand = cands[i];
+				const cc = await countSelectorMatches(runtime.page, cand);
+				checks.push({ selector: cand, ok: !!cc?.ok, count: Number(cc?.count || 0), reason: asText(cc?.reason || "") });
+				if (cc?.ok && Number(cc?.count || 0) > 0) {
+					selector = cand;
+					matchedCount = Number(cc.count || 0);
+					break;
+				}
+			}
+			if (!selector) {
+				const reason = asText(ai?.reason || "") || "AI 未返回可用 selector";
+				throw new Error(reason);
+			}
+			await showTipSafe(runtime.webRpa, runtime.page, `已生成 selector（匹配 ${matchedCount} 个元素）`);
+			await trySwitchBackToBuilderApp(runtime);
+			const elapsedMs = Date.now() - t0;
+			await logBuilder("info", "selector.query.done", {
+				sessionId,
+				contextId: runtime.activeContextId,
+				actionType,
+				query,
+				selector,
+				matchedCount,
+				candidates: cands.length,
+				elapsedMs,
+			});
+			res.json({
+				ok: true,
+				data: {
+					sessionId,
+					contextId: runtime.activeContextId,
+					actionType,
+					query,
+					selector,
+					matchedCount,
+					aiUsed: true,
+					aiReason: asText(ai?.reason || ""),
+					aiQuery: asText(ai?.query || ""),
+					candidates: cands,
+					checks,
+				},
+			});
+		} catch (err) {
+			await logBuilder("error", "selector.query.error", {
+				sessionId,
+				reason: asText(err?.message || err),
+				elapsedMs: Date.now() - t0,
+			});
+			fail(res, 400, err?.message || err);
+		}
+	});
+
+	router.post("/api/builder/session/:id/run-js-generate", async (req, res) => {
+		const t0 = Date.now();
+		const sessionId = asText(req.params.id);
+		try {
+			const body = toObject(req.body, {});
+			const contextId = asText(body.contextId || "");
+			const query = asText(body.query || "");
+			const scope = asText(body.scope || "page").toLowerCase() === "agent" ? "agent" : "page";
+			const argsArr = Array.isArray(body.args) ? body.args : [];
+			const cacheEnabled = !(body.cache === false);
+			if (!query) throw new Error("query is required");
+			await logBuilder("info", "run_js.generate.begin", {
+				sessionId,
+				contextId,
+				scope,
+				cacheEnabled,
+				argsCount: argsArr.length,
+				queryPreview: query.slice(0, 180),
+			});
+			const mgr = getMgr();
+			if (contextId) {
+				try { mgr.selectContext(sessionId, contextId); } catch (_) {}
+			}
+			const runtime = getActivePageRuntime(mgr, sessionId);
+			if (contextId && runtime.activeContextId !== contextId) {
+				throw new Error(`context not active: ${contextId}`);
+			}
+			runtime.webRpa.setCurrentPage(runtime.page);
+			try { await runtime.webRpa.browser?.activate?.(); } catch (_) {}
+			try { await runtime.page?.bringToFront?.({ focusBrowser: true }); } catch (_) {}
+
+			const { resolveRunJsCode } = await import("../rpaflows/FlowRunJsResolver.mjs");
+			const verifyInput = (argsArr[0] && typeof argsArr[0] === "object" && !Array.isArray(argsArr[0])) ? argsArr[0] : {};
+			const cacheKey = cacheEnabled
+				? `builder_${sessionId}_${runtime.activeContextId || "ctx"}_run_js`
+				: `builder_${sessionId}_${runtime.activeContextId || "ctx"}_run_js_nocache_${Date.now()}`;
+			const logger = await getBuilderLogger();
+			const tr = Date.now();
+			const codeResolved = await resolveRunJsCode({
+				cacheKey,
+				query,
+				verifyInput,
+				webRpa: runtime.webRpa,
+				page: runtime.page,
+				session: runtime.session,
+				scope,
+				aiOptions: {},
+				logger,
+			});
+			await logBuilder("info", "run_js.generate.resolved", {
+				sessionId,
+				contextId: runtime.activeContextId,
+				scope,
+				cacheEnabled,
+				cacheKey,
+				status: asText(codeResolved?.status || "failed"),
+				fromCache: !!codeResolved?.value?.fromCache,
+				model: asText(codeResolved?.value?.model || ""),
+				elapsedMs: Date.now() - tr,
+			});
+			if (!codeResolved || codeResolved.status !== "done") {
+				throw new Error(asText(codeResolved?.reason || "run_js code resolve failed"));
+			}
+			const code = asText(codeResolved?.value?.code || "");
+			if (!code) throw new Error("AI 未返回 run_js.code");
+			const runRet = await execRunJsAction({
+				type: "run_js",
+				code,
+				scope,
+				args: argsArr,
+			}, {
+				args: {},
+				opts: {},
+				vars: {},
+				result: {},
+				parseVal: parseFlowVal,
+				pageEval: async (codeStr, callArgs) => {
+					return runtime.page.callFunction(codeStr, callArgs, { awaitPromise: true });
+				},
+			});
+			await logBuilder("info", "run_js.generate.exec", {
+				sessionId,
+				contextId: runtime.activeContextId,
+				runStatus: asText(runRet?.status || "failed"),
+				runReason: asText(runRet?.reason || ""),
+				codeChars: code.length,
+			});
+			await trySwitchBackToBuilderApp(runtime);
+			const elapsedMs = Date.now() - t0;
+			await logBuilder("info", "run_js.generate.done", {
+				sessionId,
+				contextId: runtime.activeContextId,
+				scope,
+				query: query.slice(0, 160),
+				cacheEnabled,
+				codeFromCache: !!codeResolved?.value?.fromCache,
+				runStatus: asText(runRet?.status || "failed"),
+				elapsedMs,
+			});
+			res.json({
+				ok: true,
+				data: {
+					sessionId,
+					contextId: runtime.activeContextId,
+					scope,
+					query,
+					cacheEnabled,
+					code,
+					codeFromCache: !!codeResolved?.value?.fromCache,
+					model: asText(codeResolved?.value?.model || ""),
+					runResult: runRet || { status: "failed", reason: "empty run result" },
+				},
+			});
+		} catch (err) {
+			await logBuilder("error", "run_js.generate.error", {
+				sessionId,
+				reason: asText(err?.message || err),
+				elapsedMs: Date.now() - t0,
+			});
+			fail(res, 400, err?.message || err);
 		}
 	});
 

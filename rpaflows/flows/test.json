@@ -1,0 +1,48 @@
+{
+  "flow": {
+    "id": "flow_builder_demo",
+    "start": "step_1",
+    "args": {},
+    "steps": [
+      {
+        "id": "step_1",
+        "action": {
+          "type": "goto",
+          "url": "https://www.weibo.com"
+        },
+        "next": {
+          "done": "done_1",
+          "failed": "abort_1"
+        }
+      },
+      {
+        "id": "done_1",
+        "action": {
+          "type": "done",
+          "conclusion": "ok"
+        },
+        "next": {
+          "done": "step_2"
+        }
+      },
+      {
+        "id": "abort_1",
+        "action": {
+          "type": "abort",
+          "reason": "failed"
+        },
+        "next": {}
+      },
+      {
+        "id": "step_2",
+        "action": {
+          "type": "run_js",
+          "code": "function() \n  var items = [];\n  var articles = document.querySelectorAll('article[class*=\"_wrap_m3n8j\"]');\n  articles.forEach(function(article) {\n    var textEl = article.querySelector('div[class*=\"_wbtext_\"]');\n    var text = textEl ? textEl.textContent.trim() : '';\n    if (text) {\n      items.push(text);\n    }\n  });\n  return items;\n}",
+          "query": "找到并返回当前列出的微博项目文本内容文本数组",
+          "scope": "page"
+        },
+        "next": {}
+      }
+    ]
+  }
+}

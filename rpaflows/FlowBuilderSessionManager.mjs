@@ -28,7 +28,7 @@ function safeErr(err) {
 class FlowBuilderSessionManager {
 	constructor(options = {}) {
 		this.options = {
-			maxSessions: asPosInt(options.maxSessions ?? process.env.FLOW_BUILDER_MAX_SESSIONS, 3, 1),
+			maxSessions: asPosInt(options.maxSessions ?? process.env.FLOW_BUILDER_MAX_SESSIONS, 5, 1),
 			idleTimeoutMs: asPosInt(options.idleTimeoutMs ?? process.env.FLOW_BUILDER_IDLE_TIMEOUT_MS, 30 * 60 * 1000, 30_000),
 			cleanupIntervalMs: asPosInt(options.cleanupIntervalMs ?? process.env.FLOW_BUILDER_CLEANUP_INTERVAL_MS, 60 * 1000, 10_000),
 			defaultAlias: asText(options.defaultAlias || process.env.FLOW_BUILDER_ALIAS || "flow_builder"),
@@ -72,14 +72,30 @@ class FlowBuilderSessionManager {
 	}
 
 	async startSession({ alias = "", launchMode = "", startUrl = "" } = {}) {
+		const useAlias = asText(alias) || this.options.defaultAlias;
+		const useLaunchMode = asText(launchMode) || this.options.defaultLaunchMode;
+		const useStartUrl = asText(startUrl) || this.options.defaultStartUrl;
+
+		// Default behavior: reuse an existing ready/starting session with the same alias.
+		// This avoids creating duplicate builder sessions on refresh or repeated clicks.
+		let reused = null;
+		for (const s of this.sessions.values()) {
+			if (asText(s.alias) !== useAlias) continue;
+			if (s.status !== "ready" && s.status !== "starting") continue;
+			if (!reused || Number(s.createdAt || 0) > Number(reused.createdAt || 0)) {
+				reused = s;
+			}
+		}
+		if (reused) {
+			this._touch(reused);
+			return { ...this._toSummary(reused), reused: true };
+		}
+
 		await this.cleanupExpiredSessions();
 		if (this.sessions.size >= this.options.maxSessions) {
 			throw new Error(`too many sessions (max=${this.options.maxSessions})`);
 		}
 		const sid = buildSessionId();
-		const useAlias = asText(alias) || this.options.defaultAlias;
-		const useLaunchMode = asText(launchMode) || this.options.defaultLaunchMode;
-		const useStartUrl = asText(startUrl) || this.options.defaultStartUrl;
 
 		const session = {
 			id: sid,
@@ -121,7 +137,7 @@ class FlowBuilderSessionManager {
 			session.activeContextId = asText(page?.context || "");
 			session.status = "ready";
 			this._touch(session);
-			return this._toSummary(session);
+			return { ...this._toSummary(session), reused: false };
 		} catch (err) {
 			session.status = "error";
 			session.error = safeErr(err);

@@ -5,6 +5,7 @@
 > - 新增 `ask_assist` 持久化参数：`persistAcrossNav` / `persistTtlMs` / `reopenDelayMs` / `tipPollMs` / `tipTimeoutMs`，用于 in-page prompt/tip 在页面跳转/刷新后自动恢复（见 6.1.5 与 Action Union）
 > - 新增 `invoke.fork`：支持在子执行时 fork 隔离页面上下文（`false` 旧行为；`true` 复用当前页 fork；`string` 表示先打开该 URL 再 fork 执行，见 8.1）
 > - 新增 `invokeMany`：通用批量子调用动作（支持并发、每项模板参数、每项 fork、结果聚合），用于替代专用 batch action（见 8.1.2）
+> - `goto` 新增 `newPage?: boolean`：当为 true 时，先创建新 tab/page，再在新页执行导航（默认 false）
 > - 变更：取消 `next: { router:"routerId" }`（Flow 不再暗含 RouterMap 依赖）；保留 `next: { router: Function }` 作为动态路由兜底，并要求显式 `unsafe:true`，且 router 必须只读/无副作用（见 4.3）
 > - 变更：QuerySpec 在 kind="selector" 时，`policy` 默认从 `"single"` 调整为 `"pool"`（更符合“多候选试探”的默认策略）
 > - 新增 `readElement`：读取当前页面中元素的单一材料（text/value/html/rect/attr:\*），支持 `multi`
@@ -1174,7 +1175,8 @@ type ActionBase = {
 
 type Action = ActionBase & (
   // 打开指定 URL（url 支持插值：`${path}` 或 `${{ ... }}`；例如 `${targetUrl}`）
-  | { type: "goto"; url: string }
+  // newPage=true 时：先创建新 tab/page，再在新页执行 goto（默认 false）
+  | { type: "goto"; url: string; newPage?: boolean }
 
   // 参数分支（仅根据 call.args 路由；不触碰页面）
   | BranchAction

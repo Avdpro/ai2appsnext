@@ -272,6 +272,10 @@ function codeDigest(code) {
 async function showAiBusyTip({ webRpa, page, tipId, text, logger = null }) {
 	try {
 		if (!webRpa || !page || typeof webRpa.inPageTip !== "function") return null;
+		await logger?.debug("run_js.ui.tip.show", {
+			tipId: String(tipId || "__flow_ai_run_js_busy__"),
+			text: String(text || "").slice(0, 120),
+		});
 		const ret = await webRpa.inPageTip(page, String(text || "AI 正在生成页面读取代码，请稍候…"), {
 			id: String(tipId || "__flow_ai_run_js_busy__"),
 			position: "top",
@@ -293,6 +297,7 @@ async function dismissAiBusyTip({ webRpa, page, tipId, logger = null }) {
 	try {
 		if (!tipId) return;
 		if (!webRpa || !page || typeof webRpa.inPageTipDismiss !== "function") return;
+		await logger?.debug("run_js.ui.tip.dismiss", { tipId: String(tipId || "") });
 		await webRpa.inPageTipDismiss(page, String(tipId));
 	} catch (e) {
 		await logger?.debug("ui.tip.dismiss_failed", { reason: e?.message || "unknown", tipId: String(tipId || "") });
@@ -508,6 +513,9 @@ function normalizeVerifyDecision(obj) {
 function classifyExecutionFailure(reason) {
 	const s = String(reason || "").toLowerCase();
 	if (!s) return { errorType: "execution_failed", failedStep: "runtime" };
+	if (s.includes("not connected to webdriver bidi")) {
+		return { errorType: "bidi_disconnected", failedStep: "runtime_connection" };
+	}
 	if (s.includes("not a valid selector") || s.includes("failed to execute 'queryselector'")) {
 		return { errorType: "selector_invalid", failedStep: "selector_compile" };
 	}
@@ -655,11 +663,26 @@ async function generateRunJsCodeByAI({ query, verifyInput = null, webRpa = null,
 	try { title = await page.title(); } catch (_) {}
 	const feedback = [];
 	const feedbackKeep = 3;
+	await logger?.info("run_js.ai.generate.begin", {
+		scope,
+		profile,
+		verifyMaxCycles: cfg.verifyMaxCycles,
+		retryMax: cfg.retryMax,
+		model,
+		fallbackModel,
+		providerFallback,
+		queryPreview: String(query || "").slice(0, 180),
+	});
 	for (let cycle = 0; cycle < cfg.verifyMaxCycles; cycle++) {
+		const cycleNo = cycle + 1;
+		const cycleStart = Date.now();
+		await logger?.info("run_js.ai.cycle.begin", { cycle: cycleNo, total: cfg.verifyMaxCycles, feedbackCount: feedback.length });
 		// Always use current-round page html; never carry old html through retries/cycles.
 		const html = await readPageHtmlForAI({ webRpa, page, logger, maxLen: cfg.htmlMaxLen });
 		if (typeof onProgressTip === "function") {
-			await onProgressTip(buildRunJsTipText(cycle, cfg.verifyMaxCycles));
+			const tipText = buildRunJsTipText(cycle, cfg.verifyMaxCycles);
+			await logger?.debug("run_js.ai.cycle.tip", { cycle: cycleNo, text: String(tipText || "").slice(0, 120) });
+			await onProgressTip(tipText);
 		}
 		const payload = buildUserPayload({
 			query,
@@ -687,6 +710,11 @@ async function generateRunJsCodeByAI({ query, verifyInput = null, webRpa = null,
 			else return { ok: false, reason: `primary(${cfg.provider}/${model}) failed: ${first.reason}; provider-fallback(${providerFallback}/${model2}) failed: ${xb.reason}` };
 		}
 		if (!gen.ok) return { ok: false, reason: gen.reason || "invalid run_js code" };
+		await logger?.info("run_js.ai.cycle.generated", {
+			cycle: cycleNo,
+			model: gen.model || null,
+			codeChars: String(gen.code || "").length,
+		});
 		const codeLog = await logCandidateCode({
 			cfg,
 			logger,
@@ -698,13 +726,23 @@ async function generateRunJsCodeByAI({ query, verifyInput = null, webRpa = null,
 		const codeRef = codeLog?.digest ? `code#${codeLog.digest}` : "code#unknown";
 
 		const shouldVerify = cfg.verifyEnabled && scope === "page" && (profile !== "comments" || cfg.verifyCommentsEnabled);
+		await logger?.debug("run_js.ai.cycle.verify.plan", { cycle: cycleNo, shouldVerify, scope, verifyEnabled: cfg.verifyEnabled });
 		if (!shouldVerify) {
+			await logger?.info("run_js.ai.cycle.end", { cycle: cycleNo, decision: "accept_without_verify", elapsedMs: Date.now() - cycleStart });
 			return gen;
 		}
 		const execOut = await executeRunJsCandidateOnPage({ page, code: gen.code, taskQuery: query, verifyInput, profile });
 		if (!execOut.ok) {
 			const reason = `execution failed: ${execOut.reason || "unknown"}`;
 			await logger?.warn("run_js.ai.verify_exec_failed", { reason, cycle: cycle + 1, model: gen.model || null, candidate: codeRef });
+			if (/not connected to webdriver bidi/i.test(String(execOut.reason || ""))) {
+				await logger?.error("run_js.ai.verify_exec_fatal", {
+					cycle: cycle + 1,
+					reason,
+					candidate: codeRef,
+				});
+				return { ok: false, reason: "WebDriver BiDi connection lost while verifying run_js code" };
+			}
 			const cls = classifyExecutionFailure(execOut.reason || reason);
 			pushFeedbackLimited(feedback, {
 				error_type: cls.errorType,
@@ -718,6 +756,7 @@ async function generateRunJsCodeByAI({ query, verifyInput = null, webRpa = null,
 				evidence: [String(execOut.reason || "").slice(0, 260)].filter(Boolean),
 				candidate: codeRef,
 			}, feedbackKeep);
+			await logger?.info("run_js.ai.cycle.end", { cycle: cycleNo, decision: "exec_failed_retry", elapsedMs: Date.now() - cycleStart });
 			continue;
 		}
 		const verify = await verifyRunJsCandidateByAI({
@@ -734,10 +773,12 @@ async function generateRunJsCodeByAI({ query, verifyInput = null, webRpa = null,
 			const reason = verify.reason || "verify model failed";
 			await logger?.warn("run_js.ai.verify_failed", { reason, cycle: cycle + 1, model: verify.model || null, candidate: codeRef });
 			pushFeedbackLimited(feedback, { type: "verify_model_failed", message: reason }, feedbackKeep);
+			await logger?.info("run_js.ai.cycle.end", { cycle: cycleNo, decision: "verify_model_failed_retry", elapsedMs: Date.now() - cycleStart });
 			continue;
 		}
 		if (verify.decision.ok) {
 			await logger?.info("run_js.ai.verify_pass", { cycle: cycle + 1, model: verify.model || null, candidate: codeRef });
+			await logger?.info("run_js.ai.cycle.end", { cycle: cycleNo, decision: "verify_pass", elapsedMs: Date.now() - cycleStart });
 			return gen;
 		}
 		const issues = Array.isArray(verify.decision.issues) ? verify.decision.issues : [];
@@ -780,13 +821,21 @@ async function generateRunJsCodeByAI({ query, verifyInput = null, webRpa = null,
 			resultPreview: safeJson(execOut.result, 1200),
 			candidate: codeRef,
 		}, feedbackKeep);
+		await logger?.info("run_js.ai.cycle.end", { cycle: cycleNo, decision: "verify_rejected_retry", elapsedMs: Date.now() - cycleStart });
 	}
+	await logger?.warn("run_js.ai.generate.exhausted", { verifyMaxCycles: cfg.verifyMaxCycles });
 	return { ok: false, reason: "run_js verification rejected all generated candidates" };
 }
 
 async function resolveRunJsCode({ cacheKey, query, verifyInput = null, webRpa = null, page, session = null, scope = "page", logger = null, aiOptions = null }) {
 	const key = String(cacheKey || "").trim();
 	if (!key) return { status: "failed", reason: "run_js cacheKey required" };
+	const t0 = Date.now();
+	await logger?.info("run_js.resolve.begin", {
+		cacheKey: key,
+		scope: scope === "agent" ? "agent" : "page",
+		queryPreview: String(query || "").slice(0, 180),
+	});
 	const cfg = pickAIConfig(aiOptions);
 	let pageScope = "";
 	try { pageScope = normalizeUrlForCache(await page.url()); } catch (_) {}
@@ -832,6 +881,7 @@ async function resolveRunJsCode({ cacheKey, query, verifyInput = null, webRpa = 
 					}
 				} else {
 					await logger?.info("run_js.cache.hit", { cacheKey: key });
+					await logger?.info("run_js.resolve.done", { cacheKey: key, fromCache: true, elapsedMs: Date.now() - t0 });
 					return { status: "done", value: { code: rr.code, fromCache: true } };
 				}
 			}
@@ -875,7 +925,10 @@ async function resolveRunJsCode({ cacheKey, query, verifyInput = null, webRpa = 
 	} finally {
 		await dismissAiBusyTip({ webRpa, page, tipId, logger });
 	}
-	if (!genResult.ok) return { status: "failed", reason: genResult.reason || "run_js ai generate failed" };
+	if (!genResult.ok) {
+		await logger?.warn("run_js.resolve.failed", { cacheKey: key, reason: genResult.reason || "run_js ai generate failed", elapsedMs: Date.now() - t0 });
+		return { status: "failed", reason: genResult.reason || "run_js ai generate failed" };
+	}
 
 	if (ctx) {
 		try {
@@ -885,6 +938,7 @@ async function resolveRunJsCode({ cacheKey, query, verifyInput = null, webRpa = 
 		}
 	}
 	await logger?.info("run_js.ai.generated", { cacheKey: key, model: genResult.model || null });
+	await logger?.info("run_js.resolve.done", { cacheKey: key, fromCache: false, model: genResult.model || null, elapsedMs: Date.now() - t0 });
 	return { status: "done", value: { code: genResult.code, fromCache: false, model: genResult.model || null } };
 }
 

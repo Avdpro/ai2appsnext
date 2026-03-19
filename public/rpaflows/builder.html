@@ -325,7 +325,7 @@
     }
 
     .field-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
-    .field-row { display: block; }
+    .field-row { display: block; min-width: 0; }
     .field-row.hidden { display: none; }
     .input-with-btn {
       display: grid;
@@ -518,6 +518,135 @@
     .picker-hint {
       color: var(--sub);
       font-size: 12px;
+    }
+    .runjs-preview-pre {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+      color: #132033;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.42;
+      padding: 9px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 42vh;
+      overflow: auto;
+    }
+    .code-editor-wrap {
+      position: relative;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+      overflow: hidden;
+    }
+    .code-editor-hl,
+    .code-editor-ta {
+      margin: 0;
+      width: calc(100% - 48px);
+      max-width: calc(100% - 48px);
+      min-height: 180px;
+      max-height: 380px;
+      overflow: auto;
+      box-sizing: border-box;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 10px 11px;
+      tab-size: 2;
+      white-space: pre;
+    }
+    .code-editor-ln {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 48px;
+      margin: 0;
+      padding: 10px 6px 10px 4px;
+      box-sizing: border-box;
+      border-right: 1px solid #d7e0ee;
+      background: #f3f7ff;
+      color: #64748b;
+      text-align: right;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 4;
+    }
+    .code-editor-mark {
+      position: absolute;
+      display: none;
+      left: 59px;
+      right: 11px;
+      height: 18px;
+      border-radius: 4px;
+      background: rgba(220, 38, 38, 0.16);
+      box-shadow: inset 3px 0 0 rgba(220, 38, 38, 0.78);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .code-editor-hl {
+      pointer-events: none;
+      color: #132033;
+      background: transparent;
+      position: relative;
+      margin-left: 48px;
+      z-index: 2;
+    }
+    .code-editor-ta {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 48px;
+      border: 0;
+      border-radius: 0;
+      resize: vertical;
+      color: transparent;
+      caret-color: #132033;
+      background: transparent;
+      z-index: 3;
+    }
+    .code-editor-hl .tok-com { color: #6b7280; }
+    .code-editor-hl .tok-str { color: #0b7a3f; }
+    .code-editor-hl .tok-num { color: #9f1f59; }
+    .code-editor-hl .tok-key { color: #1d4ed8; }
+    .code-editor-hl .tok-id { color: #6d28d9; }
+    .code-editor-hl .tok-op { color: #334155; }
+    .btn.tip-show {
+      position: relative;
+      overflow: visible;
+    }
+    .btn.tip-show::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      white-space: nowrap;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 12px;
+      line-height: 1.25;
+      border: 1px solid transparent;
+      z-index: 20;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
+    }
+    .btn.tip-show.tip-ok::after {
+      background: #e7f9ef;
+      border-color: #8ad3ae;
+      color: #0b6c3f;
+    }
+    .btn.tip-show.tip-err::after {
+      background: #feecec;
+      border-color: #f4aaaa;
+      color: #b31f1f;
     }
 
     pre {
@@ -767,6 +896,7 @@
                 <option>scroll</option>
                 <option>invoke</option>
                 <option>run_js</option>
+                <option>run_ai</option>
                 <option>branch</option>
                 <option>ask_assist</option>
                 <option>done</option>
@@ -784,8 +914,17 @@
                 <button class="btn secondary" id="confirmPickBtn" type="button">选中确认</button>
               </div>
             </div>
-            <div class="field-row" data-types="click,input,hover"><label>query</label><input id="fQuery" placeholder="可见的搜索框"></div>
+            <div class="field-row" data-types="click,input,hover">
+              <label>query</label>
+              <div class="input-with-btn">
+                <input id="fQuery" placeholder="可见的搜索框">
+                <button class="btn secondary" id="genByFromQueryBtn" type="button">AI 生成 by</button>
+              </div>
+            </div>
             <div class="field-row" data-types="goto"><label>url</label><input id="fUrl" placeholder="https://..."></div>
+            <div class="field-row" data-types="goto">
+              <label class="checkbox-inline"><input id="fGotoNewPage" type="checkbox"><span>newPage（先新开 tab 再导航）</span></label>
+            </div>
             <div class="field-row" data-types="input,done,abort,ask_assist"><label>text / conclusion / reason</label><textarea id="fText"></textarea></div>
 
             <div class="field-row" data-types="press_key"><label>key</label><input id="fKey" placeholder="Enter"></div>
@@ -833,10 +972,72 @@
               <textarea id="fInvokeArgs">{}</textarea>
             </div>
 
-            <div class="field-row" data-types="run_js"><label>run_js.code</label><textarea id="fRunJsCode"></textarea></div>
-            <div class="field-row" data-types="run_js"><label>run_js.query</label><input id="fRunJsQuery"></div>
-            <div class="field-row" data-types="run_js"><label>run_js.args JSON(Array)</label><textarea id="fRunJsArgs">[]</textarea></div>
+            <div class="field-row" data-types="run_js">
+              <label>run_js.code</label>
+              <div class="row" style="margin-bottom:6px;">
+                <button class="btn secondary" id="formatRunJsCodeBtn" type="button">排版美化(Tab缩进)</button>
+                <button class="btn secondary" id="checkRunJsCodeBtn" type="button">语法检查</button>
+              </div>
+              <div class="code-editor-wrap">
+                <pre id="fRunJsCodeLn" class="code-editor-ln" aria-hidden="true">1</pre>
+                <div id="fRunJsCodeErr" class="code-editor-mark" aria-hidden="true"></div>
+                <pre id="fRunJsCodeHl" class="code-editor-hl"></pre>
+                <textarea id="fRunJsCode" class="code-editor-ta"></textarea>
+              </div>
+            </div>
+            <div class="field-row" data-types="run_js">
+              <label>run_js.query</label>
+              <textarea id="fRunJsQuery" placeholder="描述要生成的函数逻辑、参数约束、返回结构"></textarea>
+              <div class="row" style="margin-top:6px;">
+                <button class="btn secondary" id="genRunJsCodeBtn" type="button">AI 生成并试跑</button>
+              </div>
+            </div>
+            <div class="field-row" data-types="run_ai">
+              <label>run_ai.prompt</label>
+              <textarea id="fRunAiPrompt" placeholder="描述你希望 AI 完成的任务（例如：提取列表并按 schema 返回）"></textarea>
+            </div>
+            <div class="field-row" data-types="run_ai">
+              <label>run_ai.input（JSON 或纯文本）</label>
+              <textarea id="fRunAiInput" placeholder="可留空；JSON 会自动解析，非 JSON 按字符串处理"></textarea>
+            </div>
+            <div class="field-row" data-types="run_ai">
+              <label>run_ai.schema（JSON Object，可选）</label>
+              <textarea id="fRunAiSchema" placeholder='例如：{"type":"object","properties":{"items":{"type":"array"}}}'></textarea>
+            </div>
+            <div class="field-row" data-types="run_ai">
+              <label>run_ai.model</label>
+              <select id="fRunAiModel">
+                <option value="">(默认)</option>
+                <option value="fast">fast</option>
+                <option value="balanced">balanced</option>
+                <option value="quality">quality</option>
+                <option value="vision">vision</option>
+                <option value="free">free</option>
+              </select>
+            </div>
+            <div class="field-row" data-types="run_ai">
+              <label>run_ai.page 注入材料</label>
+              <div class="row" style="gap:10px; flex-wrap:wrap;">
+                <label class="checkbox-inline"><input id="fRunAiPageUrl" type="checkbox"><span>url</span></label>
+                <label class="checkbox-inline"><input id="fRunAiPageHtml" type="checkbox"><span>html</span></label>
+                <label class="checkbox-inline"><input id="fRunAiPageScreenshot" type="checkbox"><span>screenshot</span></label>
+                <label class="checkbox-inline"><input id="fRunAiPageArticle" type="checkbox"><span>article</span></label>
+                <button class="btn secondary" id="runAiPagePresetBtn" type="button">常用：url+html</button>
+              </div>
+            </div>
+            <div class="field-row" data-types="run_js">
+              <label>run_js.args（结构化）</label>
+              <div id="fRunJsArgsBox" class="kv-list"></div>
+              <div class="row" style="margin-top:6px;">
+                <button class="btn secondary" id="addRunJsArgBtn" type="button">+ 添加参数</button>
+              </div>
+              <label style="margin-top:8px;">run_js.args JSON(Array)（高级）</label>
+              <textarea id="fRunJsArgs">[]</textarea>
+            </div>
             <div class="field-row" data-types="run_js"><label>run_js.scope</label><select id="fRunJsScope"><option>page</option><option>agent</option></select></div>
+            <div class="field-row" data-types="run_js">
+              <label class="checkbox-inline"><input id="fRunJsCache" type="checkbox"><span>run_js.cache（query 模式可缓存 AI 生成代码）</span></label>
+            </div>
 
             <div class="field-row" data-types="branch"><label>branch.default</label><select id="fBranchDefault"></select></div>
             <div class="field-row" data-types="branch">
@@ -853,6 +1054,7 @@
           <div class="section" style="margin-top:10px; margin-bottom:0; background:#fff;">
             <label>Step Meta</label>
             <div class="field-grid" style="margin-top:6px;">
+              <div><label>postWaitMs（动作成功后稳定等待）</label><input id="fPostWaitMs" placeholder="例如：200"></div>
               <div><label>step.desc（可选）</label><input id="stepDescInput" placeholder="步骤说明，用于可读性"></div>
               <div><label>step.saveAs（可选，字符串或 JSON）</label><input id="stepSaveAsInput" class="mono" placeholder="例如：searchCtx 或 {\"query\":\"result.query\"}"></div>
             </div>
@@ -882,6 +1084,10 @@
           <div class="section" style="margin-top:10px; margin-bottom:0; background:#fff;">
             <label>本次执行结果</label>
             <pre id="actionRunResultPre">尚未执行步骤</pre>
+          </div>
+          <div class="section" id="runJsResultBox" style="margin-top:10px; margin-bottom:0; background:#fff; display:none;">
+            <label>run_js 调试摘要</label>
+            <pre id="runJsResultPre">暂无 run_js 结果</pre>
           </div>
         </div>
       </div>
@@ -924,6 +1130,20 @@
       </div>
     </div>
   </div>
+  <div id="runJsPreviewMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="runJsPreviewTitle">
+      <div class="row" style="justify-content:space-between;">
+        <h3 id="runJsPreviewTitle" class="picker-title">run_js 试跑结果确认</h3>
+        <button class="btn secondary" id="runJsPreviewCloseBtn" type="button">关闭</button>
+      </div>
+      <div id="runJsPreviewHint" class="picker-hint">请确认试跑结果是否符合预期，确认后会回填 code。</div>
+      <pre id="runJsPreviewPre" class="runjs-preview-pre">暂无数据</pre>
+      <div class="row" style="justify-content:flex-end;">
+        <button class="btn danger" id="runJsPreviewRejectBtn" type="button">不采用</button>
+        <button class="btn ok" id="runJsPreviewAcceptBtn" type="button">确认并回填</button>
+      </div>
+    </div>
+  </div>
   <datalist id="stepIdOptions"></datalist>
   <datalist id="invokeArgKeyOptions"></datalist>
 
@@ -946,9 +1166,12 @@
       invokeKeyPickerTargetId: "",
       invokeKeyPickerFilterKind: "all",
       invokeKeyPickerSelected: new Set(),
+      runJsPreviewPending: null,
+      runJsPreviewResolver: null,
+      runJsSyntaxErrorLine: 0,
     };
 
-    const actionTypes = ["goto","click","hover","input","press_key","wait","scroll","invoke","run_js","branch","ask_assist","done","abort"];
+    const actionTypes = ["goto","click","hover","input","press_key","wait","scroll","invoke","run_js","run_ai","branch","ask_assist","done","abort"];
     let graphPanning = false;
     let graphPanStartX = 0;
     let graphPanStartY = 0;
@@ -981,12 +1204,340 @@
     }
 
     function setStatus(text) { $("status").textContent = String(text || ""); }
+    function showButtonTip(btn, text, tone = "ok") {
+      if (!btn) return;
+      if (btn._tipTimer) {
+        clearTimeout(btn._tipTimer);
+        btn._tipTimer = 0;
+      }
+      btn.dataset.tip = String(text || "");
+      btn.classList.add("tip-show");
+      btn.classList.toggle("tip-ok", tone === "ok");
+      btn.classList.toggle("tip-err", tone === "err");
+      btn._tipTimer = setTimeout(() => {
+        btn.classList.remove("tip-show", "tip-ok", "tip-err");
+        delete btn.dataset.tip;
+        btn._tipTimer = 0;
+      }, 1200);
+    }
     function setOutput(data, opts = {}) {
       $("outputPre").textContent = (typeof data === "string") ? data : JSON.stringify(data, null, 2);
       if (opts && opts.toLog === true) activateTab("right", "right-log");
     }
     function setActionRunResult(data) {
       $("actionRunResultPre").textContent = (typeof data === "string") ? data : JSON.stringify(data, null, 2);
+      const box = $("runJsResultBox");
+      const pre = $("runJsResultPre");
+      if (!box || !pre) return;
+      const debug = extractRunJsDebugPayload(data);
+      if (!debug) {
+        box.style.display = "none";
+        pre.textContent = "暂无 run_js 结果";
+        return;
+      }
+      box.style.display = "";
+      pre.textContent = JSON.stringify(debug, null, 2);
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function highlightRunJsCode(src) {
+      const s = String(src || "");
+      const re = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:function|return|const|let|var|if|else|for|while|try|catch|finally|throw|new|await|async|true|false|null|undefined)\b|\b\d+(?:\.\d+)?\b|=>|===|!==|==|!=|<=|>=|&&|\|\||[+\-*\/%=<>!]+/g;
+      let out = "";
+      let last = 0;
+      let m = null;
+      while ((m = re.exec(s))) {
+        const i = m.index;
+        if (i > last) out += escapeHtml(s.slice(last, i));
+        const tok = m[0];
+        let cls = "tok-op";
+        if (/^\/\//.test(tok) || /^\/\*/.test(tok)) cls = "tok-com";
+        else if (/^["'`]/.test(tok)) cls = "tok-str";
+        else if (/^\d/.test(tok)) cls = "tok-num";
+        else if (/^(function|return|const|let|var|if|else|for|while|try|catch|finally|throw|new|await|async|true|false|null|undefined)$/.test(tok)) cls = "tok-key";
+        out += `<span class="${cls}">${escapeHtml(tok)}</span>`;
+        last = i + tok.length;
+      }
+      if (last < s.length) out += escapeHtml(s.slice(last));
+      return out || "&nbsp;";
+    }
+
+    function renderRunJsCodeHighlight() {
+      const ta = $("fRunJsCode");
+      const hl = $("fRunJsCodeHl");
+      const ln = $("fRunJsCodeLn");
+      if (!ta || !hl) return;
+      hl.innerHTML = highlightRunJsCode(ta.value);
+      hl.scrollTop = ta.scrollTop;
+      hl.scrollLeft = ta.scrollLeft;
+      if (ln) {
+        const lines = Math.max(1, String(ta.value || "").split("\n").length);
+        const nums = [];
+        for (let i = 1; i <= lines; i += 1) nums.push(String(i));
+        ln.textContent = nums.join("\n");
+        ln.scrollTop = ta.scrollTop;
+      }
+      syncRunJsSyntaxErrorMark();
+    }
+
+    function syncRunJsSyntaxErrorMark() {
+      const ta = $("fRunJsCode");
+      const mark = $("fRunJsCodeErr");
+      if (!ta || !mark) return;
+      const lineNo = Number(state.runJsSyntaxErrorLine || 0);
+      if (!Number.isFinite(lineNo) || lineNo <= 0) {
+        mark.style.display = "none";
+        return;
+      }
+      const cs = getComputedStyle(ta);
+      const padTop = parseFloat(cs.paddingTop) || 0;
+      let lineHeight = parseFloat(cs.lineHeight);
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+        const fs = parseFloat(cs.fontSize) || 12;
+        lineHeight = fs * 1.5;
+      }
+      const top = padTop + ((lineNo - 1) * lineHeight) - ta.scrollTop;
+      if (top + lineHeight < 0 || top > ta.clientHeight) {
+        mark.style.display = "none";
+        return;
+      }
+      mark.style.display = "block";
+      mark.style.top = `${Math.max(0, top)}px`;
+      mark.style.height = `${lineHeight}px`;
+    }
+
+    function extractSyntaxLocation(err, lineOffset = 0) {
+      const loc = { line: 0, col: 0, found: false };
+      const apply = (lineRaw, colRaw) => {
+        const lineNum = Number(lineRaw || 0);
+        const colNum = Number(colRaw || 0);
+        if (Number.isFinite(lineNum) && lineNum >= 0) {
+          loc.line = Math.max(0, lineNum - Number(lineOffset || 0));
+          loc.found = true;
+          if (Number.isFinite(colNum) && colNum > 0) loc.col = colNum;
+        }
+      };
+      if (err && Number.isFinite(Number(err.lineNumber)) && Number(err.lineNumber) >= 0) {
+        apply(Number(err.lineNumber), Number(err.columnNumber || 0));
+        if (loc.found) return loc;
+      }
+      const stack = String(err?.stack || "");
+      let m = stack.match(/<anonymous>:(\d+):(\d+)/);
+      if (!m) m = stack.match(/Function:(\d+):(\d+)/);
+      if (!m) m = stack.match(/run_js_check\.mjs:(\d+):(\d+)/);
+      if (!m) m = stack.match(/blob:[^\s)\]]+:(\d+):(\d+)/);
+      if (!m) m = stack.match(/\(at [^:)\]]+:(\d+):(\d+)\)/);
+      if (m) {
+        apply(m[1], m[2]);
+        if (loc.found) return loc;
+      }
+      const msg = String(err?.message || "");
+      let mm = msg.match(/run_js_check\.mjs:(\d+):(\d+)/);
+      if (!mm) mm = msg.match(/blob:[^\s)\]]+:(\d+):(\d+)/);
+      if (!mm) mm = msg.match(/\(at [^:)\]]+:(\d+):(\d+)\)/);
+      if (mm) {
+        apply(mm[1], mm[2]);
+        if (loc.found) return loc;
+      }
+      const mLineCol = msg.match(/line\s+(\d+)\s*[:,]\s*(\d+)/i);
+      if (mLineCol) {
+        apply(mLineCol[1], mLineCol[2]);
+        if (loc.line > 0) return loc;
+      }
+      const mLine = msg.match(/line\s+(\d+)/i);
+      if (mLine) {
+        apply(mLine[1], 0);
+      }
+      return loc;
+    }
+
+    function compileRunJsCandidate(code) {
+      const wrapped = [
+        "\"use strict\";",
+        "const __runJsCandidate = (",
+        String(code || ""),
+        ");",
+        "if (typeof __runJsCandidate !== \"function\") throw new Error(\"代码不是函数表达式\");",
+        "return __runJsCandidate;",
+      ].join("\n");
+      return new Function(wrapped)();
+    }
+
+    async function checkRunJsCodeSyntaxByModule(code) {
+      const src = [
+        "const __runJsCandidate = (",
+        String(code || ""),
+        ");",
+        "if (typeof __runJsCandidate !== \"function\") throw new Error(\"代码不是函数表达式\");",
+        "export default __runJsCandidate;",
+        "//# sourceURL=run_js_check.mjs",
+      ].join("\n");
+      const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+      try {
+        await import(`${url}#t=${Date.now()}`);
+        return { ok: true, line: 0, col: 0, hasLine: false };
+      } catch (err) {
+        const loc = extractSyntaxLocation(err, 1);
+        return {
+          ok: false,
+          line: loc.line || 0,
+          col: loc.col || 0,
+          hasLine: loc.found === true,
+          error: String(err?.message || err || "syntax error"),
+        };
+      } finally {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+      }
+    }
+
+    async function checkRunJsCodeSyntaxByWorker(code) {
+      const src = [
+        "\"use strict\";",
+        "const __runJsCandidate = (",
+        String(code || ""),
+        ");",
+        "if (typeof __runJsCandidate !== \"function\") throw new Error(\"代码不是函数表达式\");",
+        "self.postMessage({ ok: true });",
+        "//# sourceURL=run_js_check_worker.js",
+      ].join("\n");
+      const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+      let worker = null;
+      let timer = 0;
+      try {
+        const ret = await new Promise((resolve) => {
+          let done = false;
+          const finish = (data) => {
+            if (done) return;
+            done = true;
+            resolve(data);
+          };
+          worker = new Worker(url);
+          worker.onmessage = () => {
+            finish({ ok: true, line: 0, col: 0, hasLine: false });
+          };
+          worker.onerror = (ev) => {
+            ev.preventDefault();
+            const rawLine = Number(ev?.lineno || 0);
+            const rawCol = Number(ev?.colno || 0);
+            const hasLine = Number.isFinite(rawLine) && rawLine > 0;
+            // Wrapper has 2 lines before user code body starts.
+            const line = hasLine ? Math.max(0, rawLine - 3) : 0;
+            finish({
+              ok: false,
+              line,
+              col: rawCol > 0 ? rawCol : 0,
+              hasLine,
+              error: String(ev?.message || "syntax error"),
+            });
+          };
+          timer = setTimeout(() => {
+            finish({ ok: false, line: 0, col: 0, hasLine: false, error: "syntax check timeout" });
+          }, 2500);
+        });
+        return ret;
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (worker) {
+          try { worker.terminate(); } catch (_) {}
+        }
+        try { URL.revokeObjectURL(url); } catch (_) {}
+      }
+    }
+
+    function beautifyRunJsCodeTabs() {
+      const ta = $("fRunJsCode");
+      if (!ta) return;
+      const lines = String(ta.value || "").split(/\r?\n/);
+      const out = lines.map((line) => {
+        const m = line.match(/^ +/);
+        if (!m) return line.replace(/[ \t]+$/g, "");
+        const spaces = m[0].length;
+        const tabs = Math.floor(spaces / 2);
+        const rest = line.slice(spaces).replace(/[ \t]+$/g, "");
+        return `${"\t".repeat(tabs)}${spaces % 2 ? " " : ""}${rest}`;
+      }).join("\n");
+      ta.value = out;
+      state.actionJsonDirty = false;
+      renderRunJsCodeHighlight();
+      syncActionJsonFromFields(true);
+      setStatus("run_js.code 已按 Tab 缩进美化");
+      showButtonTip($("formatRunJsCodeBtn"), "已完成", "ok");
+    }
+
+    async function checkRunJsCodeSyntax() {
+      const code = String($("fRunJsCode").value || "").trim();
+      if (!code) {
+        state.runJsSyntaxErrorLine = 0;
+        renderRunJsCodeHighlight();
+        setOutput({ ok: false, info: "run_js 语法检查失败", error: "run_js.code 不能为空", line: 0, column: 0, hasLine: false });
+        setStatus("run_js 语法错误：run_js.code 不能为空");
+        showButtonTip($("checkRunJsCodeBtn"), "语法错误", "err");
+        return { ok: false, line: 0, column: 0, error: "run_js.code 不能为空" };
+      }
+      try {
+        const fn = compileRunJsCandidate(code);
+        if (typeof fn !== "function") throw new Error("代码不是函数表达式");
+        state.runJsSyntaxErrorLine = 0;
+        renderRunJsCodeHighlight();
+        setOutput({ ok: true, info: "run_js 语法检查通过", type: "function" });
+        setStatus("run_js 语法检查通过");
+        showButtonTip($("checkRunJsCodeBtn"), "语法通过", "ok");
+        return { ok: true, line: 0, column: 0, error: "" };
+      } catch (err) {
+        const fastLoc = extractSyntaxLocation(err, 2);
+        let rawLine = fastLoc.line || 0;
+        let col = fastLoc.col || 0;
+        let msg = String(err?.message || err || "syntax error");
+        let mode = "fast";
+        let precise = null;
+        let workerPrecise = null;
+        let hasLine = fastLoc.found === true;
+        if (!hasLine) {
+          workerPrecise = await checkRunJsCodeSyntaxByWorker(code);
+          if (workerPrecise && !workerPrecise.ok) {
+            rawLine = Number(workerPrecise.line || 0);
+            col = Number(workerPrecise.col || 0);
+            hasLine = workerPrecise.hasLine === true;
+            msg = String(workerPrecise.error || msg);
+            mode = "worker";
+          }
+        }
+        if (!hasLine) {
+          precise = await checkRunJsCodeSyntaxByModule(code);
+          if (precise && !precise.ok) {
+            rawLine = Number(precise.line || rawLine || 0);
+            col = Number(precise.col || col || 0);
+            hasLine = precise.hasLine === true;
+            msg = String(precise.error || msg);
+            mode = hasLine ? "module" : mode;
+          }
+        }
+        // Normalize syntax line as 0-based -> 1-based display/highlight.
+        const line = hasLine ? (Number(rawLine || 0) + 1) : 0;
+        state.runJsSyntaxErrorLine = line;
+        renderRunJsCodeHighlight();
+        const debug = {
+          mode,
+          hasLine,
+          rawLine,
+          fastLoc,
+          fastMessage: String(err?.message || ""),
+          fastStack: String(err?.stack || "").split("\n").slice(0, 8).join("\n"),
+          workerPrecise,
+          precise,
+        };
+        console.warn("[RPAFLOWS][builder][syntax-check] fail", debug);
+        setOutput({ ok: false, info: "run_js 语法检查失败", error: msg, line, column: col, hasLine, debug });
+        setStatus(line ? `run_js 语法错误：第 ${line} 行${col ? ` 第 ${col} 列` : ""}，${msg}` : `run_js 语法错误：${msg}`);
+        showButtonTip($("checkRunJsCodeBtn"), "语法错误", "err");
+        return { ok: false, line, column: col, error: msg, debug };
+      }
     }
 
     function parseJsonText(text, fallback = null) {
@@ -1792,6 +2343,173 @@
       const obj = normalizeInvokeArgs(parsed);
       renderInvokeArgRows(obj);
       refreshInvokeArgKeyOptions();
+    }
+
+    function normalizeRunJsArgs(raw) {
+      return Array.isArray(raw) ? raw : [];
+    }
+
+    function stringifyRunJsArgValue(v) {
+      if (typeof v === "string") return v;
+      try { return JSON.stringify(v); } catch (_) { return String(v); }
+    }
+
+    function parseRunJsArgValue(raw) {
+      const text = String(raw == null ? "" : raw).trim();
+      if (!text) return { has: false, value: undefined };
+      try {
+        return { has: true, value: JSON.parse(text) };
+      } catch (_) {
+        return { has: true, value: text };
+      }
+    }
+
+    function createRunJsArgRow(seed = {}) {
+      const row = document.createElement("div");
+      row.className = "kv-row";
+      const valueInput = document.createElement("input");
+      valueInput.placeholder = "参数值（JSON 或字符串）";
+      valueInput.className = "mono";
+      valueInput.value = stringifyRunJsArgValue(seed?.value);
+      const hint = document.createElement("input");
+      hint.className = "mono";
+      hint.value = String(seed?.indexLabel || "");
+      hint.disabled = true;
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn danger";
+      delBtn.textContent = "删";
+      const sync = () => {
+        syncRunJsArgsJsonFromRows(false);
+        syncActionJsonFromFields(false);
+      };
+      valueInput.addEventListener("input", sync);
+      delBtn.addEventListener("click", () => {
+        row.remove();
+        if (!$("fRunJsArgsBox").children.length) {
+          $("fRunJsArgsBox").appendChild(createRunJsArgRow({ value: "" }));
+        }
+        refreshRunJsArgRowIndex();
+        sync();
+      });
+      row.__valueInput = valueInput;
+      row.__indexInput = hint;
+      row.appendChild(hint);
+      row.appendChild(valueInput);
+      row.appendChild(delBtn);
+      return row;
+    }
+
+    function refreshRunJsArgRowIndex() {
+      const box = $("fRunJsArgsBox");
+      if (!box) return;
+      let idx = 0;
+      for (const row of Array.from(box.children || [])) {
+        idx += 1;
+        if (row.__indexInput) row.__indexInput.value = `args[${idx - 1}]`;
+      }
+    }
+
+    function renderRunJsArgRows(argsArr) {
+      const box = $("fRunJsArgsBox");
+      if (!box) return;
+      box.innerHTML = "";
+      const arr = normalizeRunJsArgs(argsArr);
+      if (!arr.length) {
+        box.appendChild(createRunJsArgRow({ value: "" }));
+      } else {
+        for (const v of arr) box.appendChild(createRunJsArgRow({ value: v }));
+      }
+      refreshRunJsArgRowIndex();
+    }
+
+    function readRunJsArgRows() {
+      const box = $("fRunJsArgsBox");
+      if (!box) return [];
+      const out = [];
+      for (const row of Array.from(box.children || [])) {
+        const parsed = parseRunJsArgValue(row.__valueInput?.value);
+        if (!parsed.has) continue;
+        out.push(parsed.value);
+      }
+      return out;
+    }
+
+    function syncRunJsArgsJsonFromRows(force = false) {
+      if (state.actionJsonDirty && !force) return;
+      const arr = normalizeRunJsArgs(readRunJsArgRows());
+      $("fRunJsArgs").value = JSON.stringify(arr, null, 2);
+    }
+
+    function syncRunJsArgsRowsFromJson() {
+      const parsed = parseJsonText($("fRunJsArgs").value, null);
+      renderRunJsArgRows(normalizeRunJsArgs(parsed));
+    }
+
+    function readRunJsArgsFromEditor() {
+      let arr = null;
+      try {
+        arr = parseJsonText($("fRunJsArgs").value, null);
+      } catch (_) {
+        arr = null;
+      }
+      if (!Array.isArray(arr)) arr = readRunJsArgRows();
+      return normalizeRunJsArgs(arr);
+    }
+
+    function closeRunJsPreviewDialog(accepted = false) {
+      const mask = $("runJsPreviewMask");
+      if (mask) {
+        mask.classList.remove("show");
+        mask.setAttribute("aria-hidden", "true");
+      }
+      const resolver = state.runJsPreviewResolver;
+      state.runJsPreviewResolver = null;
+      if (typeof resolver === "function") resolver(accepted === true);
+    }
+
+    function showRunJsPreviewDialog(payload) {
+      state.runJsPreviewPending = payload && typeof payload === "object" ? payload : null;
+      const pre = $("runJsPreviewPre");
+      const hint = $("runJsPreviewHint");
+      const obj = state.runJsPreviewPending || {};
+      const run = obj.runResult || {};
+      const preview = {
+        status: String(run.status || ""),
+        reason: String(run.reason || ""),
+        error: run.error || null,
+        value: ("value" in run) ? run.value : null,
+        meta: run.meta || {},
+      };
+      pre.textContent = JSON.stringify(preview, null, 2);
+      hint.textContent = `query 已生成代码并试跑（status=${preview.status || "-"}），确认后将回填 run_js.code`;
+      const mask = $("runJsPreviewMask");
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      return new Promise((resolve) => {
+        state.runJsPreviewResolver = resolve;
+      });
+    }
+
+    function extractRunJsDebugPayload(runData) {
+      const data = (runData && typeof runData === "object") ? runData : {};
+      const history = Array.isArray(data.history) ? data.history : [];
+      let item = history.find((x) => String(x?.actionType || "").toLowerCase() === "run_js") || null;
+      if (!item && String($("actionTypeSelect")?.value || "").toLowerCase() === "run_js") {
+        item = { stepId: String($("stepIdInput")?.value || ""), actionType: "run_js", result: data.lastResult || data };
+      }
+      if (!item) return null;
+      const r = (item.result && typeof item.result === "object") ? item.result : {};
+      return {
+        stepId: String(item.stepId || ""),
+        actionType: "run_js",
+        status: String(r.status || data.status || ""),
+        reason: String(r.reason || ""),
+        error: r.error || null,
+        value: ("value" in r) ? r.value : data.value,
+        meta: r.meta || data.meta || {},
+        flowStatus: String(data.status || ""),
+      };
     }
 
     function buildInvokeFindFromFields() {
@@ -2849,6 +3567,8 @@
       $("fBy").value = String(a.by || "");
       $("fQuery").value = String(a.query || "");
       $("fUrl").value = String(a.url || "");
+      $("fGotoNewPage").checked = a.newPage === true;
+      $("fPostWaitMs").value = (a.postWaitMs == null) ? "" : String(a.postWaitMs);
       $("fText").value = String(a.text || a.reason || a.conclusion || "");
       $("fKey").value = String(a.key || "");
       $("fModifiers").value = Array.isArray(a.modifiers) ? a.modifiers.join(",") : String(a.modifiers || "");
@@ -2863,9 +3583,28 @@
       renderInvokeArgRows(invokeArgs);
       $("fInvokeArgs").value = JSON.stringify(normalizeInvokeArgs(invokeArgs), null, 2);
       $("fRunJsCode").value = String(a.code || "");
+      state.runJsSyntaxErrorLine = 0;
+      renderRunJsCodeHighlight();
       $("fRunJsQuery").value = String(a.query || "");
-      $("fRunJsArgs").value = JSON.stringify(Array.isArray(a.args) ? a.args : [], null, 2);
+      const runJsArgs = Array.isArray(a.args) ? a.args : [];
+      renderRunJsArgRows(runJsArgs);
+      $("fRunJsArgs").value = JSON.stringify(runJsArgs, null, 2);
       $("fRunJsScope").value = (String(a.scope || "page") === "agent") ? "agent" : "page";
+      $("fRunJsCache").checked = a.cache === true;
+      $("fRunAiPrompt").value = String(a.prompt || "");
+      if (a.input === undefined) $("fRunAiInput").value = "";
+      else if (typeof a.input === "string") $("fRunAiInput").value = a.input;
+      else $("fRunAiInput").value = JSON.stringify(a.input, null, 2);
+      $("fRunAiSchema").value = (a.schema && typeof a.schema === "object" && !Array.isArray(a.schema))
+        ? JSON.stringify(a.schema, null, 2)
+        : "";
+      const runAiModel = String(a.model || "").trim();
+      $("fRunAiModel").value = ["fast","balanced","quality","vision","free"].includes(runAiModel) ? runAiModel : "";
+      const runAiPage = (a.page && typeof a.page === "object" && !Array.isArray(a.page)) ? a.page : {};
+      $("fRunAiPageUrl").checked = runAiPage.url === true;
+      $("fRunAiPageHtml").checked = runAiPage.html === true;
+      $("fRunAiPageScreenshot").checked = runAiPage.screenshot === true;
+      $("fRunAiPageArticle").checked = runAiPage.article === true;
       setSelectValueKeepCustom("fBranchDefault", String(a.default || ""));
       const branchCases = Array.isArray(a.cases) ? a.cases : [];
       setBranchCasesRows(branchCases);
@@ -2883,6 +3622,7 @@
         const url = String($("fUrl").value || "").trim();
         if (strict && !url) throw new Error("goto 需要 url");
         if (url) action.url = url;
+        if ($("fGotoNewPage").checked) action.newPage = true;
       }
       if (t === "click") {
         if (by) action.by = by;
@@ -2954,12 +3694,50 @@
       if (t === "run_js") {
         const code = String($("fRunJsCode").value || "").trim();
         const q = String($("fRunJsQuery").value || "").trim();
-        const argsArr = parseJsonText($("fRunJsArgs").value, []);
+        const argsArr = readRunJsArgsFromEditor();
         if (code) action.code = code;
         if (q) action.query = q;
         if (Array.isArray(argsArr) && argsArr.length) action.args = argsArr;
         action.scope = String($("fRunJsScope").value || "page");
+        if ($("fRunJsCache").checked) action.cache = true;
         if (strict && !action.code && !action.query) throw new Error("run_js 需要 code 或 query");
+      }
+      if (t === "run_ai") {
+        const prompt = String($("fRunAiPrompt").value || "").trim();
+        if (strict && !prompt) throw new Error("run_ai 需要 prompt");
+        if (prompt) action.prompt = prompt;
+
+        const inputRaw = String($("fRunAiInput").value || "").trim();
+        if (inputRaw) {
+          try {
+            action.input = JSON.parse(inputRaw);
+          } catch (_) {
+            action.input = inputRaw;
+          }
+        }
+
+        const schemaRaw = String($("fRunAiSchema").value || "").trim();
+        if (schemaRaw) {
+          let schemaObj = null;
+          try {
+            schemaObj = JSON.parse(schemaRaw);
+          } catch (_) {
+            throw new Error("run_ai.schema 必须是合法 JSON");
+          }
+          if (!schemaObj || typeof schemaObj !== "object" || Array.isArray(schemaObj)) {
+            throw new Error("run_ai.schema 必须是 JSON Object");
+          }
+          action.schema = schemaObj;
+        }
+
+        const model = String($("fRunAiModel").value || "").trim();
+        if (model) action.model = model;
+        const page = {};
+        if ($("fRunAiPageUrl").checked) page.url = true;
+        if ($("fRunAiPageHtml").checked) page.html = true;
+        if ($("fRunAiPageScreenshot").checked) page.screenshot = true;
+        if ($("fRunAiPageArticle").checked) page.article = true;
+        if (Object.keys(page).length) action.page = page;
       }
       if (t === "branch") {
         const def = String($("fBranchDefault").value || "").trim();
@@ -2983,6 +3761,8 @@
         const reason = String($("fText").value || "").trim();
         if (reason) action.reason = reason;
       }
+      const postWaitMs = Number($("fPostWaitMs").value || 0);
+      if (postWaitMs > 0) action.postWaitMs = Math.floor(postWaitMs);
       return action;
     }
 
@@ -3205,10 +3985,10 @@
         state.sessionId = String(data.id || data.sessionId || "");
         renderSessionTag(`status=${data.status || "-"}`);
         setOutput(data);
-        setStatus("Session 已启动");
+        setStatus(data?.reused ? "已复用 Session" : "Session 已启动");
         await refreshContexts();
         renderGraph();
-        showBusyMask("Session 启动成功", "success");
+        showBusyMask(data?.reused ? "Session 已复用" : "Session 启动成功", "success");
         await sleepMs(900);
       } catch (err) {
         showBusyMask(`Session 启动失败：${String(err?.message || err)}`, "error");
@@ -3310,6 +4090,103 @@
       } finally {
         btn.disabled = false;
         btn.textContent = "Pick 元素";
+      }
+    }
+
+    async function generateByFromQuery() {
+      requireSession();
+      const actionType = String($("actionTypeSelect").value || "").toLowerCase();
+      if (!["click", "input", "hover"].includes(actionType)) {
+        throw new Error("当前 action.type 不支持此功能（仅 click / input / hover）");
+      }
+      const query = String($("fQuery").value || "").trim();
+      if (!query) throw new Error("请先填写 query");
+      const btn = $("genByFromQueryBtn");
+      btn.disabled = true;
+      btn.textContent = "AI 处理中...";
+      setStatus("正在激活页面并请求 AI 生成 by...");
+      try {
+        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/query-selector`, {
+          contextId: String(state.activeContextId || ""),
+          query,
+          actionType,
+        });
+        const selector = String(data?.selector || "").trim();
+        if (!selector) throw new Error("AI 未返回可用 selector");
+        setStatus("AI 已生成 selector，正在页面高亮并等待确认...");
+        const confirmData = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/pick-element`, {
+          contextId: String(state.activeContextId || ""),
+          selector,
+        });
+        if (confirmData?.matched === false) {
+          const msg = String(confirmData?.message || "生成的 selector 没有选中任何元素");
+          setOutput({ ok: true, info: "query-selector-empty", data, confirmData });
+          setStatus(msg);
+          return;
+        }
+        const matchedCount = Number(confirmData?.matchedCount || data?.matchedCount || 0);
+        if (confirmData?.confirmed) {
+          $("fBy").value = selector;
+          state.actionJsonDirty = false;
+          syncActionJsonFromFields(true);
+          setOutput({ ok: true, info: "query-selector-confirmed", data, confirmData });
+          setStatus(`AI 生成 by 已确认（匹配 ${matchedCount} 个）`);
+        } else if (confirmData?.cancelled) {
+          setOutput({ ok: true, info: "query-selector-cancelled", data, confirmData });
+          setStatus(`已取消使用该 selector（匹配 ${matchedCount} 个）`);
+        } else {
+          setOutput({ ok: true, info: "query-selector-rejected", data, confirmData });
+          setStatus(`未确认该 selector（匹配 ${matchedCount} 个）`);
+        }
+        try { window.focus(); } catch (_) {}
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "AI 生成 by";
+      }
+    }
+
+    async function generateRunJsCodeByQuery() {
+      requireSession();
+      const actionType = String($("actionTypeSelect").value || "").toLowerCase();
+      if (actionType !== "run_js") throw new Error("仅 run_js 可使用该功能");
+      const query = String($("fRunJsQuery").value || "").trim();
+      if (!query) throw new Error("请先填写 run_js.query");
+      const btn = $("genRunJsCodeBtn");
+      btn.disabled = true;
+      btn.textContent = "AI 处理中...";
+      setStatus("正在激活页面并请求 AI 生成 run_js 代码...");
+      showBusyMask("AI 正在生成并试跑 run_js，请稍候...", "working");
+      try {
+        const argsArr = readRunJsArgsFromEditor();
+        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-js-generate`, {
+          contextId: String(state.activeContextId || ""),
+          query,
+          scope: String($("fRunJsScope").value || "page"),
+          args: argsArr,
+          cache: $("fRunJsCache").checked,
+        });
+        const runResult = (data && typeof data.runResult === "object") ? data.runResult : {};
+        setActionRunResult(runResult);
+        setOutput({ ok: true, info: "run_js.ai.generate_tested", data });
+        const accepted = await showRunJsPreviewDialog(data);
+        if (accepted) {
+          const code = String(data?.code || "").trim();
+          if (!code) throw new Error("AI 未返回可回填的代码");
+          $("fRunJsCode").value = code;
+          state.runJsSyntaxErrorLine = 0;
+          renderRunJsCodeHighlight();
+          state.actionJsonDirty = false;
+          syncActionJsonFromFields(true);
+          setStatus("已确认并回填 run_js.code");
+          showBusyMask("已回填 run_js.code", "success");
+          await sleepMs(700);
+        } else {
+          setStatus("已取消回填 run_js.code");
+        }
+      } finally {
+        hideBusyMask();
+        btn.disabled = false;
+        btn.textContent = "AI 生成并试跑";
       }
     }
 
@@ -3525,9 +4402,10 @@
 
     function bindActionEditorEvents() {
       [
-        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fText","fKey","fModifiers","fTimes","fTimeout",
+        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
         "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
-        "fRunJsScope","fBranchDefault","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput",
+        "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
+        "fBranchDefault","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput",
         "fInvokeFindKind","fInvokeFindMust","fInvokeFindPrefer","fInvokeFindRank"
       ].forEach((id) => {
         const el = $(id);
@@ -3546,8 +4424,35 @@
               ensureInvokeArgKeyOptionsLoaded();
             }
           }
+          if (id === "fRunJsCode") {
+            state.runJsSyntaxErrorLine = 0;
+            renderRunJsCodeHighlight();
+          }
           if (id !== "actionJsonInput") syncActionJsonFromFields(false);
         });
+      });
+      $("fRunJsCode").addEventListener("scroll", () => {
+        const hl = $("fRunJsCodeHl");
+        const ln = $("fRunJsCodeLn");
+        const ta = $("fRunJsCode");
+        if (!hl || !ta) return;
+        hl.scrollTop = ta.scrollTop;
+        hl.scrollLeft = ta.scrollLeft;
+        if (ln) ln.scrollTop = ta.scrollTop;
+        syncRunJsSyntaxErrorMark();
+      });
+      $("fRunJsCode").addEventListener("keydown", (ev) => {
+        if (ev.key !== "Tab") return;
+        ev.preventDefault();
+        const ta = ev.currentTarget;
+        if (!ta) return;
+        const start = Number(ta.selectionStart || 0);
+        const end = Number(ta.selectionEnd || 0);
+        ta.value = `${ta.value.slice(0, start)}\t${ta.value.slice(end)}`;
+        ta.selectionStart = ta.selectionEnd = start + 1;
+        state.runJsSyntaxErrorLine = 0;
+        renderRunJsCodeHighlight();
+        syncActionJsonFromFields(false);
       });
       $("nextJsonInput").addEventListener("change", () => {
         syncNextFieldsFromJson();
@@ -3582,12 +4487,34 @@
         syncInvokeArgsRowsFromJson();
         syncActionJsonFromFields(false);
       });
+      $("fRunJsArgs").addEventListener("change", () => {
+        syncRunJsArgsRowsFromJson();
+        syncActionJsonFromFields(false);
+      });
       $("addInvokeFilterBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         $("fInvokeFiltersBox").appendChild(createInvokeFilterRow({ key: "", value: "" }));
         syncInvokeFindJsonFromFields(false);
         syncActionJsonFromFields(false);
+      });
+      $("addRunJsArgBtn").addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        $("fRunJsArgsBox").appendChild(createRunJsArgRow({ value: "" }));
+        refreshRunJsArgRowIndex();
+        syncRunJsArgsJsonFromRows(false);
+        syncActionJsonFromFields(false);
+      });
+      $("runAiPagePresetBtn").addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        $("fRunAiPageUrl").checked = true;
+        $("fRunAiPageHtml").checked = true;
+        $("fRunAiPageScreenshot").checked = false;
+        $("fRunAiPageArticle").checked = false;
+        syncActionJsonFromFields(false);
+        setStatus("run_ai.page 已应用常用配置：url + html");
       });
       $("addInvokeArgBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -3612,16 +4539,26 @@
       $("invokeKeyPickerMask").addEventListener("click", (ev) => {
         if (ev.target === $("invokeKeyPickerMask")) hideInvokeKeyPicker();
       });
+      $("runJsPreviewCloseBtn").addEventListener("click", () => closeRunJsPreviewDialog(false));
+      $("runJsPreviewRejectBtn").addEventListener("click", () => closeRunJsPreviewDialog(false));
+      $("runJsPreviewAcceptBtn").addEventListener("click", () => closeRunJsPreviewDialog(true));
+      $("runJsPreviewMask").addEventListener("click", (ev) => {
+        if (ev.target === $("runJsPreviewMask")) closeRunJsPreviewDialog(false);
+      });
       document.addEventListener("keydown", (ev) => {
         if (ev.key !== "Escape") return;
         const mask = $("invokeKeyPickerMask");
         if (mask && mask.classList.contains("show")) hideInvokeKeyPicker();
+        const mask2 = $("runJsPreviewMask");
+        if (mask2 && mask2.classList.contains("show")) closeRunJsPreviewDialog(false);
       });
       renderInvokeFilterRows([]);
       syncInvokeFindJsonFromFields(true);
       renderInvokeArgRows({});
       syncInvokeArgsJsonFromRows(true);
       ensureInvokeArgKeyOptionsLoaded();
+      renderRunJsArgRows([]);
+      syncRunJsArgsJsonFromRows(true);
       setBranchCasesRows([]);
       syncBranchCasesJsonFromRows(false);
       syncNextJsonFromFields();
@@ -3674,12 +4611,17 @@
     $("restoreStepBtn").addEventListener("click", () => { try { restoreEditorStep(); } catch (err) { failUi(err); } });
     $("runStepBtn").addEventListener("click", () => runStep().catch(failUi));
     $("pickByBtn").addEventListener("click", () => pickSelectorForAction().catch(failUi));
+    $("genByFromQueryBtn").addEventListener("click", () => generateByFromQuery().catch(failUi));
+    $("genRunJsCodeBtn").addEventListener("click", () => generateRunJsCodeByQuery().catch(failUi));
+    $("formatRunJsCodeBtn").addEventListener("click", () => { try { beautifyRunJsCodeTabs(); } catch (err) { failUi(err); } });
+    $("checkRunJsCodeBtn").addEventListener("click", () => checkRunJsCodeSyntax().catch(failUi));
     $("confirmPickBtn").addEventListener("click", () => confirmPickElement().catch(failUi));
 
     renderSessionTag();
     renderContextTag();
     setFlow(getFlowFromTextarea());
     setActionFieldVisibility();
+    renderRunJsCodeHighlight();
     loadLogMeta();
     refreshFlows().catch(failUi);
   </script>
