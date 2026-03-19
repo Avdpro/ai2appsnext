@@ -182,6 +182,18 @@
       box-shadow: inset 0 2px 0 #2563eb;
       background: #eff6ff;
     }
+    .step-dirty-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #f59e0b;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .step-item.active .step-dirty-dot {
+      background: #ef4444;
+    }
     #left-steps.tab-content.active {
       display: flex;
       flex-direction: column;
@@ -534,6 +546,23 @@
       max-height: 42vh;
       overflow: auto;
     }
+    .decision-card {
+      width: min(560px, 96vw);
+      height: auto;
+      min-height: 0;
+    }
+    .decision-msg {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+      color: #132033;
+      font-size: 13px;
+      line-height: 1.45;
+      padding: 10px 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
     .code-editor-wrap {
       position: relative;
       width: 100%;
@@ -790,9 +819,13 @@
           <textarea id="flowGoalInput" style="min-height:70px;" placeholder="例如：在当前页面搜索关键词并读取前 5 条结果"></textarea>
           <label style="margin-top:8px;">Flow 描述（description）</label>
           <textarea id="flowDescInput" style="min-height:70px;" placeholder="给流程使用者看的说明，可与目标不同"></textarea>
-          <div class="grid" style="margin-top:8px;">
+          <div class="grid" style="margin-top:8px; grid-template-columns:1fr;">
             <div><label>Flow ID</label><input id="flowIdInput" placeholder="flow_id"></div>
-            <div><label>Capabilities（逗号分隔）</label><input id="flowCapsInput" placeholder="search,read.list"></div>
+          </div>
+          <label style="margin-top:8px;">Capabilities（逗号分隔）</label>
+          <div class="input-with-add">
+            <input id="flowCapsInput" placeholder="search,read.list">
+            <button class="btn secondary square" id="pickFlowCapsBtn" type="button" title="选择并添加 Capabilities">+</button>
           </div>
           <label style="margin-top:8px;">参数键（逗号分隔，用于批量补全）</label>
           <input id="flowArgsInput" placeholder="search.query,read.minItems">
@@ -1144,6 +1177,14 @@
       </div>
     </div>
   </div>
+  <div id="decisionMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card decision-card" role="dialog" aria-modal="true" aria-labelledby="decisionTitle">
+      <h3 id="decisionTitle" class="picker-title">确认操作</h3>
+      <pre id="decisionMsg" class="decision-msg"></pre>
+      <div id="decisionHint" class="picker-hint"></div>
+      <div class="row" id="decisionBtns" style="justify-content:flex-end;"></div>
+    </div>
+  </div>
   <datalist id="stepIdOptions"></datalist>
   <datalist id="invokeArgKeyOptions"></datalist>
 
@@ -1169,6 +1210,9 @@
       runJsPreviewPending: null,
       runJsPreviewResolver: null,
       runJsSyntaxErrorLine: 0,
+      stepDrafts: {},
+      editorDirty: false,
+      decisionResolver: null,
     };
 
     const actionTypes = ["goto","click","hover","input","press_key","wait","scroll","invoke","run_js","run_ai","branch","ask_assist","done","abort"];
@@ -1204,6 +1248,233 @@
     }
 
     function setStatus(text) { $("status").textContent = String(text || ""); }
+    const STEP_EDITOR_DRAFT_FIELDS = [
+      "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
+      "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
+      "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
+      "fBranchDefault","fBranchCases","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput","nextJsonInput","actionJsonInput",
+    ];
+
+    function cloneStableValue(v) {
+      if (Array.isArray(v)) return v.map((x) => cloneStableValue(x));
+      if (v && typeof v === "object") {
+        const out = {};
+        for (const k of Object.keys(v).sort()) out[k] = cloneStableValue(v[k]);
+        return out;
+      }
+      return v;
+    }
+
+    function stableJson(v) {
+      return JSON.stringify(cloneStableValue(v));
+    }
+
+    function normalizeStepForCompare(step) {
+      const src = (step && typeof step === "object") ? step : {};
+      const out = {
+        id: String(src.id || "").trim(),
+        action: (src.action && typeof src.action === "object" && !Array.isArray(src.action)) ? src.action : {},
+        next: (src.next && typeof src.next === "object" && !Array.isArray(src.next)) ? src.next : {},
+      };
+      const desc = String(src.desc || "").trim();
+      if (desc) out.desc = desc;
+      if (src.saveAs !== undefined && src.saveAs !== null && String(src.saveAs).trim() !== "") out.saveAs = src.saveAs;
+      return out;
+    }
+
+    function parseStepSaveAsInputRaw(raw) {
+      const text = String(raw || "").trim();
+      if (!text) return null;
+      try {
+        const obj = JSON.parse(text);
+        return (obj && typeof obj === "object") ? obj : text;
+      } catch (_) {
+        return text;
+      }
+    }
+
+    function buildStepFromEditorLoose() {
+      const stepId = String($("stepIdInput").value || "").trim();
+      if (!stepId) return null;
+      let action = null;
+      if (state.actionJsonDirty) {
+        try {
+          action = parseJsonText($("actionJsonInput").value, null);
+        } catch (_) {
+          return null;
+        }
+        if (!action || typeof action !== "object" || Array.isArray(action)) return null;
+        action.type = String(action.type || $("actionTypeSelect").value || "").trim();
+      } else {
+        try {
+          action = buildActionFromFields(false);
+        } catch (_) {
+          return null;
+        }
+      }
+      if (!action || !String(action.type || "").trim()) return null;
+      const type = String(action.type || "").toLowerCase();
+      const next = (type === "branch") ? {} : readNextFromFields();
+      return {
+        id: stepId,
+        action,
+        next,
+        desc: String($("stepDescInput").value || "").trim(),
+        saveAs: parseStepSaveAsInputRaw($("stepSaveAsInput").value),
+      };
+    }
+
+    function hasDraft(stepId) {
+      const sid = String(stepId || "").trim();
+      return !!(sid && state.stepDrafts && state.stepDrafts[sid]);
+    }
+
+    function updateStepTagDirty() {
+      const sid = String($("stepIdInput")?.value || state.selectedStepId || "").trim() || "-";
+      const t = String($("actionTypeSelect")?.value || stepById(state.selectedStepId)?.action?.type || "-");
+      $("stepTag").textContent = `step: ${sid} (${t})${state.editorDirty ? " *未保存" : ""}`;
+      const tab = document.querySelector('.tabs[data-tab-group="right"] .tab[data-tab="right-action"]');
+      if (tab) tab.textContent = state.editorDirty ? "Action & Test *" : "Action & Test";
+    }
+
+    function collectCurrentEditorDraft() {
+      const out = { values: {}, checks: {}, actionJsonDirty: state.actionJsonDirty === true };
+      for (const id of STEP_EDITOR_DRAFT_FIELDS) {
+        const el = $(id);
+        if (!el) continue;
+        if (el.type === "checkbox") out.checks[id] = el.checked === true;
+        else out.values[id] = String(el.value || "");
+      }
+      return out;
+    }
+
+    function restoreEditorFromDraft(draft) {
+      const d = (draft && typeof draft === "object") ? draft : {};
+      const values = (d.values && typeof d.values === "object") ? d.values : {};
+      const checks = (d.checks && typeof d.checks === "object") ? d.checks : {};
+      for (const id of STEP_EDITOR_DRAFT_FIELDS) {
+        const el = $(id);
+        if (!el) continue;
+        if (el.type === "checkbox") {
+          el.checked = checks[id] === true;
+        } else if (id in values) {
+          if (el.tagName === "SELECT") {
+            setSelectValueKeepCustom(id, String(values[id] || ""));
+          } else {
+            el.value = String(values[id] || "");
+          }
+        }
+      }
+      state.actionJsonDirty = d.actionJsonDirty === true;
+      setActionFieldVisibility();
+      syncInvokeFindFieldsFromJson();
+      syncInvokeArgsRowsFromJson();
+      syncRunJsArgsRowsFromJson();
+      const branchCases = parseJsonText($("fBranchCases").value, null);
+      if (Array.isArray(branchCases)) setBranchCasesRows(branchCases);
+      syncNextFieldsFromJson();
+      if (!state.actionJsonDirty) syncActionJsonFromFields(true);
+      state.runJsSyntaxErrorLine = 0;
+      renderRunJsCodeHighlight();
+      updateEditorDirtyState({ renderList: false });
+    }
+
+    function computeSelectedStepDirty() {
+      const sid = String(state.selectedStepId || "").trim();
+      if (!sid) return false;
+      const base = stepById(sid);
+      const edited = buildStepFromEditorLoose();
+      if (!base) return !!edited;
+      if (!edited) return true;
+      if (String(edited.id || "").trim() !== sid) return true;
+      return stableJson(normalizeStepForCompare(base)) !== stableJson(normalizeStepForCompare(edited));
+    }
+
+    function updateEditorDirtyState(opts = {}) {
+      const renderList = opts.renderList !== false;
+      const sid = String(state.selectedStepId || "").trim();
+      const prevDirty = state.editorDirty === true;
+      const prevDraftCount = Object.keys(state.stepDrafts || {}).length;
+      let dirty = false;
+      if (sid) {
+        dirty = computeSelectedStepDirty();
+        if (dirty) state.stepDrafts[sid] = collectCurrentEditorDraft();
+        else delete state.stepDrafts[sid];
+      } else {
+        state.stepDrafts = {};
+      }
+      state.editorDirty = dirty;
+      updateStepTagDirty();
+      const nextDraftCount = Object.keys(state.stepDrafts || {}).length;
+      if (renderList && (prevDirty !== dirty || prevDraftCount !== nextDraftCount)) {
+        renderStepList();
+        renderGraph();
+      }
+      return dirty;
+    }
+
+    async function chooseSwitchAction(fromId, toId) {
+      const from = String(fromId || "").trim();
+      const to = String(toId || "").trim();
+      if (!from || !to || from === to) return "allow";
+      return await showDecisionDialog({
+        title: "未保存修改",
+        message: `步骤 ${from} 有未保存修改，切换到 ${to} 前请选择处理方式。`,
+        hint: "建议先保存，避免丢失编辑内容。",
+        options: [
+          { value: "save", label: "保存并切换", className: "btn ok" },
+          { value: "discard", label: "丢弃并切换", className: "btn danger" },
+          { value: "cancel", label: "取消", className: "btn secondary" },
+        ],
+      });
+    }
+
+    async function chooseRunDirtyAction(stepId) {
+      const sid = String(stepId || "").trim();
+      if (!sid) return "cancel";
+      return await showDecisionDialog({
+        title: "执行前确认",
+        message: `步骤 ${sid} 有未保存修改，请选择执行方式。`,
+        hint: "保存后执行会先写入 Flow；执行已保存版本不会应用当前改动。",
+        options: [
+          { value: "save", label: "保存后执行", className: "btn ok" },
+          { value: "saved", label: "执行已保存版本", className: "btn warn" },
+          { value: "cancel", label: "取消", className: "btn secondary" },
+        ],
+      });
+    }
+
+    async function switchStepWithGuard(stepId, opts = {}) {
+      const targetId = String(stepId || "").trim();
+      if (!targetId) return false;
+      const fromId = String(state.selectedStepId || "").trim();
+      if (fromId && targetId !== fromId && opts.bypassGuard !== true) {
+        const dirty = updateEditorDirtyState({ renderList: false });
+        if (dirty) {
+          const action = await chooseSwitchAction(fromId, targetId);
+          if (action === "cancel") return false;
+          if (action === "save") {
+            try {
+              applyEditorStep();
+            } catch (err) {
+              failUi(err);
+              return false;
+            }
+          }
+          if (action === "discard") {
+            delete state.stepDrafts[fromId];
+            state.editorDirty = false;
+          }
+        }
+      }
+      state.selectedStepId = targetId;
+      renderStepList();
+      renderGraph();
+      loadStepToEditor(targetId, { preferDraft: true });
+      activateTab("right", "right-action");
+      if (hasDraft(targetId)) setStatus(`已恢复步骤草稿：${targetId}`);
+      return true;
+    }
     function showButtonTip(btn, text, tone = "ok") {
       if (!btn) return;
       if (btn._tipTimer) {
@@ -1872,25 +2143,27 @@
 
     async function openInvokeKeyPicker(targetFieldId) {
       const id = String(targetFieldId || "").trim();
-      if (id !== "fInvokeFindMust" && id !== "fInvokeFindPrefer") {
+      if (id !== "fInvokeFindMust" && id !== "fInvokeFindPrefer" && id !== "flowCapsInput") {
         throw new Error("未知目标字段，无法打开选择器");
       }
       state.invokeKeyPickerTargetId = id;
-      state.invokeKeyPickerFilterKind = "all";
+      state.invokeKeyPickerFilterKind = (id === "flowCapsInput") ? "cap" : "all";
       const existing = parseCsv($(id).value || "");
       state.invokeKeyPickerSelected = new Set(existing);
       $("invokeKeyPickerTitle").textContent = id === "fInvokeFindMust"
         ? "选择并添加到 find.must"
-        : "选择并添加到 find.prefer";
+        : (id === "fInvokeFindPrefer" ? "选择并添加到 find.prefer" : "选择并添加到 Flow Capabilities");
       $("invokeKeyPickerSearch").value = "";
-      document.querySelectorAll('input[name="invokeKeyKind"]').forEach((el) => { el.checked = el.value === "all"; });
+      document.querySelectorAll('input[name="invokeKeyKind"]').forEach((el) => {
+        el.checked = el.value === state.invokeKeyPickerFilterKind;
+      });
       const mask = $("invokeKeyPickerMask");
       mask.classList.add("show");
       mask.setAttribute("aria-hidden", "false");
-      updateInvokeKeyPickerHint("正在加载 RPA.js 能力键...");
+      updateInvokeKeyPickerHint(id === "flowCapsInput" ? "正在加载 Capabilities 列表..." : "正在加载 RPA.js 能力键...");
       renderInvokeKeyPickerList();
       try {
-        await fetchInvokeFindKeys(currentInvokeFindKind());
+        await fetchInvokeFindKeys(id === "flowCapsInput" ? "rpa" : currentInvokeFindKind());
         renderInvokeKeyPickerList();
         updateInvokeKeyPickerHint(`kind=${state.invokeFindKeysKind}，共 ${state.invokeFindKeys.length} 项，已选 ${(state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected.size : 0} 项`);
       } catch (err) {
@@ -1907,12 +2180,23 @@
       if (!targetId) return;
       const src = parseCsv($(targetId).value || "");
       const picked = Array.from((state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected : []);
-      const merged = Array.from(new Set([...src, ...picked]));
+      const capOnly = targetId === "flowCapsInput";
+      const allowed = capOnly
+        ? picked.filter((k) => Array.isArray(state.invokeFindKeys) && state.invokeFindKeys.some((x) => x.key === k && x.kind === "cap"))
+        : picked;
+      const merged = Array.from(new Set([...src, ...allowed]));
       $(targetId).value = merged.join(",");
-      syncInvokeFindJsonFromFields(false);
-      syncActionJsonFromFields(false);
+      if (targetId === "fInvokeFindMust" || targetId === "fInvokeFindPrefer") {
+        syncInvokeFindJsonFromFields(false);
+        syncActionJsonFromFields(false);
+      }
       hideInvokeKeyPicker();
-      setStatus(`已更新 ${targetId === "fInvokeFindMust" ? "find.must" : "find.prefer"}（+${Math.max(0, merged.length - src.length)}）`);
+      updateEditorDirtyState();
+      if (targetId === "flowCapsInput") {
+        setStatus(`已更新 Flow Capabilities（+${Math.max(0, merged.length - src.length)}）`);
+      } else {
+        setStatus(`已更新 ${targetId === "fInvokeFindMust" ? "find.must" : "find.prefer"}（+${Math.max(0, merged.length - src.length)}）`);
+      }
     }
 
     function normalizeArgDefs(raw) {
@@ -2491,6 +2775,44 @@
       });
     }
 
+    function closeDecisionDialog(choice = "cancel") {
+      const mask = $("decisionMask");
+      if (mask) {
+        mask.classList.remove("show");
+        mask.setAttribute("aria-hidden", "true");
+      }
+      const resolver = state.decisionResolver;
+      state.decisionResolver = null;
+      if (typeof resolver === "function") resolver(String(choice || "cancel"));
+    }
+
+    function showDecisionDialog(cfg = {}) {
+      const title = String(cfg.title || "确认操作").trim() || "确认操作";
+      const message = String(cfg.message || "").trim();
+      const hint = String(cfg.hint || "").trim();
+      const options = Array.isArray(cfg.options) ? cfg.options : [];
+      const mask = $("decisionMask");
+      const btns = $("decisionBtns");
+      if (!mask || !btns) return Promise.resolve("cancel");
+      $("decisionTitle").textContent = title;
+      $("decisionMsg").textContent = message || "-";
+      $("decisionHint").textContent = hint;
+      btns.innerHTML = "";
+      for (const opt of options) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = String(opt?.className || "btn secondary");
+        btn.textContent = String(opt?.label || opt?.value || "确定");
+        btn.addEventListener("click", () => closeDecisionDialog(String(opt?.value || "cancel")));
+        btns.appendChild(btn);
+      }
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      return new Promise((resolve) => {
+        state.decisionResolver = resolve;
+      });
+    }
+
     function extractRunJsDebugPayload(runData) {
       const data = (runData && typeof runData === "object") ? runData : {};
       const history = Array.isArray(data.history) ? data.history : [];
@@ -2708,6 +3030,10 @@
 
     function setFlow(flowObj) {
       state.flow = normalizeFlow(flowObj);
+      const liveIds = new Set((Array.isArray(state.flow?.steps) ? state.flow.steps : []).map((s) => String(s?.id || "").trim()).filter(Boolean));
+      for (const key of Object.keys(state.stepDrafts || {})) {
+        if (!liveIds.has(key)) delete state.stepDrafts[key];
+      }
       refreshStepIdOptions();
       if (!state.selectedStepId || !state.flow.steps.some((s) => s.id === state.selectedStepId)) {
         state.selectedStepId = state.flow.start || state.flow.steps[0]?.id || "";
@@ -2718,7 +3044,7 @@
       $("startTag").textContent = `start: ${state.flow.start || "-"}`;
       renderStepList();
       renderGraph();
-      if (state.selectedStepId) loadStepToEditor(state.selectedStepId);
+      if (state.selectedStepId) loadStepToEditor(state.selectedStepId, { preferDraft: true });
     }
 
     function getFlowFromTextarea() {
@@ -2754,7 +3080,7 @@
         state.selectedStepId = fromId;
         renderStepList();
         renderGraph();
-        loadStepToEditor(fromId);
+        loadStepToEditor(fromId, { preferDraft: true });
         setStatus(`步骤顺序已调整：${fromId} -> 列表末尾`);
         state.suppressRowClickUntil = Date.now() + 180;
       };
@@ -2766,13 +3092,15 @@
         const left = document.createElement("div");
         left.textContent = `${s.id} (${String(s?.action?.type || "-")})`;
         left.className = "mono";
-        row.addEventListener("click", () => {
+        if (hasDraft(s.id)) {
+          const dot = document.createElement("span");
+          dot.className = "step-dirty-dot";
+          dot.title = "该步骤有未保存草稿";
+          left.appendChild(dot);
+        }
+        row.addEventListener("click", async () => {
           if (Date.now() < Number(state.suppressRowClickUntil || 0)) return;
-          state.selectedStepId = s.id;
-          renderStepList();
-          renderGraph();
-          loadStepToEditor(s.id);
-          activateTab("right", "right-action");
+          await switchStepWithGuard(s.id);
         });
         const runBtn = document.createElement("button");
         runBtn.type = "button";
@@ -2816,7 +3144,7 @@
           state.selectedStepId = fromId;
           renderStepList();
           renderGraph();
-          loadStepToEditor(fromId);
+          loadStepToEditor(fromId, { preferDraft: true });
           setStatus(`步骤顺序已调整：${fromId} -> ${toId} 前`);
           state.suppressRowClickUntil = Date.now() + 180;
         });
@@ -3312,11 +3640,7 @@
         }
 
         node.addEventListener("click", () => {
-          state.selectedStepId = sid;
-          renderStepList();
-          renderGraph();
-          loadStepToEditor(sid);
-          activateTab("right", "right-action");
+          switchStepWithGuard(sid).catch(failUi);
         });
         canvas.appendChild(node);
       }
@@ -3775,9 +4099,15 @@
       }
     }
 
-    function loadStepToEditor(stepId) {
+    function loadStepToEditor(stepId, opts = {}) {
       const step = stepById(stepId);
       if (!step) return;
+      const preferDraft = opts.preferDraft !== false;
+      if (preferDraft && hasDraft(step.id)) {
+        restoreEditorFromDraft(state.stepDrafts[step.id]);
+        updateStepTagDirty();
+        return;
+      }
       $("stepIdInput").value = step.id;
       $("stepDescInput").value = String(step?.desc || "");
       const saveAs = step?.saveAs;
@@ -3789,8 +4119,9 @@
       applyActionToFields(step.action || {});
       setNextFields(step.next || {});
       syncNextJsonFromFields();
-      $("stepTag").textContent = `step: ${step.id} (${String(step?.action?.type || "-")})`;
       state.actionJsonDirty = false;
+      updateEditorDirtyState({ renderList: false });
+      updateStepTagDirty();
     }
 
     function buildStepFromEditor() {
@@ -3912,11 +4243,14 @@
         else flow.steps.push(step);
       }
       if (!flow.start) flow.start = step.id;
+      if (editedFromId) delete state.stepDrafts[editedFromId];
+      delete state.stepDrafts[step.id];
+      state.editorDirty = false;
       setFlow(flow);
       state.selectedStepId = step.id;
       renderStepList();
       renderGraph();
-      loadStepToEditor(step.id);
+      loadStepToEditor(step.id, { preferDraft: false });
       return { renamed: !!(editedFromId && editedFromId !== step.id), renameRefsChanged };
     }
 
@@ -4228,20 +4562,41 @@
 
     async function runStep() {
       requireSession();
-      const step = buildStepFromEditor();
-      applyStepToFlow(step, { editedFromId: state.selectedStepId });
+      let stepForRun = null;
+      const selectedId = String(state.selectedStepId || "").trim();
+      const dirty = updateEditorDirtyState({ renderList: false });
+      if (dirty) {
+        const action = await chooseRunDirtyAction(selectedId || String($("stepIdInput").value || "").trim());
+        if (action === "cancel") {
+          setStatus("已取消执行");
+          return;
+        }
+        if (action === "save") {
+          const step = buildStepFromEditor();
+          applyStepToFlow(step, { editedFromId: state.selectedStepId });
+          stepForRun = stepById(String(step.id || "").trim()) || step;
+        } else {
+          stepForRun = stepById(selectedId);
+          if (!stepForRun) throw new Error("当前步骤无已保存版本，无法执行");
+        }
+      } else {
+        const step = buildStepFromEditor();
+        applyStepToFlow(step, { editedFromId: state.selectedStepId });
+        stepForRun = stepById(String(step.id || "").trim()) || step;
+      }
+      if (!stepForRun) throw new Error("缺少可执行步骤");
       setStatus("执行步骤...");
-      setActionRunResult({ running: true, stepId: step.id, actionType: step?.action?.type || "" });
-      showBusyMask(`正在执行步骤：${step.id}...`, "working");
+      setActionRunResult({ running: true, stepId: stepForRun.id, actionType: stepForRun?.action?.type || "" });
+      showBusyMask(`正在执行步骤：${stepForRun.id}...`, "working");
       try {
-        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-step`, { step });
+        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-step`, { step: stepForRun });
         setActionRunResult(data);
         setOutput(data);
         setStatus(`执行完成：${data.status || "-"}`);
         showBusyMask(`步骤执行完成：${data.status || "done"}`, "success");
         await sleepMs(700);
       } catch (err) {
-        setActionRunResult({ ok: false, error: String(err?.message || err), stepId: step.id });
+        setActionRunResult({ ok: false, error: String(err?.message || err), stepId: stepForRun.id });
         showBusyMask(`步骤执行失败：${String(err?.message || err)}`, "error");
         await sleepMs(1300);
         throw err;
@@ -4255,11 +4610,8 @@
       if (!sid) throw new Error("缺少 stepId");
       const step = stepById(sid);
       if (!step) throw new Error(`flow 中不存在 step: ${sid}`);
-      state.selectedStepId = sid;
-      renderStepList();
-      renderGraph();
-      loadStepToEditor(sid);
-      activateTab("right", "right-action");
+      const switched = await switchStepWithGuard(sid);
+      if (!switched) return;
       await runStep();
     }
 
@@ -4273,6 +4625,8 @@
       const shownPath = toDisplayFlowPathUi(String(flow.sourcePath || flow.sourcePathAbs || path));
       $("savePathInput").value = shownPath;
       $("savedFlowSelect").value = shownPath;
+      state.stepDrafts = {};
+      state.editorDirty = false;
       setFlow(flow);
       setOutput(data);
       setStatus("Flow 已加载");
@@ -4308,6 +4662,8 @@
       const flow = createNewFlowTemplate();
       $("savePathInput").value = "";
       $("savedFlowSelect").value = "";
+      state.stepDrafts = {};
+      state.editorDirty = false;
       setFlow(flow);
       setOutput({ ok: true, info: "new flow created", flowId: flow.id });
       setStatus("已新建 Flow");
@@ -4356,6 +4712,7 @@
       if (idx < 0) return;
       const removedId = state.flow.steps[idx].id;
       state.flow.steps.splice(idx, 1);
+      delete state.stepDrafts[removedId];
       if (state.flow.start === removedId) state.flow.start = state.flow.steps[0]?.id || "";
       state.selectedStepId = state.flow.steps[Math.max(0, idx - 1)]?.id || state.flow.steps[0]?.id || "";
       setFlow(state.flow);
@@ -4380,8 +4737,10 @@
       if (!stepId) throw new Error("当前没有可还原的 step");
       const step = stepById(stepId);
       if (!step) throw new Error(`flow 中不存在 step: ${stepId}`);
+      delete state.stepDrafts[stepId];
+      if (state.selectedStepId === stepId) state.editorDirty = false;
       state.selectedStepId = stepId;
-      loadStepToEditor(stepId);
+      loadStepToEditor(stepId, { preferDraft: false });
       renderStepList();
       renderGraph();
       setStatus(`已还原 step：${stepId}`);
@@ -4389,6 +4748,8 @@
     }
 
     function reparseFlow() {
+      state.stepDrafts = {};
+      state.editorDirty = false;
       setFlow(getFlowFromTextarea());
       setStatus("Flow 解析完成");
       setOutput({ ok: true, info: "flow re-parsed" });
@@ -4429,6 +4790,7 @@
             renderRunJsCodeHighlight();
           }
           if (id !== "actionJsonInput") syncActionJsonFromFields(false);
+          updateEditorDirtyState();
         });
       });
       $("fRunJsCode").addEventListener("scroll", () => {
@@ -4453,16 +4815,20 @@
         state.runJsSyntaxErrorLine = 0;
         renderRunJsCodeHighlight();
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("nextJsonInput").addEventListener("change", () => {
         syncNextFieldsFromJson();
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("actionJsonInput").addEventListener("input", () => {
         state.actionJsonDirty = true;
+        updateEditorDirtyState();
       });
       $("actionTypeSelect").addEventListener("change", () => {
         state.actionJsonDirty = false;
+        updateEditorDirtyState();
       });
       $("addBranchCaseBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -4471,6 +4837,7 @@
         refreshStepIdOptions();
         syncBranchCasesJsonFromRows(false);
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("fBranchCases").addEventListener("change", () => {
         const raw = String($("fBranchCases").value || "").trim();
@@ -4478,18 +4845,22 @@
         if (!Array.isArray(parsed)) return;
         setBranchCasesRows(parsed);
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("fInvokeFind").addEventListener("change", () => {
         syncInvokeFindFieldsFromJson();
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("fInvokeArgs").addEventListener("change", () => {
         syncInvokeArgsRowsFromJson();
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("fRunJsArgs").addEventListener("change", () => {
         syncRunJsArgsRowsFromJson();
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("addInvokeFilterBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -4497,6 +4868,7 @@
         $("fInvokeFiltersBox").appendChild(createInvokeFilterRow({ key: "", value: "" }));
         syncInvokeFindJsonFromFields(false);
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("addRunJsArgBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -4505,6 +4877,7 @@
         refreshRunJsArgRowIndex();
         syncRunJsArgsJsonFromRows(false);
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("runAiPagePresetBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -4515,6 +4888,7 @@
         $("fRunAiPageArticle").checked = false;
         syncActionJsonFromFields(false);
         setStatus("run_ai.page 已应用常用配置：url + html");
+        updateEditorDirtyState();
       });
       $("addInvokeArgBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -4522,9 +4896,11 @@
         $("fInvokeArgsBox").appendChild(createInvokeArgRow({ key: "", value: "" }));
         syncInvokeArgsJsonFromRows(false);
         syncActionJsonFromFields(false);
+        updateEditorDirtyState();
       });
       $("pickInvokeMustBtn").addEventListener("click", () => openInvokeKeyPicker("fInvokeFindMust").catch(failUi));
       $("pickInvokePreferBtn").addEventListener("click", () => openInvokeKeyPicker("fInvokeFindPrefer").catch(failUi));
+      $("pickFlowCapsBtn").addEventListener("click", () => openInvokeKeyPicker("flowCapsInput").catch(failUi));
       $("invokeKeyPickerCloseBtn").addEventListener("click", () => hideInvokeKeyPicker());
       $("invokeKeyPickerCancelBtn").addEventListener("click", () => hideInvokeKeyPicker());
       $("invokeKeyPickerApplyBtn").addEventListener("click", () => applyInvokeKeyPickerSelection());
@@ -4545,12 +4921,17 @@
       $("runJsPreviewMask").addEventListener("click", (ev) => {
         if (ev.target === $("runJsPreviewMask")) closeRunJsPreviewDialog(false);
       });
+      $("decisionMask").addEventListener("click", (ev) => {
+        if (ev.target === $("decisionMask")) closeDecisionDialog("cancel");
+      });
       document.addEventListener("keydown", (ev) => {
         if (ev.key !== "Escape") return;
         const mask = $("invokeKeyPickerMask");
         if (mask && mask.classList.contains("show")) hideInvokeKeyPicker();
         const mask2 = $("runJsPreviewMask");
         if (mask2 && mask2.classList.contains("show")) closeRunJsPreviewDialog(false);
+        const mask3 = $("decisionMask");
+        if (mask3 && mask3.classList.contains("show")) closeDecisionDialog("cancel");
       });
       renderInvokeFilterRows([]);
       syncInvokeFindJsonFromFields(true);
@@ -4562,6 +4943,7 @@
       setBranchCasesRows([]);
       syncBranchCasesJsonFromRows(false);
       syncNextJsonFromFields();
+      updateEditorDirtyState({ renderList: false });
     }
 
     bindTabs();
