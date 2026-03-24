@@ -6,6 +6,7 @@
 > - 新增 `invoke.fork`：支持在子执行时 fork 隔离页面上下文（`false` 旧行为；`true` 复用当前页 fork；`string` 表示先打开该 URL 再 fork 执行，见 8.1）
 > - 新增 `invokeMany`：通用批量子调用动作（支持并发、每项模板参数、每项 fork、结果聚合），用于替代专用 batch action（见 8.1.2）
 > - `goto` 新增 `newPage?: boolean`：当为 true 时，先创建新 tab/page，再在新页执行导航（默认 false）
+> - 新增 `closePage`：用于关闭页面；支持 `target:"active"|"flow"|"contextId"|"urlMatch"`，其中 `target:"flow"` 表示关闭当前 Flow 使用/打开过的全部页面（见 Action Union）
 > - 变更：取消 `next: { router:"routerId" }`（Flow 不再暗含 RouterMap 依赖）；保留 `next: { router: Function }` 作为动态路由兜底，并要求显式 `unsafe:true`，且 router 必须只读/无副作用（见 4.3）
 > - 变更：QuerySpec 在 kind="selector" 时，`policy` 默认从 `"single"` 调整为 `"pool"`（更符合“多候选试探”的默认策略）
 > - 新增 `readElement`：读取当前页面中元素的单一材料（text/value/html/rect/attr:\*），支持 `multi`
@@ -817,6 +818,10 @@ type Cond =
   | { op: "truthy";   path: string; source?: "args"|"opts"|"vars"|"result" }            // JS truthy（非空字符串/非0/true/非空数组等）
   | { op: "eq";       path: string; value: any; source?: "args"|"opts"|"vars"|"result" } // ===
   | { op: "neq";      path: string; value: any; source?: "args"|"opts"|"vars"|"result" } // !==
+  | { op: "gt";       path: string; value: number; source?: "args"|"opts"|"vars"|"result" } // 数值 >
+  | { op: "gte";      path: string; value: number; source?: "args"|"opts"|"vars"|"result" } // 数值 >=
+  | { op: "lt";       path: string; value: number; source?: "args"|"opts"|"vars"|"result" } // 数值 <
+  | { op: "lte";      path: string; value: number; source?: "args"|"opts"|"vars"|"result" } // 数值 <=
   | { op: "in";       path: string; values: any[]; source?: "args"|"opts"|"vars"|"result" } // 值属于集合
   | { op: "contains"; path: string; value: any; source?: "args"|"opts"|"vars"|"result" }    // 字符串/数组包含（实现需区分类型）
   | { op: "match";    path: string; regex: string; flags?: string; source?: "args"|"opts"|"vars"|"result" } // 正则（可选）
@@ -827,6 +832,7 @@ type Cond =
 
 - `path` 总是从 `call.args` 读取（例如 `"cover.data"` 表示 `call.args.cover.data`）
 - `value/values/regex` 为常量（通常无需插值）
+- `gt/gte/lt/lte` 按“数值比较”执行：运行时会把两侧转换为 Number；任一侧无法转换为有限数值（NaN/Infinity）则该条件视为不命中（false）
 
 示例（有封面则上传，否则跳过）：
 ```js
@@ -1177,6 +1183,25 @@ type Action = ActionBase & (
   // 打开指定 URL（url 支持插值：`${path}` 或 `${{ ... }}`；例如 `${targetUrl}`）
   // newPage=true 时：先创建新 tab/page，再在新页执行 goto（默认 false）
   | { type: "goto"; url: string; newPage?: boolean }
+
+  // 关闭页面：
+  // - target=active: 关闭 currentPage（默认）
+  // - target=flow: 关闭当前 flow 使用/打开过的全部页面
+  // - target=contextId: 按页面 id 关闭指定页（需 contextId）
+  // - target=urlMatch: 关闭 URL 包含 matchUrl 的页面
+  // ifLast:
+  // - skip(默认): 若命中页是最后一页，则跳过
+  // - fail: 若命中页是最后一页，则失败
+  // - allow: 允许关闭最后一页
+  // activateAfterClose=true(默认): 关闭后激活剩余页面作为 currentPage
+  | {
+      type: "closePage";
+      target?: "active" | "flow" | "contextId" | "urlMatch";
+      contextId?: string;
+      matchUrl?: string;
+      ifLast?: "skip" | "fail" | "allow";
+      activateAfterClose?: boolean;
+    }
 
   // 参数分支（仅根据 call.args 路由；不触碰页面）
   | BranchAction

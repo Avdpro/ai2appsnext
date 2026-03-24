@@ -71,6 +71,79 @@ class FlowBuilderSessionManager {
 		return session;
 	}
 
+	async _collectLivePages(session) {
+		const webRpa = session?.webRpa || null;
+		if (!webRpa) return [];
+		const seen = new Set();
+		const candidates = [];
+		const pushCandidate = (p) => {
+			if (!p || typeof p !== "object") return;
+			const ctx = asText(p?.context || "");
+			if (!ctx || seen.has(ctx)) return;
+			seen.add(ctx);
+			candidates.push(p);
+		};
+		try {
+			if (session?.browser && typeof session.browser.getPages === "function") {
+				const pages = await session.browser.getPages();
+				for (const p of (Array.isArray(pages) ? pages : [])) pushCandidate(p);
+			}
+		} catch (_) {
+		}
+		if (!candidates.length && Array.isArray(webRpa.sessionPages)) {
+			for (const p of webRpa.sessionPages) pushCandidate(p);
+		}
+		pushCandidate(webRpa.currentPage || null);
+
+		const alive = [];
+		for (const page of candidates) {
+			const contextId = asText(page?.context || "");
+			if (!contextId) continue;
+			let url = "";
+			let title = "";
+			try {
+				url = asText(await page.url());
+			} catch (_) {
+				continue;
+			}
+			try { title = asText(await page.title()); } catch (_) {}
+			alive.push({ page, contextId, url, title });
+		}
+		return alive;
+	}
+
+	async _rebindSessionActivePage(session) {
+		if (!session || session.status !== "ready" || !session.webRpa) return { activeContextId: "", contexts: [] };
+		const webRpa = session.webRpa;
+		const alive = await this._collectLivePages(session);
+		const contexts = alive.map((one) => ({
+			contextId: one.contextId,
+			url: one.url,
+			title: one.title,
+			active: false,
+		}));
+		let activeContextId = asText(session.activeContextId || "");
+		let activePage = null;
+		if (activeContextId) {
+			const found = alive.find((one) => one.contextId === activeContextId);
+			if (found) activePage = found.page;
+		}
+		if (!activePage && alive.length) {
+			activePage = alive[alive.length - 1].page;
+			activeContextId = asText(activePage?.context || "");
+		}
+		if (Array.isArray(webRpa.sessionPages)) {
+			webRpa.sessionPages = alive.map((one) => one.page);
+		}
+		try {
+			if (activePage) webRpa.setCurrentPage(activePage);
+		} catch (_) {
+		}
+		session.activeContextId = activeContextId;
+		for (const row of contexts) row.active = (row.contextId === activeContextId);
+		return { activeContextId, contexts };
+	}
+
 	async startSession({ alias = "", launchMode = "", startUrl = "" } = {}) {
 		const useAlias = asText(alias) || this.options.defaultAlias;
 		const useLaunchMode = asText(launchMode) || this.options.defaultLaunchMode;
@@ -87,6 +160,10 @@ class FlowBuilderSessionManager {
 			}
 		}
 		if (reused) {
+			try {
+				await this._rebindSessionActivePage(reused);
+			} catch (_) {
+			}
 			this._touch(reused);
 			return { ...this._toSummary(reused), reused: true };
 		}
@@ -192,29 +269,11 @@ class FlowBuilderSessionManager {
 		if (session.status !== "ready" || !session.webRpa) {
 			throw new Error(`session is not ready (status=${session.status})`);
 		}
-		const webRpa = session.webRpa;
-		const pages = Array.isArray(webRpa.sessionPages) ? Array.from(webRpa.sessionPages) : [];
-		const activeByPage = asText(webRpa.currentPage?.context || "");
-		const contexts = [];
-		for (const page of pages) {
-			const contextId = asText(page?.context || "");
-			if (!contextId) continue;
-			let url = "";
-			let title = "";
-			try { url = asText(await page.url()); } catch (_) {}
-			try { title = asText(await page.title()); } catch (_) {}
-			contexts.push({
-				contextId,
-				url,
-				title,
-				active: contextId === activeByPage,
-			});
-		}
-		session.activeContextId = activeByPage || asText(session.activeContextId);
+		const rebound = await this._rebindSessionActivePage(session);
 		this._touch(session);
 		return {
-			activeContextId: session.activeContextId,
-			contexts,
+			activeContextId: asText(rebound.activeContextId || session.activeContextId || ""),
+			contexts: Array.isArray(rebound.contexts) ? rebound.contexts : [],
 		};
 	}
 

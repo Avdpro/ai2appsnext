@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ShowMore Test - Collapsed</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #f3f4f6; color: #111827; }
+    .wrap { max-width: 860px; margin: 24px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; }
+    #article { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+    #content.collapsed {
+      max-height: 58px;
+      overflow: hidden;
+      position: relative;
+    }
+    #content.collapsed::after{
+      content:"";
+      position:absolute;left:0;right:0;bottom:0;height:28px;
+      background:linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1));
+    }
+    #expand-btn { margin-top: 10px; border: 1px solid #9ca3af; border-radius: 8px; padding: 8px 12px; background: #f9fafb; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>ShowMore 本地测试（折叠态）</h1>
+    <article id="article">
+      <div id="content" class="collapsed">
+        这是一段用于 showMore 测试的长文本。为了模拟真实网页中的“展开全文”场景，这里默认折叠显示，
+        需要点击“展开全文 / Show more”按钮才会完整展示全部内容。展开后会移除 collapsed 状态并隐藏按钮。
+        你可以用这个页面测试 showMore.checkOnly 与 showMore.expand 的行为是否符合预期。
+      </div>
+      <button id="expand-btn" aria-expanded="false" type="button">展开全文 / Show more</button>
+    </article>
+  </main>
+  <script>
+    (function(){
+      const btn = document.getElementById("expand-btn");
+      const content = document.getElementById("content");
+      btn.addEventListener("click", function(){
+        content.classList.remove("collapsed");
+        btn.setAttribute("aria-expanded", "true");
+        btn.style.display = "none";
+      });
+    })();
+  </script>
+</body>
+</html>
+

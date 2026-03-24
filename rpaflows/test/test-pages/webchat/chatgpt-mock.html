@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebChat Mock - ChatGPT Style</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dce2ea;
+      --text: #1f2937;
+      --muted: #667085;
+      --accent: #0a7a5d;
+      --accent-2: #0f9d78;
+      --user: #e8f7f2;
+      --assistant: #ffffff;
+      --danger: #b42318;
+      --shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 500px at -200px -180px, #d8e7ff 0%, transparent 70%),
+        radial-gradient(900px 500px at 120% -120px, #d9fff0 0%, transparent 70%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .btn:hover { background: #f8fafc; }
+    .btn.primary {
+      border-color: transparent;
+      background: linear-gradient(180deg, var(--accent-2), var(--accent));
+      color: #fff;
+    }
+
+    .btn.danger {
+      border-color: #fecaca;
+      color: var(--danger);
+      background: #fff5f5;
+    }
+
+    .sessions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: auto;
+      min-height: 0;
+      padding-right: 4px;
+    }
+
+    .session-item {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      text-align: left;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .session-item.active {
+      border-color: #93c5fd;
+      background: #eff6ff;
+    }
+
+    .session-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .session-meta {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .main {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      padding: 14px;
+      gap: 12px;
+    }
+
+    .topbar {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--shadow);
+    }
+
+    .top-left {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .session-name {
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 360px;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .chat {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      overflow: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .msg {
+      max-width: 860px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .msg.user {
+      margin-left: auto;
+      background: var(--user);
+      border-color: #bbf7d0;
+    }
+
+    .msg.assistant {
+      margin-right: auto;
+      background: var(--assistant);
+    }
+
+    .msg .meta {
+      margin-bottom: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .attachments {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      font-size: 11px;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fafc;
+      color: var(--muted);
+    }
+
+    .composer {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .composer textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      resize: vertical;
+      min-height: 92px;
+      font: inherit;
+      color: var(--text);
+    }
+
+    .composer-row {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .composer-left,
+    .composer-right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      padding: 22px;
+      text-align: center;
+      color: var(--muted);
+      background: #fafcff;
+    }
+
+    @media (max-width: 960px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); max-height: 300px; }
+      .session-name { max-width: 170px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span data-role="mock-brand">AI Chat Mock</span>
+        <button class="btn primary" id="btn-new-session" data-role="new-session">New</button>
+      </div>
+      <div class="sessions" id="session-list" data-role="session-list"></div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="top-left">
+          <div class="session-name" id="session-name" data-role="session-title">No session</div>
+          <div class="pill" id="session-kind-pill" data-role="session-kind">kind: ai</div>
+        </div>
+        <div class="top-right">
+          <button class="btn" id="btn-rename-session" data-role="rename-session">Rename</button>
+          <button class="btn danger" id="btn-delete-session" data-role="delete-session">Delete</button>
+        </div>
+      </div>
+
+      <section class="chat" id="chat-log" data-role="chat-log"></section>
+
+      <section class="composer">
+        <textarea id="input-text" data-role="chat-input" placeholder="Type your message..."></textarea>
+        <div class="attachments" id="composer-attachments" data-role="composer-attachments"></div>
+        <div class="composer-row">
+          <div class="composer-left">
+            <input id="file-input" data-role="file-input" type="file" multiple style="display:none" />
+            <button class="btn" id="btn-add-file" data-role="add-asset">Add attachment</button>
+            <button class="btn" id="btn-clear-draft" data-role="clear-draft">Clear draft</button>
+          </div>
+          <div class="composer-right">
+            <span class="status" id="status-text" data-role="status">Ready</span>
+            <button class="btn primary" id="btn-send" data-role="send-message">Send</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const STORE_KEY = "webchat_mock_store_v1";
+      const REPLIES = [
+        "Good question. I suggest starting with a small reproducible case, then iterating from logs.",
+        "I can help with that. Share the constraints and expected output, and I will structure a plan.",
+        "Here is a concise answer: yes, but add validation and retries to keep it robust.",
+        "Nice direction. I would prioritize reliability first, then optimize speed and UX.",
+        "A practical next step is to split the task into atomic actions and verify each step."
+      ];
+
+      const nowTs = () => Date.now();
+      const id = (p) => p + "_" + Math.random().toString(36).slice(2, 10);
+      const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      const ui = {
+        sessionList: document.getElementById("session-list"),
+        sessionName: document.getElementById("session-name"),
+        sessionKind: document.getElementById("session-kind-pill"),
+        chatLog: document.getElementById("chat-log"),
+        inputText: document.getElementById("input-text"),
+        fileInput: document.getElementById("file-input"),
+        attachList: document.getElementById("composer-attachments"),
+        statusText: document.getElementById("status-text"),
+        btnNew: document.getElementById("btn-new-session"),
+        btnRename: document.getElementById("btn-rename-session"),
+        btnDelete: document.getElementById("btn-delete-session"),
+        btnAddFile: document.getElementById("btn-add-file"),
+        btnClearDraft: document.getElementById("btn-clear-draft"),
+        btnSend: document.getElementById("btn-send")
+      };
+
+      const state = {
+        sessions: [],
+        activeSessionId: null,
+        draftText: "",
+        draftFiles: [],
+        sending: false
+      };
+
+      function save() {
+        const payload = {
+          sessions: state.sessions,
+          activeSessionId: state.activeSessionId
+        };
+        localStorage.setItem(STORE_KEY, JSON.stringify(payload));
+      }
+
+      function load() {
+        try {
+          const raw = localStorage.getItem(STORE_KEY);
+          if (!raw) return false;
+          const parsed = JSON.parse(raw);
+          if (!parsed || !Array.isArray(parsed.sessions)) return false;
+          state.sessions = parsed.sessions;
+          state.activeSessionId = parsed.activeSessionId || (parsed.sessions[0] && parsed.sessions[0].id) || null;
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function activeSession() {
+        return state.sessions.find((s) => s.id === state.activeSessionId) || null;
+      }
+
+      function mkSession(title) {
+        const ts = nowTs();
+        return {
+          id: id("sess"),
+          kind: "ai",
+          title: title || "New chat",
+          createdAt: ts,
+          updatedAt: ts,
+          messages: []
+        };
+      }
+
+      function ensureBootSession() {
+        if (!state.sessions.length) {
+          const s = mkSession("Welcome chat");
+          s.messages.push({
+            id: id("msg"),
+            role: "assistant",
+            text: "Welcome. This is a local AI chat mock page.",
+            ts: nowTs(),
+            status: "done",
+            attachments: []
+          });
+          state.sessions.push(s);
+          state.activeSessionId = s.id;
+        }
+      }
+
+      function setStatus(v) {
+        ui.statusText.textContent = v;
+      }
+
+      function newSession() {
+        const s = mkSession();
+        state.sessions.unshift(s);
+        state.activeSessionId = s.id;
+        state.draftText = "";
+        state.draftFiles = [];
+        save();
+        renderAll();
+      }
+
+      function removeSession(sessionId) {
+        const i = state.sessions.findIndex((s) => s.id === sessionId);
+        if (i < 0) return;
+        state.sessions.splice(i, 1);
+        if (!state.sessions.length) {
+          ensureBootSession();
+        }
+        if (state.activeSessionId === sessionId) {
+          state.activeSessionId = state.sessions[0].id;
+        }
+        save();
+        renderAll();
+      }
+
+      function renameSession(sessionId) {
+        const s = state.sessions.find((x) => x.id === sessionId);
+        if (!s) return;
+        const next = window.prompt("Rename session", s.title || "New chat");
+        if (next == null) return;
+        const title = String(next).trim();
+        if (!title) return;
+        s.title = title.slice(0, 120);
+        s.updatedAt = nowTs();
+        save();
+        renderAll();
+      }
+
+      function addFiles(fileList) {
+        const files = Array.from(fileList || []);
+        for (const f of files) {
+          state.draftFiles.push({
+            id: id("file"),
+            name: f.name,
+            size: f.size
+          });
+        }
+        renderComposer();
+      }
+
+      function clearDraft() {
+        state.draftText = "";
+        state.draftFiles = [];
+        ui.inputText.value = "";
+        ui.fileInput.value = "";
+        renderComposer();
+      }
+
+      function upsertSessionTitleByFirstUserMessage(s, text) {
+        if (!s || s.title !== "New chat") return;
+        const t = String(text || "").trim();
+        if (!t) return;
+        s.title = t.slice(0, 50);
+      }
+
+      function pushMessage(s, role, text, attachments, status) {
+        s.messages.push({
+          id: id("msg"),
+          role: role,
+          text: String(text || ""),
+          ts: nowTs(),
+          status: status || "done",
+          attachments: Array.isArray(attachments) ? attachments : []
+        });
+        s.updatedAt = nowTs();
+      }
+
+      function randomReply(promptText) {
+        const base = REPLIES[Math.floor(Math.random() * REPLIES.length)];
+        const head = String(promptText || "").trim().slice(0, 72);
+        if (!head) return base;
+        return base + "\n\nYou asked: \"" + head + "\"";
+      }
+
+      function sendCurrent() {
+        if (state.sending) return;
+        const s = activeSession();
+        if (!s) return;
+        const text = ui.inputText.value.trim();
+        const files = state.draftFiles.slice();
+        if (!text && !files.length) return;
+
+        state.sending = true;
+        setStatus("Sending...");
+
+        pushMessage(s, "user", text, files, "done");
+        upsertSessionTitleByFirstUserMessage(s, text);
+
+        clearDraft();
+        save();
+        renderAll();
+
+        const delay = 700 + Math.floor(Math.random() * 1000);
+        window.setTimeout(() => {
+          const as = activeSession();
+          if (!as) return;
+          pushMessage(as, "assistant", randomReply(text), [], "done");
+          state.sending = false;
+          setStatus("Ready");
+          save();
+          renderAll();
+        }, delay);
+      }
+
+      function renderSessionList() {
+        ui.sessionList.innerHTML = "";
+        for (const s of state.sessions) {
+          const item = document.createElement("button");
+          item.className = "session-item" + (s.id === state.activeSessionId ? " active" : "");
+          item.setAttribute("data-role", "session-item");
+          item.setAttribute("data-session-id", s.id);
+
+          const left = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "session-title";
+          title.textContent = s.title || "Untitled";
+          const meta = document.createElement("div");
+          meta.className = "session-meta";
+          meta.textContent = (s.messages.length || 0) + " msgs";
+          left.appendChild(title);
+          left.appendChild(meta);
+
+          const acts = document.createElement("div");
+          acts.className = "session-actions";
+
+          const renameBtn = document.createElement("button");
+          renameBtn.className = "icon-btn";
+          renameBtn.type = "button";
+          renameBtn.title = "Rename";
+          renameBtn.textContent = "R";
+          renameBtn.setAttribute("data-role", "session-rename");
+          renameBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            renameSession(s.id);
+          });
+
+          const delBtn = document.createElement("button");
+          delBtn.className = "icon-btn";
+          delBtn.type = "button";
+          delBtn.title = "Delete";
+          delBtn.textContent = "D";
+          delBtn.setAttribute("data-role", "session-delete");
+          delBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            const ok = window.confirm("Delete this session?");
+            if (ok) removeSession(s.id);
+          });
+
+          acts.appendChild(renameBtn);
+          acts.appendChild(delBtn);
+
+          item.appendChild(left);
+          item.appendChild(acts);
+
+          item.addEventListener("click", function () {
+            state.activeSessionId = s.id;
+            save();
+            renderAll();
+          });
+
+          ui.sessionList.appendChild(item);
+        }
+      }
+
+      function renderChat() {
+        const s = activeSession();
+        ui.chatLog.innerHTML = "";
+        if (!s || !s.messages.length) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "No messages yet. Start by sending a prompt.";
+          ui.chatLog.appendChild(empty);
+          return;
+        }
+
+        for (const m of s.messages) {
+          const box = document.createElement("article");
+          box.className = "msg " + (m.role === "user" ? "user" : "assistant");
+          box.setAttribute("data-role", "message");
+          box.setAttribute("data-message-role", m.role);
+
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          const role = document.createElement("span");
+          role.textContent = m.role;
+          const time = document.createElement("span");
+          time.textContent = fmtTime(m.ts);
+          const status = document.createElement("span");
+          status.textContent = m.status || "done";
+          meta.appendChild(role);
+          meta.appendChild(time);
+          meta.appendChild(status);
+
+          const text = document.createElement("div");
+          text.className = "text";
+          text.textContent = m.text || "";
+
+          box.appendChild(meta);
+          box.appendChild(text);
+
+          if (Array.isArray(m.attachments) && m.attachments.length) {
+            const list = document.createElement("div");
+            list.className = "attachments";
+            for (const a of m.attachments) {
+              const chip = document.createElement("span");
+              chip.className = "chip";
+              chip.textContent = "file: " + a.name;
+              list.appendChild(chip);
+            }
+            box.appendChild(list);
+          }
+
+          ui.chatLog.appendChild(box);
+        }
+        ui.chatLog.scrollTop = ui.chatLog.scrollHeight;
+      }
+
+      function renderComposer() {
+        ui.attachList.innerHTML = "";
+        for (const f of state.draftFiles) {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = f.name;
+          ui.attachList.appendChild(chip);
+        }
+        const hasDraft = ui.inputText.value.trim().length > 0 || state.draftFiles.length > 0;
+        ui.btnSend.disabled = !hasDraft || state.sending;
+      }
+
+      function renderHeader() {
+        const s = activeSession();
+        if (!s) {
+          ui.sessionName.textContent = "No session";
+          ui.sessionKind.textContent = "kind: -";
+          return;
+        }
+        ui.sessionName.textContent = s.title || "Untitled";
+        ui.sessionKind.textContent = "kind: " + (s.kind || "ai");
+      }
+
+      function renderAll() {
+        renderSessionList();
+        renderHeader();
+        renderChat();
+        renderComposer();
+      }
+
+      ui.btnNew.addEventListener("click", newSession);
+      ui.btnRename.addEventListener("click", function () {
+        const s = activeSession();
+        if (s) renameSession(s.id);
+      });
+      ui.btnDelete.addEventListener("click", function () {
+        const s = activeSession();
+        if (!s) return;
+        const ok = window.confirm("Delete current session?");
+        if (ok) removeSession(s.id);
+      });
+      ui.btnAddFile.addEventListener("click", function () {
+        ui.fileInput.click();
+      });
+      ui.fileInput.addEventListener("change", function (e) {
+        addFiles(e.target.files);
+        ui.fileInput.value = "";
+      });
+      ui.btnClearDraft.addEventListener("click", clearDraft);
+      ui.btnSend.addEventListener("click", sendCurrent);
+      ui.inputText.addEventListener("input", function () {
+        state.draftText = ui.inputText.value;
+        renderComposer();
+      });
+      ui.inputText.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          sendCurrent();
+        }
+      });
+
+      load();
+      ensureBootSession();
+      renderAll();
+      setStatus("Ready");
+      save();
+    })();
+  </script>
+</body>
+</html>

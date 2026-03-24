@@ -85,6 +85,13 @@ async function runFlow({
 	const runtimeOpts = (runtimeSession && (opts?.session === undefined))
 		? { ...(opts || {}), session: runtimeSession }
 		: (opts || {});
+	const flowRunCtx = (runtimeOpts.__flowRunCtx && typeof runtimeOpts.__flowRunCtx === "object")
+		? runtimeOpts.__flowRunCtx
+		: { usedContextIds: new Set(), flowId: String(flow?.id || "") };
+	if (!(flowRunCtx.usedContextIds instanceof Set)) {
+		flowRunCtx.usedContextIds = new Set(Array.isArray(flowRunCtx.usedContextIds) ? flowRunCtx.usedContextIds : []);
+	}
+	runtimeOpts.__flowRunCtx = flowRunCtx;
 
 	const stepsById = {};
 	for (const s of flow.steps) stepsById[s.id] = s;
@@ -132,10 +139,20 @@ async function runFlow({
 	const validateRequiredArgs = () => {
 		const defs = (flow?.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {};
 		const missing = [];
+		const readArgByDefKey = (defKey) => {
+			const key = String(defKey || "").trim();
+			if (!key) return undefined;
+			// Prefer exact top-level key match for backward compatibility.
+			if (args && typeof args === "object" && Object.prototype.hasOwnProperty.call(args, key)) {
+				return args[key];
+			}
+			// Support nested-path required keys, e.g. "ctx.size" -> args.ctx.size.
+			return parseFlowVal(`\${args.${key}}`, args, runtimeOpts, vars, lastResult);
+		};
 		for (const [key, spec] of Object.entries(defs)) {
 			if (!spec || typeof spec !== "object" || Array.isArray(spec)) continue;
 			if (spec.required !== true) continue;
-			const v = args ? args[key] : undefined;
+			const v = readArgByDefKey(key);
 			if (v === undefined || v === null) {
 				missing.push(key);
 				continue;
@@ -155,6 +172,8 @@ async function runFlow({
 	while (curStep && count < maxSteps) {
 		count++;
 		if (webRpa?.currentPage || runtimePage || page) runtimePage = webRpa?.currentPage || runtimePage || page || null;
+		const activeCtxBefore = String(runtimePage?.context || webRpa?.currentPage?.context || "").trim();
+		if (activeCtxBefore) flowRunCtx.usedContextIds.add(activeCtxBefore);
 		await logger?.info("step.start", { stepId: curStep.id, actionType: curStep.action?.type, index: count });
 		const stepResult = await executeStepAction({
 			webRpa,
@@ -174,6 +193,8 @@ async function runFlow({
 			...stepResult,
 			status: normalizeStatus(stepResult?.status),
 		};
+		const activeCtxAfter = String(webRpa?.currentPage?.context || runtimePage?.context || "").trim();
+		if (activeCtxAfter) flowRunCtx.usedContextIds.add(activeCtxAfter);
 		lastResult = normalized;
 		await logger?.info("step.end", { stepId: curStep.id, actionType: curStep.action?.type, status: normalized.status, reason: normalized.reason || "" });
 

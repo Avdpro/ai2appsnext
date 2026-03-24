@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blocker Fixture - Closeable Consent</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { padding: 24px; }
+    .overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.62);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dialog {
+      width: min(560px, 92vw);
+      background: #fff; color: #111; border-radius: 12px;
+      padding: 18px 18px 16px 18px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+    }
+    .actions { display: flex; gap: 10px; margin-top: 16px; }
+    button { border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+    .primary { background: #1463ff; color: #fff; }
+    .ghost { background: #eceff4; color: #111; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Fixture: Closeable Consent Blocker</h1>
+    <p>这是一个可关闭 blocker，用于验证 blockers.clear=true 的自动清理流程。</p>
+    <a href="#content">示例内容链接</a>
+  </main>
+
+  <div id="cookie-consent-overlay" class="overlay consent modal" role="dialog" aria-modal="true">
+    <section class="dialog">
+      <h2>Cookie 同意</h2>
+      <p>我们使用 cookie 改善体验。请先同意后继续浏览。</p>
+      <div class="actions">
+        <button id="consent-accept" class="primary">同意并继续</button>
+        <button id="consent-close" class="ghost">关闭</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      const overlay = document.getElementById("cookie-consent-overlay");
+      function closeOverlay() {
+        if (overlay) overlay.remove();
+      }
+      document.getElementById("consent-accept").addEventListener("click", closeOverlay);
+      document.getElementById("consent-close").addEventListener("click", closeOverlay);
+    })();
+  </script>
+</body>
+</html>

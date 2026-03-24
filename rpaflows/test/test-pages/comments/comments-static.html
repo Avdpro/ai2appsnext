@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Comments Test - Static</title>
+  <style>
+    body { margin: 0; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:#f6f7fb; color:#111; }
+    .wrap { max-width: 860px; margin: 24px auto; padding: 0 14px; }
+    #comment-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+    .comment { background:#fff; border:1px solid #d7dbe7; border-radius: 10px; padding: 10px 12px; }
+    .author { font-weight: 700; margin-bottom: 4px; }
+    .text { line-height: 1.65; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>静态评论页（无加载更多）</h1>
+    <ul id="comment-list">
+      <li class="comment" data-comment="1" data-id="s1"><div class="author">A</div><div class="text">静态评论 1</div></li>
+      <li class="comment" data-comment="1" data-id="s2"><div class="author">B</div><div class="text">静态评论 2</div></li>
+      <li class="comment" data-comment="1" data-id="s3"><div class="author">C</div><div class="text">静态评论 3</div></li>
+    </ul>
+  </div>
+</body>
+</html>

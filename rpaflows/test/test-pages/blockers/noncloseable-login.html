@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blocker Fixture - Noncloseable Login</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { padding: 24px; }
+    .overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.68);
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: auto;
+    }
+    .dialog {
+      width: min(560px, 92vw);
+      background: #fff; color: #111; border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+    }
+    .btn { margin-top: 12px; border: 0; border-radius: 8px; padding: 10px 14px; background: #2b59ff; color: #fff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Fixture: Noncloseable Login Blocker</h1>
+    <p>该 blocker 不能通过简单关闭解除，预期走 manual-needed/failed 路径。</p>
+  </main>
+
+  <div id="login-gate-overlay" class="overlay paywall login dialog" role="dialog" aria-modal="true">
+    <section class="dialog">
+      <h2>请先登录以继续</h2>
+      <p>此内容仅对已登录用户开放。请登录后再访问。</p>
+      <button class="btn" type="button">登录继续</button>
+    </section>
+  </div>
+</body>
+</html>

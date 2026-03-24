@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Comments Test - Load More</title>
+  <style>
+    body { margin: 0; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:#f6f7fb; color:#111; }
+    .wrap { max-width: 860px; margin: 24px auto; padding: 0 14px; }
+    h1 { margin: 0 0 12px; font-size: 24px; }
+    #comment-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+    .comment { background:#fff; border:1px solid #d7dbe7; border-radius: 10px; padding: 10px 12px; }
+    .author { font-weight: 700; margin-bottom: 4px; }
+    .meta { color:#555; font-size: 12px; margin-bottom: 6px; }
+    .text { line-height: 1.65; }
+    #more-btn { margin-top: 14px; border: 0; background: #0a66ff; color: #fff; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    #more-btn[disabled] { background:#93b9ff; cursor:not-allowed; }
+    #status { margin-top: 8px; color:#555; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>评论列表测试页</h1>
+    <ul id="comment-list"></ul>
+    <button id="more-btn">加载更多评论</button>
+    <div id="status"></div>
+  </div>
+  <script>
+    const PAGE_SIZE = 3;
+    const MAX_PAGE = 4;
+    let page = 0;
+    let total = 0;
+
+    function makeComment(p, i) {
+      total += 1;
+      const li = document.createElement("li");
+      li.className = "comment";
+      li.setAttribute("data-comment", "1");
+      li.setAttribute("data-id", "c" + total);
+      li.innerHTML = `
+        <div class="author" data-author="1">User ${total}</div>
+        <div class="meta"><time datetime="2026-02-17T10:${String(total).padStart(2, "0")}:00Z">2026-02-17 10:${String(total).padStart(2, "0")}</time></div>
+        <div class="text">这是第 ${total} 条评论（第 ${p} 页第 ${i} 条）。</div>
+      `;
+      return li;
+    }
+
+    function appendPage() {
+      if (page >= MAX_PAGE) return false;
+      page += 1;
+      const ul = document.getElementById("comment-list");
+      for (let i = 1; i <= PAGE_SIZE; i++) {
+        ul.appendChild(makeComment(page, i));
+      }
+      const btn = document.getElementById("more-btn");
+      if (page >= MAX_PAGE) {
+        btn.disabled = true;
+        btn.textContent = "没有更多评论";
+      }
+      document.getElementById("status").textContent = `page=${page}/${MAX_PAGE}, total=${total}`;
+      return true;
+    }
+
+    document.getElementById("more-btn").addEventListener("click", () => {
+      setTimeout(appendPage, 220);
+    });
+
+    appendPage();
+    appendPage();
+  </script>
+</body>
+</html>

@@ -720,7 +720,7 @@ async function ensureChatFabInjected(page, iconDataUrl = "", historySeed = [], f
 				const fBranchHint = doc.createElement("div");
 				fBranchHint.style.fontSize = "12px";
 				fBranchHint.style.color = "#64748b";
-				fBranchHint.textContent = "支持 exists/truthy/eq/neq/in/contains/match。复杂 and/or/not 可在 JSON 区微调。";
+				fBranchHint.textContent = "支持 exists/truthy/eq/neq/gt/gte/lt/lte/in/contains/match。复杂 and/or/not 可在 JSON 区微调。";
 				const fInputMode = doc.createElement("select");
 				for (const one of ["type", "paste", "fill"]) {
 					const op = doc.createElement("option");
@@ -1297,7 +1297,7 @@ async function ensureChatFabInjected(page, iconDataUrl = "", historySeed = [], f
 						}
 						sourceSel.style.width = "100%";
 						const opSel = doc.createElement("select");
-						for (const one of ["exists", "truthy", "eq", "neq", "in", "contains", "match"]) {
+						for (const one of ["exists", "truthy", "eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "match"]) {
 							const op = doc.createElement("option");
 							op.value = one;
 							op.textContent = `op=${one}`;
@@ -1376,7 +1376,7 @@ async function ensureChatFabInjected(page, iconDataUrl = "", historySeed = [], f
 							const when = { op, path };
 							if (source && source !== "args") when.source = source;
 							const pv = parseBranchValueText(row?.__valueInput?.value);
-							if (op === "eq" || op === "neq" || op === "contains") {
+							if (op === "eq" || op === "neq" || op === "contains" || op === "gt" || op === "gte" || op === "lt" || op === "lte") {
 								if (!pv.has) {
 									if (strict) return { ok: false, reason: `branch case(${op}) 缺少 value`, cases: [] };
 									continue;
@@ -4022,7 +4022,7 @@ async function suggestFlowCapsArgsByAI({ goal, webRpa, page, session, logger = n
 
 function sanitizeBranchAction(rawAction, fallbackDefault = "") {
 	const one = (rawAction && typeof rawAction === "object") ? rawAction : {};
-	const allowedOps = new Set(["exists", "truthy", "eq", "neq", "in", "contains", "match"]);
+	const allowedOps = new Set(["exists", "truthy", "eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "match"]);
 	const allowedSources = new Set(["args", "opts", "vars", "result"]);
 	const cases = [];
 	const rawCases = Array.isArray(one.cases) ? one.cases : [];
@@ -4035,7 +4035,7 @@ function sanitizeBranchAction(rawAction, fallbackDefault = "") {
 		const when = { op, path };
 		const source = String(whenRaw.source || "").trim().toLowerCase();
 		if (allowedSources.has(source) && source !== "args") when.source = source;
-		if (op === "eq" || op === "neq" || op === "contains") {
+		if (op === "eq" || op === "neq" || op === "contains" || op === "gt" || op === "gte" || op === "lt" || op === "lte") {
 			if (!("value" in whenRaw)) continue;
 			when.value = whenRaw.value;
 		}
@@ -4170,7 +4170,7 @@ async function suggestBranchDraftByAI({ description, builderState = {}, webRpa, 
 				"{\"default\":\"stepId\",\"cases\":[{\"when\":Cond,\"to\":\"stepId\"}],\"reason\":\"string\"}",
 				"规则：",
 				"- action.type 固定是 branch（外层会补上）。",
-				"- when.op 仅允许 exists/truthy/eq/neq/in/contains/match。",
+				"- when.op 仅允许 exists/truthy/eq/neq/gt/gte/lt/lte/in/contains/match。",
 				"- when.path 必填（如 publish 或 cover.data）。",
 				"- when.source 可选，默认 args；仅可用 args/opts/vars/result。",
 				"- eq/neq/contains 用 value；in 用 values 数组；match 用 regex/flags。",

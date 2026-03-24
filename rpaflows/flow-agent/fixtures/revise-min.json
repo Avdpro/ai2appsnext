@@ -1,0 +1,12 @@
+{
+  "mode": "revise",
+  "instruction": "把读取步骤改成 invoke read.list，并保留现有 step id",
+  "flow": {
+    "id": "demo",
+    "start": "step_1",
+    "steps": [
+      { "id": "step_1", "action": { "type": "goto", "url": "about:blank" }, "next": { "done": "done_1" } },
+      { "id": "done_1", "action": { "type": "done", "reason": "ok", "conclusion": { "status": "done", "value": {} } }, "next": {} }
+    ]
+  }
+}

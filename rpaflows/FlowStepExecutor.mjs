@@ -555,6 +555,45 @@ async function waitUrlStable(page, stableMs = 600, maxWaitMs = 6000, pollMs = 12
 	return last;
 }
 
+async function listLivePages(webRpa, fallbackPage = null) {
+	const out = [];
+	const seen = new Set();
+	const pushOne = (p) => {
+		if (!p || typeof p !== "object") return;
+		const ctx = String(p.context || "").trim();
+		if (!ctx || seen.has(ctx)) return;
+		seen.add(ctx);
+		out.push(p);
+	};
+	try {
+		if (webRpa?.browser && typeof webRpa.browser.getPages === "function") {
+			const pages = await webRpa.browser.getPages();
+			for (const p of (Array.isArray(pages) ? pages : [])) pushOne(p);
+		}
+	} catch (_) {
+	}
+	if (!out.length && Array.isArray(webRpa?.sessionPages)) {
+		for (const p of webRpa.sessionPages) pushOne(p);
+	}
+	pushOne(webRpa?.currentPage || null);
+	pushOne(fallbackPage || null);
+	return out;
+}
+
+async function activatePageBestEffort(webRpa, page) {
+	if (!page) return;
+	try { webRpa?.setCurrentPage?.(page); } catch (_) {}
+	try { await webRpa?.browser?.activate?.(); } catch (_) {}
+	try { await page?.bringToFront?.({ focusBrowser: true }); } catch (_) {}
+}
+
+function addUsedContext(opts, pageLike) {
+	const ctx = String(pageLike?.context || "").trim();
+	if (!ctx) return;
+	const runCtx = opts?.__flowRunCtx;
+	if (runCtx && runCtx.usedContextIds instanceof Set) runCtx.usedContextIds.add(ctx);
+}
+
 async function executeStepAction(runtime) {
 	const { webRpa, page, session, action, args, opts, vars, lastResult, flowId, stepId, logger } = runtime;
 	if (!action || !action.type) return { status: "failed", reason: "missing action.type" };
@@ -780,6 +819,7 @@ async function executeStepAction(runtime) {
 				const waitBy = waitByRaw ? parseFlowVal(waitByRaw, args, opts, vars, lastResult) : "";
 				const waitTimeoutMs = Math.max(0, Number(action.waitTimeoutMs ?? 8000));
 				const acceptAbortIfNavigated = action.acceptAbortIfNavigated !== false;
+				const autoRecoverNoSuchFrame = action.autoRecoverNoSuchFrame !== false;
 				let activePage = getActivePage();
 				if (useNewPage) {
 					if (!webRpa?.browser || typeof webRpa.openPage !== "function") {
@@ -800,6 +840,25 @@ async function executeStepAction(runtime) {
 					} catch (e) {
 						navError = e;
 						const msg = String(e?.message || "");
+						const isNoSuchFrame = /no such frame|browsing context.+not found|context.+not found/i.test(msg);
+						if (isNoSuchFrame && autoRecoverNoSuchFrame) {
+							if (!webRpa?.browser || typeof webRpa.openPage !== "function") throw e;
+							await logger?.warn("goto.context_lost.recover_open_page", {
+								stepId,
+								attempt: attempt + 1,
+								maxAttempts: retryOnAbort + 1,
+								url,
+								reason: msg.slice(0, 260),
+							});
+							try {
+								activePage = await webRpa.openPage(webRpa.browser);
+								webRpa?.setCurrentPage?.(activePage);
+								addUsedContext(opts, activePage);
+							} catch (openErr) {
+								throw new Error(`goto: failed to recover page after context lost: ${String(openErr?.message || openErr || "unknown")}`);
+							}
+							continue;
+						}
 						const isBindingAbort = /NS_BINDING_ABORTED/i.test(msg);
 						if (!isBindingAbort) throw e;
 						await logger?.warn("goto.binding_aborted", {
@@ -829,6 +888,109 @@ async function executeStepAction(runtime) {
 				await waitUrlStable(activePage, stableMs, settleTimeoutMs, settlePollMs);
 				if (postWaitMs > 0) await sleep(postWaitMs);
 				return { status: "done", value: { url: await activePage.url(), newPage: useNewPage, pageId: activePage.context || null } };
+			}
+			case "closePage": {
+				const activePage = getActivePage();
+				const allPages = await listLivePages(webRpa, activePage);
+				if (!allPages.length) return { status: "failed", reason: "closePage: no page to close" };
+				const byContext = new Map();
+				for (const p of allPages) {
+					const cid = String(p?.context || "").trim();
+					if (cid) byContext.set(cid, p);
+				}
+				const targetRaw = parseFlowVal(action.target ?? "active", args, opts, vars, lastResult);
+				const target = String(targetRaw || "active").trim().toLowerCase();
+				const ifLast = String(parseFlowVal(action.ifLast ?? "skip", args, opts, vars, lastResult) || "skip").trim().toLowerCase();
+				const activateAfterClose = parseFlowBool(parseFlowVal(action.activateAfterClose ?? true, args, opts, vars, lastResult), true);
+				const postWaitMs = Math.max(0, Number(parseFlowVal(action.postWaitMs ?? 0, args, opts, vars, lastResult) || 0));
+				const activeCtx = String((webRpa?.currentPage || activePage)?.context || "").trim();
+				let targetPages = [];
+				if (target === "flow") {
+					const used = (opts?.__flowRunCtx?.usedContextIds instanceof Set) ? Array.from(opts.__flowRunCtx.usedContextIds) : [];
+					targetPages = used.map((cid) => byContext.get(String(cid || "").trim())).filter(Boolean);
+				} else if (target === "contextid" || target === "context_id" || target === "context") {
+					const cidRaw = parseFlowVal(action.contextId, args, opts, vars, lastResult);
+					const cid = String(cidRaw || "").trim();
+					if (!cid) return { status: "failed", reason: "closePage: target=contextId requires contextId" };
+					const p = byContext.get(cid);
+					if (p) targetPages = [p];
+				} else if (target === "urlmatch" || target === "url_match" || target === "url") {
+					const m = String(parseFlowVal(action.matchUrl, args, opts, vars, lastResult) || "").trim();
+					if (!m) return { status: "failed", reason: "closePage: target=urlMatch requires matchUrl" };
+					const needle = m.toLowerCase();
+					for (const p of allPages) {
+						let u = "";
+						try { u = String(await p.url() || ""); } catch (_) {}
+						if (u.toLowerCase().includes(needle)) targetPages.push(p);
+					}
+				} else {
+					const p = byContext.get(activeCtx);
+					if (p) targetPages = [p];
+				}
+				// unique by context
+				const seenClose = new Set();
+				targetPages = targetPages.filter((p) => {
+					const cid = String(p?.context || "").trim();
+					if (!cid || seenClose.has(cid)) return false;
+					seenClose.add(cid);
+					return true;
+				});
+				if (!targetPages.length) return { status: "failed", reason: "closePage: target page not found" };
+
+				const closedContextIds = [];
+				const skippedContextIds = [];
+				let remaining = allPages.length;
+				for (const p of targetPages) {
+					const cid = String(p?.context || "").trim();
+					if (!cid) continue;
+					if (remaining <= 1 && ifLast !== "allow") {
+						if (ifLast === "fail") {
+							return {
+								status: "failed",
+								reason: `closePage: refuse to close last page (${cid})`,
+								value: { closedContextIds, skippedContextIds: [...skippedContextIds, cid], remainingContexts: remaining },
+							};
+						}
+						skippedContextIds.push(cid);
+						continue;
+					}
+					try {
+						await webRpa.closePage(p);
+						closedContextIds.push(cid);
+						remaining = Math.max(0, remaining - 1);
+					} catch (e) {
+						return {
+							status: "failed",
+							reason: `closePage: close failed (${cid}): ${String(e?.message || e || "unknown")}`,
+							value: { closedContextIds, skippedContextIds, remainingContexts: remaining },
+						};
+					}
+				}
+				const leftPages = await listLivePages(webRpa, null);
+				let nextActive = webRpa?.currentPage || null;
+				if (!nextActive && leftPages.length) nextActive = leftPages[leftPages.length - 1];
+				if (nextActive && activateAfterClose) {
+					await activatePageBestEffort(webRpa, nextActive);
+				}
+				addUsedContext(opts, nextActive);
+				if (postWaitMs > 0) await sleep(postWaitMs);
+				const skippedOnly = !closedContextIds.length && skippedContextIds.length > 0;
+				const status = skippedOnly ? "skipped" : "done";
+				let activeUrl = "";
+				try { activeUrl = String(await nextActive?.url?.() || ""); } catch (_) {}
+				return {
+					status,
+					value: {
+						closed: closedContextIds.length > 0,
+						target,
+						closedCount: closedContextIds.length,
+						closedContextIds,
+						skippedContextIds,
+						remainingContexts: leftPages.length,
+						activeContextId: String(nextActive?.context || ""),
+						activeUrl,
+					},
+				};
 			}
 			case "press_key": {
 				const activePage = requireActivePage(action.type);

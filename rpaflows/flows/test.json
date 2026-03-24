@@ -2,7 +2,13 @@
   "flow": {
     "id": "flow_builder_demo",
     "start": "step_1",
-    "args": {},
+    "args": {
+      "query": {
+        "type": "string",
+        "required": true,
+        "desc": "搜索关键词"
+      }
+    },
     "steps": [
       {
         "id": "step_1",
@@ -11,15 +17,61 @@
           "url": "https://www.weibo.com"
         },
         "next": {
-          "done": "done_1",
+          "done": "ensure_login",
           "failed": "abort_1"
         }
       },
       {
-        "id": "done_1",
+        "id": "ensure_login",
         "action": {
-          "type": "done",
-          "conclusion": "ok"
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "login.ensure"
+            ]
+          },
+          "args": {
+            "login.ensure": true
+          }
+        },
+        "next": {
+          "done": "click_search",
+          "failed": "abort_1"
+        },
+        "saveAs": "login_result"
+      },
+      {
+        "id": "click_search",
+        "action": {
+          "type": "click",
+          "query": "搜索按钮",
+          "postWaitMs": 1500
+        },
+        "next": {
+          "done": "step_2",
+          "failed": "click_search_fallback"
+        }
+      },
+      {
+        "id": "step_2",
+        "action": {
+          "type": "run_js",
+          "code": "(args, opts, vars, result) => { var items = []; var articles = document.querySelectorAll('article[class*=\"_wrap_m3n8j\"]'); articles.forEach(function(article) { var textEl = article.querySelector('div[class*=\"_wbtext_\"]'); var text = textEl ? textEl.textContent.trim() : ''; if (text) { items.push(text); } }); return items; }",
+          "query": "找到并返回当前列出的微博项目文本内容文本数组",
+          "scope": "page"
+        },
+        "next": {
+          "done": "final_done"
+        },
+        "saveAs": "read_result"
+      },
+      {
+        "id": "click_search_fallback",
+        "action": {
+          "type": "ask_assist",
+          "reason": "无法找到搜索按钮，请手动点击搜索按钮",
+          "waitUserAction": true
         },
         "next": {
           "done": "step_2"
@@ -34,12 +86,14 @@
         "next": {}
       },
       {
-        "id": "step_2",
+        "id": "final_done",
         "action": {
-          "type": "run_js",
-          "code": "function() \n  var items = [];\n  var articles = document.querySelectorAll('article[class*=\"_wrap_m3n8j\"]');\n  articles.forEach(function(article) {\n    var textEl = article.querySelector('div[class*=\"_wbtext_\"]');\n    var text = textEl ? textEl.textContent.trim() : '';\n    if (text) {\n      items.push(text);\n    }\n  });\n  return items;\n}",
-          "query": "找到并返回当前列出的微博项目文本内容文本数组",
-          "scope": "page"
+          "type": "done",
+          "reason": "流程完成",
+          "conclusion": {
+            "status": "done",
+            "value": "${vars.read_result}"
+          }
         },
         "next": {}
       }

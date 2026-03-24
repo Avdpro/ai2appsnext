@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flow-agent-output.schema.json",
+  "title": "Flow Agent Output",
+  "type": "object",
+  "properties": {
+    "flow": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "start": { "type": "string" },
+        "steps": { "type": "array" }
+      },
+      "required": ["id", "start", "steps"]
+    },
+    "document": {
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    { "required": ["flow"] },
+    { "required": ["document"] }
+  ]
+}

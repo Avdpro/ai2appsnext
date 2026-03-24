@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LoadMore Test - Next Page</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background:#f6f7fb; color:#111; }
+    .wrap { max-width: 840px; margin: 24px auto; padding: 0 12px; }
+    h1 { margin: 0 0 12px; font-size: 24px; }
+    .card { background:#fff; border:1px solid #ddd; border-radius:12px; padding: 12px; margin-bottom: 12px; }
+    #item-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+    #item-list li { background:#fff; border:1px solid #ddd; border-radius:10px; padding: 10px; min-height: 64px; }
+    #pager { display:flex; gap:10px; margin-top: 14px; align-items:center; }
+    #next-btn { border: 0; border-radius: 8px; padding: 10px 14px; background:#0a66ff; color:#fff; cursor:pointer; font-weight: 700; }
+    #next-btn[disabled] { background:#7aa7f8; cursor:not-allowed; }
+    #status { color:#444; font-size:14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>下一页加载测试</h1>
+    <div class="card">通过点击“下一页”将新条目追加到列表。</div>
+    <ul id="item-list"></ul>
+    <div id="pager">
+      <button id="next-btn">下一页</button>
+      <span id="status"></span>
+    </div>
+  </div>
+  <script>
+    const PER_PAGE = 8;
+    const MAX_PAGE = 3;
+    let page = 0;
+
+    function renderPage(p) {
+      const list = document.getElementById("item-list");
+      const start = (p - 1) * PER_PAGE + 1;
+      for (let i = 0; i < PER_PAGE; i++) {
+        const idx = start + i;
+        const li = document.createElement("li");
+        li.className = "item";
+        li.innerHTML = "<strong>Item " + idx + "</strong><div>Page " + p + " / Row " + (i + 1) + "</div>";
+        list.appendChild(li);
+      }
+    }
+
+    function syncUi() {
+      const btn = document.getElementById("next-btn");
+      const st = document.getElementById("status");
+      st.textContent = "当前第 " + page + " 页，合计条目 " + document.querySelectorAll("#item-list > li").length;
+      if (page >= MAX_PAGE) {
+        btn.disabled = true;
+        btn.textContent = "已到底";
+      }
+    }
+
+    function nextPage() {
+      if (page >= MAX_PAGE) return;
+      page += 1;
+      renderPage(page);
+      syncUi();
+    }
+
+    document.getElementById("next-btn").addEventListener("click", () => {
+      setTimeout(nextPage, 220);
+    });
+
+    nextPage();
+  </script>
+</body>
+</html>
+

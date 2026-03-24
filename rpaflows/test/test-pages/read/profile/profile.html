@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>个人主页 - 测试用户A</title>
+  <meta name="description" content="这是测试用户A的个人简介。" />
+  <meta property="og:image" content="https://example.com/avatar-a.png" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; }
+    .head { display: flex; gap: 12px; align-items: center; }
+    .avatar { width: 72px; height: 72px; border-radius: 50%; background: #dbeafe; }
+    .verified { color: #2563eb; font-weight: 700; }
+    .stats { display: flex; gap: 14px; margin-top: 10px; }
+    .bio { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main itemscope itemtype="https://schema.org/Person">
+    <div class="head">
+      <img class="avatar" alt="avatar" src="https://example.com/avatar-a.png" />
+      <div>
+        <h1 itemprop="name">测试用户A <span class="verified">认证</span></h1>
+        <div class="bio" itemprop="description">热爱钟表与自动化。</div>
+      </div>
+    </div>
+    <div class="stats">
+      <span data-followers="345">粉丝 345</span>
+      <span data-following="78">关注 78</span>
+      <span data-posts="21">动态 21</span>
+      <span data-likes="900">获赞 900</span>
+    </div>
+  </main>
+</body>
+</html>

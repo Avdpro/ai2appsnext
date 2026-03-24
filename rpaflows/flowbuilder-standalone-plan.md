@@ -178,6 +178,13 @@ Builder UI (普通浏览器)
 关键变更文件：`/Users/avdpropang/sdk/cchome/home/public/rpaflows/builder.html`
 验证结果：新增 Flow 描述字段、参数定义编辑器（key/type/required/desc/default）、参数键批量补全与新增按钮；外壳写回时同步到 `flow.description`、`flow.goal/meta.goal`、`flow.capabilities`、`flow.args`、`flow.filters`；页面脚本 `node --check` 通过。
 
+- [x] T8：Session 集成系统登录与登录态调用（TabOS NT）
+目标：参考 `sync/tabos/tabos_nt.js` 的登录与 `makeCall` 行为，在独立 Builder 的 Session Tab 提供登录、检查、登出、登录态调用系统函数能力。
+验收：可在 Session Tab 中完成登录，显示登录态，并通过登录态调用系统函数（如 `userCurrency`）。
+完成日期：2026-03-22
+关键变更文件：`/Users/avdpropang/sdk/cchome/home/routes/APIRPAFlowBuilder.mjs`、`/Users/avdpropang/sdk/cchome/home/public/rpaflows/builder.html`
+验证结果：新增 `system/login|check|logout|call|status` API；session 查询返回 `systemAuth`；Session Tab 新增系统登录区块与对应按钮，支持状态标签显示与调用结果输出；Session 启动时会读取 `localStorage`（`LoginVO`，兼容 `login-Info`）并自动登录，再调用 `userCurrency` 校验 token，不通过则清理本地登录信息；`node --check routes/APIRPAFlowBuilder.mjs` 通过。
+
 ## 11. 执行方式
 
 从现在起按 `T1 -> T6` 顺序推进。

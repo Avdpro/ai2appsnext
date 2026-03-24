@@ -1,0 +1,344 @@
+{
+  "capabilities": {
+    "must": [
+      "compose",
+      "compose.start"
+    ],
+    "prefer": [
+      "compose.action",
+      "compose.type",
+      "compose.visibility",
+      "compose.result"
+    ]
+  },
+  "filters": [
+    {
+      "key": "domain",
+      "value": "*"
+    },
+    {
+      "key": "locale",
+      "value": "zh-CN"
+    }
+  ],
+  "ranks": {
+    "cost": 2,
+    "quality": 3,
+    "speed": 2
+  },
+  "flow": {
+    "id": "compose_start",
+    "start": "init_ctx",
+    "args": {
+      "compose": {
+        "type": "object",
+        "required": false,
+        "desc": "compose 参数，支持 compose.action/type/visibility/resetDraftOnStart"
+      }
+    },
+    "steps": [
+      {
+        "id": "init_ctx",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "(args) => { const a = args || {}; function t(v){ return String(v == null ? '' : v).trim(); } const compose = a.compose || {}; const action = t(compose.action || 'start').toLowerCase() || 'start'; const type = t(compose.type || 'post').toLowerCase() || 'post'; const visibility = t(compose.visibility || ''); const resetDraftOnStart = compose.resetDraftOnStart === false ? false : true; const actionOk = action === 'start'; let entryQuery = '打开页面中的发帖/发布/写文章/创建内容入口'; if(type === 'comment' || type === 'reply'){ entryQuery = '打开当前页面的评论或回复输入入口'; } else if(type === 'thread'){ entryQuery = '打开页面中的发串/发帖线程入口'; } else if(type === 'article'){ entryQuery = '打开写文章/发布文章入口'; } return { action, type, visibility, resetDraftOnStart, actionOk, entryQuery }; }",
+          "args": [
+            "${{ ({ compose: args.compose || {} }) }}"
+          ]
+        },
+        "saveAs": "composeCtx",
+        "next": {
+          "done": "route_action",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_action",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.actionOk",
+                "value": true
+              },
+              "to": "clear_blockers"
+            }
+          ],
+          "default": "abort_unsupported_action"
+        }
+      },
+      {
+        "id": "clear_blockers",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "blockers.check"
+            ]
+          },
+          "args": {
+            "blockers.clear": true
+          },
+          "onError": "return",
+          "returnTo": "caller"
+        },
+        "saveAs": "blockersOut",
+        "next": {
+          "done": "ensure_login",
+          "failed": "ensure_login"
+        }
+      },
+      {
+        "id": "ensure_login",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "login.check"
+            ]
+          },
+          "args": {
+            "login.ensure": true
+          },
+          "timeoutMs": 60000,
+          "onError": "fail",
+          "returnTo": "caller"
+        },
+        "saveAs": "loginOut",
+        "next": {
+          "done": "check_compose_ready",
+          "failed": "assist_login",
+          "timeout": "assist_login"
+        }
+      },
+      {
+        "id": "assist_login",
+        "action": {
+          "type": "ask_assist",
+          "reason": "请先手动完成登录（如账号密码/扫码/验证码），完成后点击\"已处理，继续\"。",
+          "waitUserAction": true
+        },
+        "next": {
+          "done": "check_compose_ready",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "check_compose_ready",
+        "action": {
+          "type": "selector",
+          "query": "可见的撰写编辑器/输入区（用于发布内容），通常是 textarea 或 contenteditable 区域，并且附近出现发布/发送/下一步按钮；避免匹配搜索框"
+        },
+        "saveAs": "composeEditorSel",
+        "next": {
+          "done": "detect_editor",
+          "failed": "open_compose_entry"
+        }
+      },
+      {
+        "id": "open_compose_entry",
+        "action": {
+          "type": "click",
+          "query": "${vars.composeCtx.entryQuery}"
+        },
+        "saveAs": "composeEntry",
+        "next": {
+          "done": "wait_compose_editor",
+          "failed": "ask_assist_open",
+          "timeout": "ask_assist_open"
+        }
+      },
+      {
+        "id": "wait_compose_editor",
+        "action": {
+          "type": "wait",
+          "timeoutMs": 7000,
+          "query": "可见的撰写编辑器/输入区（textarea 或 contenteditable），用于输入正文；通常和发布/发送按钮在同一面板"
+        },
+        "next": {
+          "done": "detect_editor",
+          "failed": "ask_assist_open",
+          "timeout": "ask_assist_open"
+        }
+      },
+      {
+        "id": "detect_editor",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "() => { function isVisible(el){ if(!el) return false; const st = window.getComputedStyle(el); if(!st) return false; if(st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity || '1') <= 0.02) return false; const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2; } const checks = ['textarea',\"[contenteditable='true']\",\"[role='textbox']\",\"div[aria-label*='写' i]\",\"div[aria-label*='post' i]\",\"div[aria-label*='tweet' i]\",\"div[aria-label*='editor' i]\"]; const hits = []; for(const sel of checks){ let arr = []; try { arr = Array.from(document.querySelectorAll(sel)); } catch(_) {} for(const el of arr){ if(!isVisible(el)) continue; const txt = String(el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim(); hits.push({ selector: sel, hint: txt.slice(0, 80) }); if(hits.length >= 8) break; } if(hits.length >= 8) break; } return { ready: hits.length > 0, count: hits.length, hints: hits, url: String(location.href || ''), title: String(document.title || '') }; }"
+        },
+        "saveAs": "editorCheck",
+        "next": {
+          "done": "route_editor_ready",
+          "failed": "ask_assist_open"
+        }
+      },
+      {
+        "id": "route_editor_ready",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "editorCheck.ready",
+                "value": true
+              },
+              "to": "route_reset_draft"
+            }
+          ],
+          "default": "ask_assist_open"
+        }
+      },
+      {
+        "id": "route_reset_draft",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.resetDraftOnStart",
+                "value": true
+              },
+              "to": "clear_editor_content"
+            }
+          ],
+          "default": "done_ok"
+        }
+      },
+      {
+        "id": "clear_editor_content",
+        "action": {
+          "type": "input",
+          "text": "",
+          "mode": "paste",
+          "clear": true
+        },
+        "next": {
+          "done": "done_ok",
+          "failed": "done_ok"
+        }
+      },
+      {
+        "id": "ask_assist_open",
+        "action": {
+          "type": "ask_assist",
+          "reason": "请手动打开页面的发帖/写作输入框（compose.start）。打开后点击\"已处理，继续\"；如果当前页面不支持请点\"无法处理\"。",
+          "waitUserAction": true
+        },
+        "next": {
+          "done": "detect_editor_after_assist",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "detect_editor_after_assist",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "() => { function isVisible(el){ if(!el) return false; const st = window.getComputedStyle(el); if(!st) return false; if(st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity || '1') <= 0.02) return false; const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2; } const checks = ['textarea',\"[contenteditable='true']\",\"[role='textbox']\",\"div[aria-label*='写' i]\",\"div[aria-label*='post' i]\",\"div[aria-label*='tweet' i]\",\"div[aria-label*='editor' i]\"]; const hits = []; for(const sel of checks){ let arr = []; try { arr = Array.from(document.querySelectorAll(sel)); } catch(_) {} for(const el of arr){ if(!isVisible(el)) continue; const txt = String(el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim(); hits.push({ selector: sel, hint: txt.slice(0, 80) }); if(hits.length >= 8) break; } if(hits.length >= 8) break; } return { ready: hits.length > 0, count: hits.length, hints: hits, url: String(location.href || ''), title: String(document.title || '') }; }"
+        },
+        "saveAs": "editorCheckAfter",
+        "next": {
+          "done": "route_editor_ready_after_assist",
+          "failed": "abort"
+        }
+      },
+      {
+        "id": "route_editor_ready_after_assist",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "editorCheckAfter.ready",
+                "value": true
+              },
+              "to": "route_reset_draft_after_assist"
+            }
+          ],
+          "default": "abort"
+        }
+      },
+      {
+        "id": "route_reset_draft_after_assist",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "eq",
+                "source": "vars",
+                "path": "composeCtx.resetDraftOnStart",
+                "value": true
+              },
+              "to": "clear_editor_content_after_assist"
+            }
+          ],
+          "default": "done_after_assist"
+        }
+      },
+      {
+        "id": "clear_editor_content_after_assist",
+        "action": {
+          "type": "input",
+          "text": "",
+          "mode": "paste",
+          "clear": true
+        },
+        "next": {
+          "done": "done_after_assist",
+          "failed": "done_after_assist"
+        }
+      },
+      {
+        "id": "done_ok",
+        "action": {
+          "type": "done",
+          "reason": "compose.start done",
+          "conclusion": {
+            "status": "done",
+            "value": "${{ ({ action:'start', id:'', url: (vars.editorCheck||{}).url || '', type: (vars.composeCtx||{}).type || 'post', visibility: (vars.composeCtx||{}).visibility || '', entryBy: (vars.composeEntry||{}).by || null, editorReady: true, editorHints: (vars.editorCheck||{}).hints || [], composeResult: vars.composeResult || null }) }}"
+          }
+        }
+      },
+      {
+        "id": "done_after_assist",
+        "action": {
+          "type": "done",
+          "reason": "compose.start done by assist",
+          "conclusion": {
+            "status": "done",
+            "value": "${{ ({ action:'start', id:'', url: (vars.editorCheckAfter||{}).url || '', type: (vars.composeCtx||{}).type || 'post', visibility: (vars.composeCtx||{}).visibility || '', entryBy: (vars.composeEntry||{}).by || null, editorReady: true, editorHints: (vars.editorCheckAfter||{}).hints || [], composeResult: vars.composeResult || null }) }}"
+          }
+        }
+      },
+      {
+        "id": "abort_unsupported_action",
+        "action": {
+          "type": "abort",
+          "reason": "compose_start only supports compose.action=start"
+        }
+      },
+      {
+        "id": "abort",
+        "action": {
+          "type": "abort",
+          "reason": "compose.start failed: cannot open composer/editor"
+        }
+      }
+    ]
+  }
+}

@@ -174,6 +174,10 @@ function runBranchAction(action, args, opts, vars, result) {
 		if (cond.op === "or") return Array.isArray(cond.items) && cond.items.some(evalCond);
 		if (cond.op === "not") return !evalCond(cond.item);
 		const v = readValue(cond);
+		const asFiniteNumber = (x) => {
+			const n = Number(x);
+			return Number.isFinite(n) ? n : null;
+		};
 		switch (cond.op) {
 			case "exists":
 				return v !== null && v !== undefined;
@@ -183,6 +187,26 @@ function runBranchAction(action, args, opts, vars, result) {
 				return v === cond.value;
 			case "neq":
 				return v !== cond.value;
+			case "gt": {
+				const a = asFiniteNumber(v);
+				const b = asFiniteNumber(cond.value);
+				return a !== null && b !== null && a > b;
+			}
+			case "gte": {
+				const a = asFiniteNumber(v);
+				const b = asFiniteNumber(cond.value);
+				return a !== null && b !== null && a >= b;
+			}
+			case "lt": {
+				const a = asFiniteNumber(v);
+				const b = asFiniteNumber(cond.value);
+				return a !== null && b !== null && a < b;
+			}
+			case "lte": {
+				const a = asFiniteNumber(v);
+				const b = asFiniteNumber(cond.value);
+				return a !== null && b !== null && a <= b;
+			}
 			case "in":
 				return Array.isArray(cond.values) && cond.values.includes(v);
 			case "contains":
@@ -191,7 +215,8 @@ function runBranchAction(action, args, opts, vars, result) {
 				return false;
 			case "match":
 				try {
-					return new RegExp(String(cond.pattern || ""), String(cond.flags || "")).test(String(v ?? ""));
+					const rx = String(cond.regex || cond.pattern || "");
+					return new RegExp(rx, String(cond.flags || "")).test(String(v ?? ""));
 				} catch (_) {
 					return false;
 				}

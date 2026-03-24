@@ -4,6 +4,7 @@ import rpaKind from "./rpa.mjs";
 
 const KNOWN_ACTION_TYPES = new Set([
 	"goto",
+	"closePage",
 	"click",
 	"hover",
 	"input",
@@ -31,6 +32,7 @@ const KNOWN_ACTION_TYPES = new Set([
 
 const ACTION_SIGNATURES = {
 	goto: `{ type: "goto", url: string, postWaitMs?: number }`,
+	closePage: `{ type: "closePage", target?: "active"|"flow"|"contextId"|"urlMatch", contextId?: string, matchUrl?: string, ifLast?: "skip"|"fail"|"allow", activateAfterClose?: boolean, postWaitMs?: number }`,
 	click: `{ type: "click", query: string, by?: string, pick?: number | string, intent?: "open"|"dismiss"|"submit", expectInputFocus?: boolean, postWaitMs?: number }`,
 	hover: `{ type: "hover", query: string, by?: string, pick?: number | string, postWaitMs?: number }`,
 	input: `{ type: "input", text: string, mode?: "fill"|"type"|"paste", clear?: boolean, pressEnter?: boolean, postWaitMs?: number }`,
@@ -56,6 +58,7 @@ const ACTION_SIGNATURES = {
 
 const ACTION_ALLOWED_KEYS = {
 	goto: new Set(["type", "url", "postWaitMs"]),
+	closePage: new Set(["type", "target", "contextId", "matchUrl", "ifLast", "activateAfterClose", "postWaitMs"]),
 	click: new Set(["type", "query", "by", "pick", "intent", "expectInputFocus", "postWaitMs"]),
 	hover: new Set(["type", "query", "by", "pick", "postWaitMs"]),
 	input: new Set(["type", "text", "mode", "clear", "pressEnter", "preEnterWaitMs", "postWaitMs", "caret"]),
@@ -83,6 +86,7 @@ const ACTION_ALLOWED_KEYS = {
 
 const ACTION_REQUIRED_KEYS = {
 	goto: ["url"],
+	closePage: [],
 	click: ["query"],
 	hover: ["query"],
 	input: ["text"],
@@ -103,7 +107,7 @@ const ACTION_REQUIRED_KEYS = {
 	branch: ["cases"],
 };
 
-const ALLOWED_BRANCH_OPS = new Set(["exists", "truthy", "eq", "neq", "in", "contains", "match", "and", "or", "not"]);
+const ALLOWED_BRANCH_OPS = new Set(["exists", "truthy", "eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "match", "and", "or", "not"]);
 const ALLOWED_COND_SOURCES = new Set(["args", "opts", "vars", "result"]);
 const ALLOWED_FIND_KEYS = new Set(["kind", "must", "prefer", "filter", "rank"]);
 
@@ -252,6 +256,79 @@ function buildRegeneratePrompt({ capabilityKeys, skillText, plan, taskProfile = 
 	].join("\n");
 }
 
+function buildFlowRevisePrompt({
+	capabilityKeys,
+	currentFlow,
+	userInstruction,
+	contextText = "",
+	taskProfile = null,
+}) {
+	const pseudoPlan = {
+		goal: "根据用户提示修改现有 flow，输出可执行完整版本",
+		steps: [
+			{ idHint: "understand_changes", intent: "理解用户修改要求并映射到步骤变更" },
+			{ idHint: "rewrite_flow", intent: "重写受影响步骤并保持整体连通性与可执行性" },
+			{ idHint: "validate_constraints", intent: "确保 invoke/find/args/模板语法/done 结构符合规范" },
+		],
+	};
+	const base = buildFlowPrompt({
+		capabilityKeys,
+		skillText: String(contextText || "").trim() || "在现有 flow 基础上按用户提示进行修改",
+		plan: pseudoPlan,
+		taskProfile,
+	});
+	return [
+		base,
+		"",
+		"[FLOW REVISION MODE]",
+		"你现在不是从零生成，而是修改现有 flow。",
+		"必须输出完整 flow（不是 patch / diff）。",
+		"尽量保留未被用户要求修改的步骤 id 与结构，降低回归风险。",
+		"若步骤使用 saveAs / vars 引用，请同步维护 flow.vars 外壳声明（type/desc/from 可选但建议填写）。",
+		"允许并鼓励使用嵌套 dotted args/vars 路径来增强可读性（例如 args.ctx.size、vars.login.ensure）。",
+		"如果用户要求与现有逻辑冲突，以用户提示优先，但仍必须满足 RPA spec。",
+		"若用户提示不完整，做保守可执行的最佳努力，并在 explanation 里简述假设。",
+		"",
+		"用户修改要求:",
+		String(userInstruction || "").trim(),
+		"",
+		"当前 flow:",
+		JSON.stringify(currentFlow || {}, null, 2),
+	].join("\n");
+}
+
+function buildFlowReviseRegeneratePrompt({
+	capabilityKeys,
+	currentFlow,
+	userInstruction,
+	contextText = "",
+	taskProfile = null,
+	previousFlow = null,
+	previousErrors = [],
+}) {
+	const base = buildFlowRevisePrompt({
+		capabilityKeys,
+		currentFlow,
+		userInstruction,
+		contextText,
+		taskProfile,
+	});
+	return [
+		base,
+		"",
+		"[REVISION REGENERATE MODE]",
+		"你必须修复所有校验错误，但保持“修改模式”目标：尽量保留原 step id 与主干结构。",
+		"不要从零发散重写；仅在必要范围内做结构调整。",
+		"优先保持未涉及用户需求的步骤不变。",
+		"",
+		"上一次修订产物(有问题):",
+		JSON.stringify(previousFlow || {}, null, 2),
+		"",
+		"必须修复的问题:",
+		JSON.stringify(previousErrors || [], null, 2),
+	].join("\n");
+}
+
 function buildPlanPrompt() {
 	return [
 		`You generate a compact execution plan for RPA Flow spec v${FLOW_PROMPT_SPEC_VERSION}.`,
@@ -319,6 +396,7 @@ function buildFlowPrompt({ capabilityKeys, skillText, plan, taskProfile = null }
 		"  id: string,",
 		"  start: string,",
 		"  args?: Record<string,{type:string,required?:boolean,desc?:string}>,",
+		"  vars?: Record<string,{type?:string,desc?:string,from?:string}>,",
 		"  steps: Array<{",
 		"    id: string,",
 		"    action: ActionUnionMember,",
@@ -330,14 +408,15 @@ function buildFlowPrompt({ capabilityKeys, skillText, plan, taskProfile = null }
 		"- for non-branch actions, use next object like {done:'x',failed:'y',timeout:'z',default:'k'} as needed.",
 		"- for branch action, route by action.cases/default and keep step.next empty or omitted.",
 		"Top-level rules:",
-		"- top-level output must have flow.id/start/steps and optional flow.args only (no extra top-level fields inside flow).",
+		"- top-level output must have flow.id/start/steps, and can include flow.args/flow.vars as needed.",
+		"- if steps use saveAs or reference vars.* templates, declare corresponding entries in flow.vars when possible for readability.",
 		"Hard constraints:",
 		"- flow must contain id/start/steps.",
 		"- step ids unique, snake_case.",
 		"- action.type must be valid known actions.",
 		"- action fields must strictly match the corresponding action signature.",
 		"- for branch action, each case must use structured condition fields (op/source/path/value/items/item/values). NEVER use when.expr.",
-		"- branch.when.op must be one of: exists, truthy, eq, neq, in, contains, match, and, or, not.",
+		"- branch.when.op must be one of: exists, truthy, eq, neq, gt, gte, lt, lte, in, contains, match, and, or, not.",
 		"- branch.when.source must be exactly one of: args, opts, vars, result.",
 		"- branch.when.source MUST NOT be interpolation/template string.",
 		"- DO NOT use alias fields like selector/value/waitFor/branches/prompt/script/waitMs/read.fields/scrollRounds unless they are part of action signature.",
@@ -397,6 +476,8 @@ function buildFlowPrompt({ capabilityKeys, skillText, plan, taskProfile = null }
 		"- flow.args keys MUST align with Task profile allowedArgs/requiredArgs; do not invent new arg names outside profile.",
 		"- if Task profile requires query, flow.args.query must exist and input must use ${args.query}.",
 		"- flow.args must be minimal: only keep args that are actually referenced by steps (plus required args). Avoid compatibility alias args unless explicitly required by skill text.",
+		"- nested args/vars are supported and encouraged for clarity: you may use dotted keys/paths such as flow.args[\"ctx.size\"], flow.vars[\"login.ensure\"], ${args.ctx.size}, ${vars.login.ensure}.",
+		"- when multiple related values belong to one concept, prefer grouped dotted naming over many flat unrelated names.",
 		"- do NOT add compatibility alias args (e.g., 兼容参数/alias/fallback alias). Keep one canonical arg per meaning.",
 		"- saveAs string key MUST be plain var key (e.g. \"center_search_selector\"); NEVER prefix with \"vars.\".",
 		"- if capability-to-invoke mapping is uncertain, still generate best-effort invoke.find using canonical capability keys from Task profile; do not refuse generation.",
@@ -449,6 +530,9 @@ function buildRepairPrompt({ flow, errors, taskProfile = null }) {
 		"- done.action.conclusion must be object with {status:\"done\", value:any}; value should carry execution result payload.",
 		"- ${...} is safe path only; use ${{...}} for expressions/default values.",
 		"- flow.args must be object map: each arg value must be object with key \"type\" (optional: required, desc).",
+		"- flow.vars (when present) must be object map: each var value is object (optional: type, desc, from).",
+		"- if flow uses saveAs or ${vars.*}, repair should add/keep matching flow.vars entries when possible.",
+		"- nested dotted names are valid and encouraged where clearer (e.g., \"ctx.size\", \"login.ensure\").",
 		"- do NOT use raw primitive arg defaults in flow.args (e.g., \"query\": \"\").",
 		"Mini examples:",
 		"- bad: args:{\"action\":\"list\",\"fields\":[\"title\"]}",
@@ -685,13 +769,50 @@ function collectArgRefsFromFlow(flow) {
 		const leaves = collectStringLeaves(step);
 		for (const s of leaves) {
 			const text = String(s || "");
-			for (const m of text.matchAll(/\bargs\.([A-Za-z0-9_]+)\b/g)) {
+			for (const m of text.matchAll(/\bargs\.([A-Za-z0-9_][A-Za-z0-9_.\[\]-]*)\b/g)) {
 				const k = String(m[1] || "").trim();
 				if (k) refs.add(k);
 			}
 		}
 	}
 	return refs;
+}
+
+function hasArgDefForRef(argDefs, refPath) {
+	const defs = (argDefs && typeof argDefs === "object" && !Array.isArray(argDefs)) ? argDefs : {};
+	const ref = String(refPath || "").trim();
+	if (!ref) return false;
+	if (Object.prototype.hasOwnProperty.call(defs, ref)) return true;
+	const segs = ref.split(".").filter(Boolean);
+	if (!segs.length) return false;
+	const root = segs[0];
+	if (Object.prototype.hasOwnProperty.call(defs, root)) return true;
+	for (let i = segs.length - 1; i >= 2; i -= 1) {
+		const prefix = segs.slice(0, i).join(".");
+		if (Object.prototype.hasOwnProperty.call(defs, prefix)) return true;
+	}
+	return false;
+}
+
+function isArgKeyAllowedByProfile(key, allowedArgs = []) {
+	const k = String(key || "").trim();
+	if (!k) return false;
+	if (allowedArgs.includes(k)) return true;
+	const root = k.split(".")[0];
+	return !!root && allowedArgs.includes(root);
+}
+
+function isArgKeyReferenced(key, referencedArgs) {
+	const k = String(key || "").trim();
+	if (!k) return false;
+	const refs = referencedArgs instanceof Set ? referencedArgs : new Set();
+	if (refs.has(k)) return true;
+	for (const ref of refs) {
+		const r = String(ref || "").trim();
+		if (!r) continue;
+		if (r.startsWith(`${k}.`) || k.startsWith(`${r}.`)) return true;
+	}
+	return false;
 }
 
 function validateRunJsFunctionCode(codeStr) {
@@ -777,6 +898,37 @@ function validateFlow(flow, opts = {}) {
 			}
 		}
 	}
+	if (flow.vars !== undefined) {
+		if (!flow.vars || typeof flow.vars !== "object" || Array.isArray(flow.vars)) {
+			errors.push("flow.vars must be an object when provided");
+		} else {
+			for (const [varName, varSpec] of Object.entries(flow.vars)) {
+				const name = String(varName || "").trim();
+				if (!name) {
+					errors.push("flow.vars contains empty var key");
+					continue;
+				}
+				if (!varSpec || typeof varSpec !== "object" || Array.isArray(varSpec)) {
+					errors.push(`flow.vars.${name} must be object (optional keys: type/desc/from)`);
+					continue;
+				}
+				if (varSpec.type !== undefined && typeof varSpec.type !== "string") {
+					errors.push(`flow.vars.${name}.type must be string when provided`);
+				}
+				if (varSpec.desc !== undefined && typeof varSpec.desc !== "string") {
+					errors.push(`flow.vars.${name}.desc must be string when provided`);
+				}
+				if (varSpec.from !== undefined && typeof varSpec.from !== "string") {
+					errors.push(`flow.vars.${name}.from must be string when provided`);
+				}
+				for (const extraKey of Object.keys(varSpec)) {
+					if (!["type", "desc", "from"].includes(String(extraKey || ""))) {
+						errors.push(`flow.vars.${name}.${extraKey} is not allowed (only type/desc/from)`);
+					}
+				}
+			}
+		}
+	}
 	if (errors.length) return errors;
 	const ids = new Set();
 	for (const step of flow.steps) {
@@ -823,6 +975,24 @@ function validateFlow(flow, opts = {}) {
 			}
 			if (actionType === "wait" && !("query" in action) && !("by" in action)) {
 				errors.push(`step ${id || "?"} wait requires query or by`);
+			}
+			if (actionType === "closePage") {
+				const target = String(action.target || "active").trim();
+				if (!["active", "flow", "contextId", "urlMatch"].includes(target)) {
+					errors.push(`step ${id || "?"} closePage.target must be active|flow|contextId|urlMatch`);
+				}
+				if (target === "contextId" && !String(action.contextId || "").trim()) {
+					errors.push(`step ${id || "?"} closePage target=contextId requires action.contextId`);
+				}
+				if (target === "urlMatch" && !String(action.matchUrl || "").trim()) {
+					errors.push(`step ${id || "?"} closePage target=urlMatch requires action.matchUrl`);
+				}
+				if (action.ifLast !== undefined) {
+					const ifLast = String(action.ifLast || "").trim();
+					if (!["skip", "fail", "allow"].includes(ifLast)) {
+						errors.push(`step ${id || "?"} closePage.ifLast must be skip|fail|allow`);
+					}
+				}
 			}
 			if ((actionType === "click" || actionType === "hover" || actionType === "readElement" || actionType === "setChecked" || actionType === "setSelect" || actionType === "uploadFile" || actionType === "wait")) {
 				const by = String(action.by || "").trim();
@@ -1007,6 +1177,22 @@ function validateFlow(flow, opts = {}) {
 						if (typeof cond.path !== "string" || !String(cond.path).trim()) {
 							errors.push(`step ${id || "?"} ${pathLabel}.path is required for op=${op}`);
 						}
+						if (op === "eq" || op === "neq" || op === "contains" || op === "gt" || op === "gte" || op === "lt" || op === "lte") {
+							if (!Object.prototype.hasOwnProperty.call(cond, "value")) {
+								errors.push(`step ${id || "?"} ${pathLabel}.value is required for op=${op}`);
+							}
+						}
+						if (op === "in") {
+							if (!Array.isArray(cond.values) || !cond.values.length) {
+								errors.push(`step ${id || "?"} ${pathLabel}.values must be non-empty array for op=in`);
+							}
+						}
+						if (op === "match") {
+							const rx = String(cond.regex || cond.pattern || "").trim();
+							if (!rx) {
+								errors.push(`step ${id || "?"} ${pathLabel}.regex is required for op=match`);
+							}
+						}
 					};
 					action.cases.forEach((c, idx) => {
 						if (!c || typeof c !== "object") {
@@ -1130,7 +1316,7 @@ function validateFlow(flow, opts = {}) {
 		const primaryQueryArg = String(taskProfile?.argNamePolicy?.primaryQueryArg || "").trim();
 		if (allowedArgs.length) {
 			for (const k of Object.keys(argDefs)) {
-				if (!allowedArgs.includes(k)) {
+				if (!isArgKeyAllowedByProfile(k, allowedArgs)) {
 					errors.push(`flow.args.${k} is not allowed by task profile`);
 				}
 			}
@@ -1139,7 +1325,7 @@ function validateFlow(flow, opts = {}) {
 			if (!(req in argDefs)) errors.push(`flow.args.${req} is required by task profile`);
 		}
 		for (const k of Object.keys(argDefs)) {
-			if (!requiredArgs.includes(k) && !referencedArgs.has(k)) {
+			if (!requiredArgs.includes(k) && !isArgKeyReferenced(k, referencedArgs)) {
 				errors.push(`flow.args.${k} is unused; remove redundant arg definitions`);
 			}
 		}
@@ -1148,7 +1334,7 @@ function validateFlow(flow, opts = {}) {
 		}
 	}
 	for (const ref of referencedArgs) {
-		if (!(ref in argDefs)) {
+		if (!hasArgDefForRef(argDefs, ref)) {
 			errors.push(`flow references args.${ref} but flow.args.${ref} is not defined`);
 		}
 	}
@@ -1156,9 +1342,9 @@ function validateFlow(flow, opts = {}) {
 		const sid = String(step?.id || "?");
 		const action = step?.action || {};
 		if (String(action?.type || "") === "input" && typeof action.text === "string") {
-			const refs = Array.from(action.text.matchAll(/\$\{args\.([a-zA-Z0-9_]+)\}/g)).map((m) => String(m[1] || "").trim()).filter(Boolean);
+			const refs = Array.from(action.text.matchAll(/\$\{args\.([A-Za-z0-9_][A-Za-z0-9_.\[\]-]*)\}/g)).map((m) => String(m[1] || "").trim()).filter(Boolean);
 			for (const ref of refs) {
-				if (!(ref in argDefs)) {
+				if (!hasArgDefForRef(argDefs, ref)) {
 					errors.push(`step ${sid} references args.${ref} in action.text but flow.args.${ref} is not defined`);
 				}
 			}
@@ -1499,4 +1685,223 @@ async function skillToFlow({
 	};
 }
 
-export { skillToFlow, validateFlow };
+async function reviseFlowByPrompt({
+	flow,
+	userInstruction,
+	contextText = "",
+	session = null,
+	model = "advanced",
+	logger = null,
+	maxRepair = 1,
+	maxRegenerate = 1,
+	timeoutMs = 600000,
+} = {}) {
+	const currentFlow = (flow && typeof flow === "object") ? flow : null;
+	if (!currentFlow) return { ok: false, reason: "flow is required" };
+	const instruction = String(userInstruction || "").trim();
+	if (!instruction) return { ok: false, reason: "userInstruction is required" };
+
+	const capabilityKeys = getCapabilityKeys();
+	const capabilityCatalog = getCapabilityCatalog();
+	const taskProfileRet = await callAiJson({
+		prompt: buildTaskProfilePrompt({
+			capabilityKeys,
+			capabilityCatalog,
+			skillText: [
+				String(contextText || "").trim(),
+				"",
+				"用户修改要求：",
+				instruction,
+			].join("\n"),
+		}),
+		inputValue: {
+			contextText: String(contextText || ""),
+			userInstruction: instruction,
+			capabilityCatalog,
+		},
+		model,
+		session,
+		logger,
+		timeoutMs,
+	});
+	const taskProfile = taskProfileRet.ok
+		? normalizeTaskProfile(taskProfileRet.result || {}, capabilityCatalog)
+		: null;
+
+	const draftRet = await callAiJson({
+		prompt: buildFlowRevisePrompt({
+			capabilityKeys,
+			currentFlow,
+			userInstruction: instruction,
+			contextText,
+			taskProfile,
+		}),
+		inputValue: {
+			flow: currentFlow,
+			userInstruction: instruction,
+			contextText: String(contextText || ""),
+			taskProfile,
+		},
+		model,
+		session,
+		logger,
+		timeoutMs,
+	});
+	if (!draftRet.ok) {
+		return {
+			ok: false,
+			reason: `flow revise failed: ${draftRet.reason || "unknown"}`,
+		};
+	}
+
+	let revisedFlow = draftRet.result?.flow || draftRet.result;
+	let errors = validateFlow(revisedFlow, { taskProfile, capabilityCatalog });
+	const scopeText = `${String(contextText || "")}\n${instruction}`;
+	if (!errors.length && hasLikelySelfRecursiveSearchInvoke(revisedFlow, scopeText)) {
+		errors.push("flow likely self-recursive: search-goal flow must not invoke search.* internally");
+	}
+
+	let repairs = 0;
+	while (errors.length && repairs < Math.max(0, Number(maxRepair || 0))) {
+		const fixRet = await callAiJson({
+			prompt: buildRepairPrompt({ flow: revisedFlow, errors, taskProfile }),
+			inputValue: { flow: revisedFlow, errors, taskProfile },
+			model,
+			session,
+			logger,
+			timeoutMs,
+		});
+		if (!fixRet.ok) {
+			return {
+				ok: false,
+				reason: `flow revise repair failed: ${fixRet.reason || "unknown"}`,
+				errors,
+				flow: revisedFlow,
+				repairs,
+			};
+		}
+		revisedFlow = fixRet.result?.flow || fixRet.result;
+		errors = validateFlow(revisedFlow, { taskProfile, capabilityCatalog });
+		if (!errors.length && hasLikelySelfRecursiveSearchInvoke(revisedFlow, scopeText)) {
+			errors.push("flow likely self-recursive: search-goal flow must not invoke search.* internally");
+		}
+		repairs += 1;
+	}
+
+	let regenerates = 0;
+	while (errors.length && regenerates < Math.max(0, Number(maxRegenerate || 0))) {
+		const regenRet = await callAiJson({
+			prompt: buildFlowReviseRegeneratePrompt({
+				capabilityKeys,
+				currentFlow,
+				userInstruction: instruction,
+				contextText,
+				taskProfile,
+				previousFlow: revisedFlow,
+				previousErrors: errors,
+			}),
+			inputValue: {
+				currentFlow,
+				flow: revisedFlow,
+				userInstruction: instruction,
+				contextText: String(contextText || ""),
+				taskProfile,
+				validationErrors: errors,
+			},
+			model,
+			session,
+			logger,
+			timeoutMs,
+		});
+		if (!regenRet.ok) {
+			return {
+				ok: false,
+				reason: `flow revise regenerate failed: ${regenRet.reason || "unknown"}`,
+				errors,
+				flow: revisedFlow,
+				repairs,
+				regenerates,
+			};
+		}
+		revisedFlow = regenRet.result?.flow || regenRet.result;
+		errors = validateFlow(revisedFlow, { taskProfile, capabilityCatalog });
+		if (!errors.length && hasLikelySelfRecursiveSearchInvoke(revisedFlow, scopeText)) {
+			errors.push("flow likely self-recursive: search-goal flow must not invoke search.* internally");
+		}
+		regenerates += 1;
+	}
+
+	if (errors.length) {
+		return {
+			ok: false,
+			reason: "flow revise validation failed",
+			errors,
+			flow: revisedFlow,
+			repairs,
+			regenerates,
+		};
+	}
+	return {
+		ok: true,
+		flow: revisedFlow,
+		repairs,
+		regenerates,
+		taskProfile,
+	};
+}
+
+async function reviseFlowDocumentByPrompt({
+	flowDocument,
+	userInstruction,
+	contextText = "",
+	session = null,
+	model = "advanced",
+	logger = null,
+	maxRepair = 1,
+	maxRegenerate = 1,
+	timeoutMs = 600000,
+} = {}) {
+	const doc = (flowDocument && typeof flowDocument === "object") ? flowDocument : null;
+	if (!doc) return { ok: false, reason: "flowDocument is required" };
+	const hasEnvelope = !!(doc && typeof doc === "object" && doc.flow && typeof doc.flow === "object");
+	const currentFlow = hasEnvelope ? doc.flow : doc;
+	const mergeFlowInnerShell = (oldFlow, newFlow) => {
+		const oldF = (oldFlow && typeof oldFlow === "object") ? oldFlow : {};
+		const newF = (newFlow && typeof newFlow === "object") ? newFlow : {};
+		const out = { ...newF };
+		// Preserve non-core inner-shell fields when AI output omits them.
+		const reservedCore = new Set(["id", "start", "args", "steps"]);
+		for (const [k, v] of Object.entries(oldF)) {
+			if (reservedCore.has(k)) continue;
+			if (Object.prototype.hasOwnProperty.call(out, k)) continue;
+			out[k] = v;
+		}
+		return out;
+	};
+	const baseTemplate = hasEnvelope ? (() => {
+		try {
+			const c = JSON.parse(JSON.stringify(doc));
+			delete c.flow;
+			return c;
+		} catch (_) {
+			return {};
+		}
+	})() : null;
+	const ret = await reviseFlowByPrompt({
+		flow: currentFlow,
+		userInstruction,
+		contextText,
+		session,
+		model,
+		logger,
+		maxRepair,
+		maxRegenerate,
+		timeoutMs,
+	});
+	if (!ret?.ok) return ret;
+	const mergedFlow = mergeFlowInnerShell(currentFlow, ret.flow);
+	const document = hasEnvelope ? { ...(baseTemplate || {}), flow: mergedFlow } : mergedFlow;
+	return { ...ret, document };
+}
+
+export { skillToFlow, reviseFlowByPrompt, reviseFlowDocumentByPrompt, validateFlow };
