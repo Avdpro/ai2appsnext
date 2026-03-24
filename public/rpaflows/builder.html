@@ -96,6 +96,60 @@
     }
     .tab-content { display: none; padding: 12px; overflow: auto; flex: 1 1 auto; min-height: 0; }
     .tab-content.active { display: block; }
+    #right-action.tab-content {
+      padding: 0;
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+      min-height: 0;
+    }
+    #right-action.tab-content.active { display: flex; }
+    .right-action-toolbar {
+      flex: 0 0 auto;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbff;
+      position: sticky;
+      top: 0;
+      z-index: 8;
+    }
+    .right-action-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+    }
+    .step-revise-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
+      gap: 12px;
+      min-height: 0;
+      flex: 1 1 auto;
+      align-items: stretch;
+    }
+    .step-revise-left {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .step-revise-right {
+      min-height: 0;
+      overflow: auto;
+      border-left: 1px solid var(--line);
+      padding-left: 10px;
+    }
+    @media (max-width: 1120px) {
+      .step-revise-layout {
+        grid-template-columns: 1fr;
+      }
+      .step-revise-right {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+        padding-left: 0;
+        padding-top: 10px;
+      }
+    }
 
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -152,6 +206,13 @@
       font-size: 13px;
       font-weight: 700;
       color: #23364d;
+    }
+    .session-divider {
+      height: 0;
+      border-top: 3px solid #94a3b8;
+      margin: 10px 2px 12px;
+      border-radius: 999px;
+      opacity: 0.95;
     }
 
     .step-list {
@@ -401,11 +462,25 @@
       gap: 6px;
       align-items: center;
     }
+    .arg-key-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
     .arg-card-actions {
       display: grid;
       grid-template-columns: 140px auto auto;
       gap: 6px;
       align-items: center;
+    }
+    .flow-shell-divider {
+      height: 0;
+      border: 0;
+      border-top: 3px solid #94a3b8;
+      margin: 10px 2px 12px;
+      border-radius: 999px;
+      opacity: 0.95;
     }
     .checkbox-inline {
       display: inline-flex;
@@ -459,7 +534,12 @@
       padding: 18px;
     }
     .picker-mask.show { display: flex; }
+    #skillToFlowMask { z-index: 14020; }
+    #flowReviseMask { z-index: 14030; }
+    #decisionMask { z-index: 14040; }
+    #flowReviseDetailMask { z-index: 14060; }
     .picker-card {
+      position: relative;
       width: min(680px, 96vw);
       height: min(640px, 86vh);
       background: #fff;
@@ -531,6 +611,29 @@
       color: var(--sub);
       font-size: 12px;
     }
+    .picker-tip {
+      position: absolute;
+      z-index: 2;
+      max-width: min(560px, calc(100% - 24px));
+      border: 1px solid #d9e5f5;
+      border-radius: 8px;
+      background: rgba(20, 30, 48, 0.96);
+      color: #f8fafc;
+      font-size: 12px;
+      line-height: 1.38;
+      padding: 7px 9px;
+      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.26);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(3px);
+      transition: opacity 120ms ease, transform 120ms ease;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .picker-tip.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
     .runjs-preview-pre {
       margin: 0;
       border: 1px solid var(--line);
@@ -545,6 +648,43 @@
       word-break: break-word;
       max-height: 42vh;
       overflow: auto;
+    }
+    .history-list {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+      color: #132033;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.42;
+      padding: 9px;
+      min-height: 220px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .history-turn {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .history-turn-head {
+      font-size: 12px;
+      color: var(--sub);
+    }
+    .history-turn-text {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .history-turn-more {
+      display: flex;
+      justify-content: flex-end;
     }
     .decision-card {
       width: min(560px, 96vw);
@@ -677,6 +817,11 @@
       border-color: #f4aaaa;
       color: #b31f1f;
     }
+    .right-action-toolbar .btn.tip-show::after {
+      top: calc(100% + 8px);
+      bottom: auto;
+      z-index: 30;
+    }
 
     pre {
       margin: 0;
@@ -694,7 +839,7 @@
     .busy-mask {
       position: fixed;
       inset: 0;
-      z-index: 9999;
+      z-index: 15000;
       display: none;
       align-items: center;
       justify-content: center;
@@ -757,7 +902,6 @@
     <div class="col">
       <div class="head">
         <h1 class="title">Flow Builder</h1>
-        <div class="desc">独立控制台（Session / Flow / Steps）</div>
       </div>
       <div class="tabs" data-tab-group="left">
         <div class="tab active" data-tab="left-session">Session</div>
@@ -801,24 +945,31 @@
       <div id="left-flow" class="tab-content">
         <div class="section">
           <p class="section-title">Flow 文件</p>
-          <label>已保存 Flow（选择即加载）</label>
+          <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <label style="margin:0;">已保存 Flow（选择即加载）</label>
+            <button class="btn secondary" id="refreshFlowsBtn" type="button">刷新列表</button>
+          </div>
           <select id="savedFlowSelect"></select>
           <label style="margin-top:8px;">sourcePath（可选）</label>
           <input id="savePathInput" placeholder="/abs/path/to/flow.json">
           <div class="row" style="margin-top:8px;">
-            <button class="btn secondary" id="refreshFlowsBtn" type="button">刷新列表</button>
             <button class="btn secondary" id="newFlowBtn" type="button">新建 Flow</button>
             <button class="btn ok" id="saveFlowBtn" type="button">保存</button>
             <button class="btn warn" id="saveAsFlowBtn" type="button">另存为</button>
           </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="openSkillToFlowBtn" type="button">Skill 生成 Flow</button>
+            <button class="btn secondary" id="openFlowReviseBtn" type="button">AI 修正 Flow</button>
+          </div>
         </div>
 
         <div class="section">
-          <p class="section-title">Flow 外壳（说明 / 能力 / 参数）</p>
+          <p class="section-title">Flow 外壳（说明 / 能力 / 参数 / 变量）</p>
           <label>Flow 说明 / 目标</label>
           <textarea id="flowGoalInput" style="min-height:70px;" placeholder="例如：在当前页面搜索关键词并读取前 5 条结果"></textarea>
           <label style="margin-top:8px;">Flow 描述（description）</label>
           <textarea id="flowDescInput" style="min-height:70px;" placeholder="给流程使用者看的说明，可与目标不同"></textarea>
+          <hr class="flow-shell-divider" aria-hidden="true">
           <div class="grid" style="margin-top:8px; grid-template-columns:1fr;">
             <div><label>Flow ID</label><input id="flowIdInput" placeholder="flow_id"></div>
           </div>
@@ -827,6 +978,7 @@
             <input id="flowCapsInput" placeholder="search,read.list">
             <button class="btn secondary square" id="pickFlowCapsBtn" type="button" title="选择并添加 Capabilities">+</button>
           </div>
+          <hr class="flow-shell-divider" aria-hidden="true">
           <label style="margin-top:8px;">参数键（逗号分隔，用于批量补全）</label>
           <input id="flowArgsInput" placeholder="search.query,read.minItems">
           <div class="row" style="margin-top:8px;">
@@ -835,10 +987,20 @@
           </div>
           <label style="margin-top:8px;">参数定义（args）</label>
           <div id="flowArgsBox" class="arg-list"></div>
-          <label style="margin-top:8px;">Filters</label>
-          <div id="flowFiltersBox" class="kv-list"></div>
-          <div class="row" style="margin-top:8px;">
+          <hr class="flow-shell-divider" aria-hidden="true">
+          <div class="row" style="margin-top:8px;justify-content:space-between;align-items:center;">
+            <label style="margin:0;">变量定义（vars）</label>
+            <button class="btn secondary" id="addVarBtn" type="button">+ 添加变量定义</button>
+          </div>
+          <div id="flowVarsBox" class="arg-list"></div>
+          <hr class="flow-shell-divider" aria-hidden="true">
+          <div class="row" style="margin-top:8px;justify-content:space-between;align-items:center;">
+            <label style="margin:0;">Filters</label>
             <button class="btn secondary" id="addFilterBtn" type="button">+ 添加 Filter</button>
+          </div>
+          <div id="flowFiltersBox" class="kv-list"></div>
+          <hr class="flow-shell-divider" aria-hidden="true">
+          <div class="row" style="margin-top:8px;">
             <button class="btn" id="applyShellBtn" type="button">应用外壳到 Flow</button>
           </div>
         </div>
@@ -892,9 +1054,12 @@
       <div class="head">
         <div class="row" style="justify-content:space-between;">
           <h2 class="title" style="font-size:16px;">Flow Graph</h2>
-          <button class="btn secondary" id="activateBrowserBtn" type="button">激活浏览器</button>
+          <div class="row">
+            <button class="btn ok" id="runFlowBtn" type="button">执行Flow</button>
+            <button class="btn secondary" id="openFlowReviseBtnMid" type="button">AI 修正 Flow</button>
+            <button class="btn secondary" id="activateBrowserBtn" type="button">激活浏览器</button>
+          </div>
         </div>
-        <div class="desc">中间区展示流程图，点击节点会同步到右侧编辑器。</div>
       </div>
       <div class="graph-wrap" id="graphWrap">
         <div class="graph-canvas" id="graphCanvas">
@@ -904,16 +1069,21 @@
     </div>
 
     <div class="col">
-      <div class="head">
-        <h2 class="title" style="font-size:16px;">Step Editor</h2>
-        <div class="desc">右侧：Action 编辑 / 测试 + 日志输出。</div>
-      </div>
       <div class="tabs" data-tab-group="right">
         <div class="tab active" data-tab="right-action">Action & Test</div>
+        <div class="tab" data-tab="right-publish">Publish</div>
         <div class="tab" data-tab="right-log">Log</div>
       </div>
 
       <div id="right-action" class="tab-content active">
+        <div class="right-action-toolbar row">
+          <button class="btn" id="applyStepBtn" type="button">写入/更新当前步骤</button>
+          <button class="btn secondary" id="restoreStepBtn" type="button">还原</button>
+          <button class="btn secondary" id="openStepReviseBtn" type="button">AI 修正当前步骤</button>
+          <button class="btn ok" id="runStepBtn" type="button">执行本步骤</button>
+          <span id="stepTag" class="tag">step: -</span>
+        </div>
+        <div class="right-action-scroll">
         <div class="section">
           <div class="grid">
             <div><label>step.id</label><input id="stepIdInput" value="step_1"></div>
@@ -921,6 +1091,7 @@
               <label>action.type</label>
               <select id="actionTypeSelect">
                 <option>goto</option>
+                <option value="closepage">closePage</option>
                 <option>click</option>
                 <option>hover</option>
                 <option>input</option>
@@ -957,6 +1128,34 @@
             <div class="field-row" data-types="goto"><label>url</label><input id="fUrl" placeholder="https://..."></div>
             <div class="field-row" data-types="goto">
               <label class="checkbox-inline"><input id="fGotoNewPage" type="checkbox"><span>newPage（先新开 tab 再导航）</span></label>
+            </div>
+            <div class="field-row" data-types="closepage">
+              <label>closePage.target</label>
+              <select id="fCloseTarget">
+                <option value="active">active（当前页面）</option>
+                <option value="flow">flow（本 Flow 打开/使用过的页面）</option>
+                <option value="contextId">contextId（指定页面）</option>
+                <option value="urlMatch">urlMatch（URL 包含）</option>
+              </select>
+            </div>
+            <div class="field-row" id="closePageContextRow" data-types="closepage">
+              <label>closePage.contextId</label>
+              <input id="fCloseContextId" placeholder="例如：page_xxx">
+            </div>
+            <div class="field-row" id="closePageUrlRow" data-types="closepage">
+              <label>closePage.matchUrl</label>
+              <input id="fCloseMatchUrl" placeholder="例如：google.com 或 /search">
+            </div>
+            <div class="field-row" data-types="closepage">
+              <label>closePage.ifLast</label>
+              <select id="fCloseIfLast">
+                <option value="skip">skip（默认，最后一页不关）</option>
+                <option value="fail">fail（最后一页时报错）</option>
+                <option value="allow">allow（允许关掉最后一页）</option>
+              </select>
+            </div>
+            <div class="field-row" data-types="closepage">
+              <label class="checkbox-inline"><input id="fCloseActivateAfter" type="checkbox" checked><span>activateAfterClose（关闭后激活剩余页面）</span></label>
             </div>
             <div class="field-row" data-types="input,done,abort,ask_assist"><label>text / conclusion / reason</label><textarea id="fText"></textarea></div>
 
@@ -1107,13 +1306,6 @@
             <textarea id="actionJsonInput">{"url":"https://example.com"}</textarea>
           </div>
 
-          <div class="row" style="margin-top:8px;">
-            <button class="btn" id="applyStepBtn" type="button">写入/更新当前步骤</button>
-            <button class="btn secondary" id="restoreStepBtn" type="button">还原</button>
-            <button class="btn ok" id="runStepBtn" type="button">执行本步骤</button>
-            <span id="stepTag" class="tag">step: -</span>
-          </div>
-
           <div class="section" style="margin-top:10px; margin-bottom:0; background:#fff;">
             <label>本次执行结果</label>
             <pre id="actionRunResultPre">尚未执行步骤</pre>
@@ -1123,6 +1315,7 @@
             <pre id="runJsResultPre">暂无 run_js 结果</pre>
           </div>
         </div>
+        </div>
       </div>
 
       <div id="right-log" class="tab-content">
@@ -1131,6 +1324,79 @@
           <div style="height:8px;"></div>
           <p class="section-title">最近响应</p>
           <pre id="outputPre">等待操作...</pre>
+        </div>
+      </div>
+
+      <div id="right-publish" class="tab-content">
+        <div class="section">
+          <p id="systemLoginTitle" class="section-title">系统登录（TabOS NT）<span id="systemAuthTag" class="tag">未登录</span></p>
+          <div class="grid-3">
+            <div><label>账号（email）</label><input id="sysEmailInput" placeholder="name@example.com"></div>
+            <div><label>密码（明文）</label><input id="sysPasswordInput" type="password" placeholder="******"></div>
+            <div id="sysApiPathBox" style="display:none;"><label>apiPath（可选）</label><input id="sysApiPathInput" placeholder="/ws/"></div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn ok" id="sysLoginBtn" type="button">登录系统</button>
+            <button class="btn secondary" id="sysCheckBtn" type="button">检查登录态</button>
+            <button class="btn danger" id="sysLogoutBtn" type="button">登出</button>
+          </div>
+          <div id="sysAdvancedCallBox" style="display:none;">
+            <label style="margin-top:8px;">系统调用 msg</label>
+            <input id="sysCallMsgInput" value="userCurrency" placeholder="例如：userCurrency">
+            <label style="margin-top:8px;">系统调用 vo（JSON）</label>
+            <textarea id="sysCallVoInput" style="min-height:90px;" placeholder='例如：{"dir":"my_dir"}'>{}</textarea>
+            <div class="grid-3" style="margin-top:8px;">
+              <div><label>timeoutMs</label><input id="sysCallTimeoutInput" type="number" min="0" value="15000"></div>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button class="btn" id="sysCallBtn" type="button">登录态调用系统函数</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <p class="section-title" style="margin:0;">Server Version</p>
+            <button class="btn secondary" id="refreshPublishInfoBtn" type="button">刷新</button>
+          </div>
+          <pre id="publishServerInfoPre">尚未加载</pre>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Pre-Audit</p>
+          <div class="grid-3">
+            <div>
+              <label>mode</label>
+              <select id="preAuditModeInput">
+                <option value="warn" selected>warn</option>
+                <option value="strict">strict</option>
+              </select>
+            </div>
+            <div>
+              <label>AI</label>
+              <label class="checkbox-inline"><input id="preAuditAiEnabledInput" type="checkbox" checked><span>启用 AI 审计</span></label>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn" id="runPreAuditBtn" type="button">执行预审计</button>
+            <span id="preAuditSummaryTag" class="tag">未执行</span>
+          </div>
+          <pre id="preAuditResultPre">暂无预审计结果</pre>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Publish</p>
+          <div class="grid-3">
+            <div><label>developer signer</label><input id="publishDevSignerInput" placeholder="例如：dev:alice"></div>
+            <div><label>system signer</label><input id="publishSystemSignerInput" placeholder="例如：sys:tabos-nt"></div>
+          </div>
+          <label style="margin-top:8px;">release note</label>
+          <textarea id="publishNoteInput" style="min-height:70px;" placeholder="本次发布说明（可选）"></textarea>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="signFlowBtn" type="button">写入签名到Flow</button>
+            <button class="btn ok" id="publishFlowBtn" type="button">提交发布</button>
+          </div>
+          <pre id="publishResultPre">暂无发布结果</pre>
         </div>
       </div>
     </div>
@@ -1154,6 +1420,7 @@
         <label class="checkbox-inline"><input type="radio" name="invokeKeyKind" value="arg"><span>arg</span></label>
       </div>
       <div id="invokeKeyPickerList" class="picker-list"></div>
+      <div id="invokeKeyPickerTip" class="picker-tip" aria-hidden="true"></div>
       <div class="row" style="justify-content:space-between;">
         <div id="invokeKeyPickerHint" class="picker-hint">加载中...</div>
         <div class="row">
@@ -1185,6 +1452,164 @@
       <div class="row" id="decisionBtns" style="justify-content:flex-end;"></div>
     </div>
   </div>
+  <div id="skillToFlowMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="skillToFlowTitle" style="max-width:860px;width:min(96vw,860px);">
+      <div class="row" style="justify-content:space-between;">
+        <h3 id="skillToFlowTitle" class="picker-title">从 Skill 生成 Flow</h3>
+        <button class="btn secondary" id="skillToFlowCloseBtn" type="button">关闭</button>
+      </div>
+      <div class="picker-hint">会覆盖当前编辑中的 Flow（不会自动保存到文件）。</div>
+      <label>Skill 文本 / 需求描述</label>
+      <textarea id="skillToFlowInput" style="min-height:180px;" placeholder="粘贴 skill 文档或需求描述，点击后用 AI 生成可执行 Flow"></textarea>
+      <div class="grid" style="margin-top:8px;">
+        <div>
+          <label>生成引擎</label>
+          <select id="skillToFlowEngineInput">
+            <option value="default" selected>直接AI（内置）</option>
+            <option value="codex">Codex</option>
+            <option value="claude_code">Claude Code</option>
+          </select>
+          <div id="skillToFlowEngineHint" class="desc" style="margin-top:4px;">引擎状态：加载中...</div>
+        </div>
+        <div>
+          <label>模型能力</label>
+          <select id="skillToFlowModelInput">
+            <option value="advanced" selected>advanced</option>
+            <option value="balanced">balanced</option>
+            <option value="fast">fast</option>
+          </select>
+        </div>
+        <div><label>timeoutMs</label><input id="skillToFlowTimeoutInput" type="number" min="5000" step="1000" value="600000"></div>
+        <div><label>maxRepair</label><input id="skillToFlowRepairInput" type="number" min="0" max="5" value="1"></div>
+        <div><label>maxRegenerate</label><input id="skillToFlowRegenerateInput" type="number" min="0" max="5" value="1"></div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:10px;">
+        <button class="btn secondary" id="clearSkillToFlowBtn" type="button">清空</button>
+        <button class="btn secondary" id="cancelSkillToFlowBtn" type="button">取消</button>
+        <button class="btn ok" id="skillToFlowBtn" type="button">生成并载入</button>
+      </div>
+    </div>
+  </div>
+  <div id="flowReviseMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="flowReviseTitle" style="max-width:980px;width:min(97vw,980px);height:min(86vh,860px);">
+      <div class="row" id="flowReviseDragHandle" style="justify-content:space-between;cursor:move;user-select:none;">
+        <h3 id="flowReviseTitle" class="picker-title">AI 对话修正当前 Flow</h3>
+        <button class="btn secondary" id="flowReviseCloseBtn" type="button">关闭</button>
+      </div>
+      <div class="picker-hint">多轮对话会保留在当前页面会话中；每次发送会基于当前 Flow + 历史摘要修正并回填。</div>
+      <div style="display:grid;grid-template-columns:1fr 330px;gap:10px;min-height:0;flex:1 1 auto;">
+        <div style="display:flex;flex-direction:column;min-height:0;">
+          <label>对话历史</label>
+          <div id="flowReviseHistoryList" class="history-list" style="flex:1 1 auto;">暂无历史</div>
+          <label style="margin-top:8px;">本轮指令</label>
+          <textarea id="flowRevisePromptInput" style="min-height:90px;" placeholder="例如：把登录分支改成优先 invoke 登录流，失败再 ask_assist"></textarea>
+          <div class="row" style="justify-content:flex-end;margin-top:8px;">
+            <button class="btn secondary" id="clearFlowRevisePromptBtn" type="button">清空输入</button>
+            <button class="btn secondary" id="clearFlowReviseHistoryBtn" type="button">清空历史</button>
+            <button class="btn ok" id="flowReviseSendBtn" type="button">发送并修正</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div>
+            <label>修正引擎</label>
+            <select id="flowReviseEngineInput">
+              <option value="default" selected>直接AI（内置）</option>
+              <option value="codex">Codex</option>
+              <option value="claude_code">Claude Code</option>
+            </select>
+            <div id="flowReviseEngineHint" class="desc" style="margin-top:4px;">引擎状态：加载中...</div>
+          </div>
+          <div>
+            <label>模型能力</label>
+            <select id="flowReviseModelInput">
+              <option value="advanced" selected>advanced</option>
+              <option value="balanced">balanced</option>
+              <option value="fast">fast</option>
+            </select>
+          </div>
+          <div>
+            <label>timeoutMs</label>
+            <input id="flowReviseTimeoutInput" type="number" min="5000" step="1000" value="600000">
+          </div>
+          <div>
+            <label>maxRepair</label>
+            <input id="flowReviseRepairInput" type="number" min="0" max="5" value="1">
+          </div>
+          <div>
+            <label>maxRegenerate</label>
+            <input id="flowReviseRegenerateInput" type="number" min="0" max="5" value="1">
+          </div>
+          <div>
+            <label>附加上下文（可选）</label>
+            <textarea id="flowReviseContextInput" style="min-height:120px;" placeholder="例如：这个 flow 用于微博搜索结果读取，要求至少返回 url/title/summary"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="stepReviseMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="stepReviseTitle" style="max-width:980px;width:min(97vw,980px);height:min(86vh,860px);">
+      <div class="row" style="justify-content:space-between;">
+        <h3 id="stepReviseTitle" class="picker-title">AI 对话修正当前步骤（锁定 action.type）</h3>
+        <button class="btn secondary" id="stepReviseCloseBtn" type="button">关闭</button>
+      </div>
+      <div class="step-revise-layout">
+        <div class="step-revise-left">
+          <label>对话历史</label>
+          <div id="stepReviseHistoryList" class="history-list" style="flex:1 1 auto;">暂无历史</div>
+          <label style="margin-top:8px;">本轮指令（仅修改当前步骤，不允许改 action.type）</label>
+          <textarea id="stepRevisePromptInput" style="min-height:90px;" placeholder="例如：把这个 click 的 selector 改得更稳健，失败时走 next.failed"></textarea>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="clearStepRevisePromptBtn" type="button">清空输入</button>
+            <button class="btn secondary" id="clearStepReviseHistoryBtn" type="button">清空历史</button>
+            <button class="btn ok" id="stepReviseSendBtn" type="button">发送并修正步骤</button>
+          </div>
+        </div>
+        <div class="step-revise-right">
+          <label>引擎</label>
+          <select id="stepReviseEngineInput">
+            <option value="default">直接AI（内置）</option>
+            <option value="codex">Codex</option>
+            <option value="claude_code">Claude Code</option>
+          </select>
+          <div id="stepReviseEngineHint" class="desc" style="margin-top:4px;">引擎状态：加载中...</div>
+          <div style="height:8px;"></div>
+          <label>model</label>
+          <select id="stepReviseModelInput">
+            <option value="advanced">advanced</option>
+            <option value="quality">quality</option>
+            <option value="balanced">balanced</option>
+            <option value="fast">fast</option>
+            <option value="free">free</option>
+          </select>
+          <div style="height:8px;"></div>
+          <label>timeoutMs</label>
+          <input id="stepReviseTimeoutInput" type="number" min="5000" step="1000" value="600000">
+          <div style="height:8px;"></div>
+          <label>maxRepair</label>
+          <input id="stepReviseRepairInput" type="number" min="0" max="5" value="1">
+          <div style="height:8px;"></div>
+          <label>maxRegenerate</label>
+          <input id="stepReviseRegenerateInput" type="number" min="0" max="5" value="1">
+          <div style="height:8px;"></div>
+          <label>附加上下文（可选）</label>
+          <textarea id="stepReviseContextInput" style="min-height:120px;" placeholder="例如：当前步骤用于微博搜索框定位，优先稳定可维护 selector"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="flowReviseDetailMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="flowReviseDetailTitle" style="max-width:1100px;width:min(98vw,1100px);height:min(88vh,900px);">
+      <div class="row" style="justify-content:space-between;">
+        <h3 id="flowReviseDetailTitle" class="picker-title">完整记录</h3>
+        <button class="btn secondary" id="flowReviseDetailCloseBtn" type="button">关闭</button>
+      </div>
+      <pre id="flowReviseDetailPre" class="runjs-preview-pre" style="flex:1 1 auto;min-height:280px;">暂无数据</pre>
+      <div class="row" id="flowReviseDetailActions" style="justify-content:flex-end;display:none;">
+        <button class="btn ok" id="reviseFlowFromRunBtn" type="button">基于本次执行让AI修正Flow</button>
+      </div>
+    </div>
+  </div>
   <datalist id="stepIdOptions"></datalist>
   <datalist id="invokeArgKeyOptions"></datalist>
 
@@ -1207,16 +1632,38 @@
       invokeKeyPickerTargetId: "",
       invokeKeyPickerFilterKind: "all",
       invokeKeyPickerSelected: new Set(),
+      invokeKeyPickerSingle: false,
+      invokeKeyPickerApplyHandler: null,
       runJsPreviewPending: null,
       runJsPreviewResolver: null,
       runJsSyntaxErrorLine: 0,
       stepDrafts: {},
       editorDirty: false,
+      editorTouched: false,
       decisionResolver: null,
+      flowReviseTurns: [],
+      flowReviseSummary: [],
+      flowReviseCodexThreadId: "",
+      stepReviseTurns: [],
+      stepReviseSummary: [],
+      stepReviseCodexThreadId: "",
+      flowAgentEngines: null,
+      preferredFlowReviseEngine: "codex",
+      preferredStepReviseEngine: "codex",
+      preferredSkillEngine: "codex",
+      systemAuth: null,
+      lastFlowRunStatus: null,
+      lastFlowRunSummaryText: "",
+      lastFlowRunContext: null,
+      useLastFlowRunContextForRevise: false,
+      publishLastAudit: null,
+      publishServerInfo: null,
     };
 
-    const actionTypes = ["goto","click","hover","input","press_key","wait","scroll","invoke","run_js","run_ai","branch","ask_assist","done","abort"];
+    const actionTypes = ["goto","closepage","click","hover","input","press_key","wait","scroll","invoke","run_js","run_ai","branch","ask_assist","done","abort"];
     let graphPanning = false;
+    let invokeKeyPickerTipDelayTimer = null;
+    let flowRunPollToken = 0;
     let graphPanStartX = 0;
     let graphPanStartY = 0;
     let graphPanStartLeft = 0;
@@ -1226,6 +1673,14 @@
       const n = Number(ms);
       if (!Number.isFinite(n) || n <= 0) return Promise.resolve();
       return new Promise((resolve) => setTimeout(resolve, n));
+    }
+
+    async function sha256Hex(text) {
+      const raw = String(text == null ? "" : text);
+      const bytes = new TextEncoder().encode(raw);
+      const hash = await crypto.subtle.digest("SHA-256", bytes);
+      const arr = Array.from(new Uint8Array(hash));
+      return arr.map((b) => b.toString(16).padStart(2, "0")).join("");
     }
 
     function showBusyMask(text, tone = "working") {
@@ -1248,8 +1703,513 @@
     }
 
     function setStatus(text) { $("status").textContent = String(text || ""); }
+
+    function truncateText(text, n = 260) {
+      const s = String(text || "");
+      if (s.length <= n) return s;
+      return `${s.slice(0, Math.max(0, n - 18))} ...(truncated)`;
+    }
+
+    function stripLikelyJsonNoise(text) {
+      let s = String(text || "");
+      s = s.replace(/```json[\s\S]*?```/gi, "[json omitted]");
+      s = s.replace(/```[\s\S]*?```/g, "[code omitted]");
+      s = s.replace(/\{[^{}\n]{260,}\}/g, "{...}");
+      s = s.replace(/\[[^[\]\n]{260,}\]/g, "[...]");
+      return s;
+    }
+
+    function getStepChangedSummary(prevFlow, nextFlow) {
+      const prevSteps = Array.isArray(prevFlow?.steps) ? prevFlow.steps : [];
+      const nextSteps = Array.isArray(nextFlow?.steps) ? nextFlow.steps : [];
+      const prevMap = new Map(prevSteps.map((s) => [String(s?.id || ""), s]));
+      const nextMap = new Map(nextSteps.map((s) => [String(s?.id || ""), s]));
+      const added = [];
+      const removed = [];
+      const changed = [];
+      for (const id of nextMap.keys()) {
+        if (!id) continue;
+        if (!prevMap.has(id)) {
+          added.push(id);
+          continue;
+        }
+        const a = JSON.stringify(prevMap.get(id));
+        const b = JSON.stringify(nextMap.get(id));
+        if (a !== b) changed.push(id);
+      }
+      for (const id of prevMap.keys()) {
+        if (!id) continue;
+        if (!nextMap.has(id)) removed.push(id);
+      }
+      return { added, removed, changed };
+    }
+
+    function buildFlowReviseContextText(baseContext = "", recentN = 4) {
+      const recent = Array.isArray(state.flowReviseTurns) ? state.flowReviseTurns.slice(-Math.max(1, recentN)) : [];
+      const summary = Array.isArray(state.flowReviseSummary) ? state.flowReviseSummary.slice(-10) : [];
+      const lines = [];
+      const base = String(baseContext || "").trim();
+      if (base) {
+        lines.push("附加上下文:");
+        lines.push(base);
+      }
+      if (summary.length) {
+        lines.push("");
+        lines.push("历史摘要:");
+        for (const p of summary) lines.push(`- ${String(p || "")}`);
+      }
+      if (recent.length) {
+        lines.push("");
+        lines.push("最近对话:");
+        for (const t of recent) {
+          const role = t?.role === "assistant" ? "assistant" : "user";
+          const tx = truncateText(stripLikelyJsonNoise(String(t?.text || "")), 280);
+          lines.push(`- [${role}] ${tx}`);
+        }
+      }
+      return lines.join("\n").trim();
+    }
+
+    function formatFlowReviseTrace(trace) {
+      const t = (trace && typeof trace === "object") ? trace : null;
+      if (!t) return "";
+      const lines = [];
+      const req = (t.request && typeof t.request === "object") ? t.request : {};
+      if (Object.keys(req).length) {
+        lines.push("trace.request:");
+        lines.push(`- engine=${String(req.engine || "-")}, model=${String(req.model || "-")}, timeoutMs=${Number(req.timeoutMs || 0) || "-"}`);
+        lines.push(`- maxRepair=${Number(req.maxRepair || 0)}, maxRegenerate=${Number(req.maxRegenerate || 0)}, stepCount=${Number(req.stepCount || 0)}`);
+        const ip = String(req.instructionPreview || "").trim();
+        if (ip) lines.push(`- instruction=${ip}`);
+      }
+      const attempts = Array.isArray(t.attempts) ? t.attempts : [];
+      if (attempts.length) {
+        lines.push("trace.attempts:");
+        attempts.forEach((a, idx) => {
+          const one = (a && typeof a === "object") ? a : {};
+          lines.push(`- #${idx + 1} engine=${String(one.engine || "-")} ok=${one.ok === true ? "true" : "false"} reason=${String(one.reason || "-")}`);
+          const errs = Array.isArray(one.errors) ? one.errors.slice(0, 4) : [];
+          for (const e of errs) lines.push(`  err: ${String(e || "")}`);
+          const raw = (one.raw && typeof one.raw === "object") ? one.raw : {};
+          const rp = String(raw.stderrPreview || raw.stdoutPreview || "").trim();
+          if (rp) lines.push(`  io: ${rp}`);
+          const meta = (one.meta && typeof one.meta === "object") ? one.meta : {};
+          const cli = (one.cli && typeof one.cli === "object") ? one.cli : {};
+          if (String(cli.command || "").trim()) lines.push(`  cli: ${String(cli.command || "")}${Number.isFinite(Number(cli.code)) ? ` (exit=${Number(cli.code)})` : ""}`);
+          if (String(cli.payloadPreview || "").trim()) lines.push(`  payload: ${String(cli.payloadPreview || "")}`);
+          if (String(cli.stdoutPreview || "").trim()) lines.push(`  output: ${String(cli.stdoutPreview || "")}`);
+          if (String(cli.stderrPreview || "").trim()) lines.push(`  stderr: ${String(cli.stderrPreview || "")}`);
+          if (meta.fallbackRepair === true) {
+            lines.push(`  fallbackRepair=true (${String(meta.originEngine || "-")} -> ${String(meta.repairEngine || "-")})`);
+          }
+        });
+      }
+      const cliAttempts = Array.isArray(t.cliAttempts) ? t.cliAttempts : [];
+      if (cliAttempts.length) {
+        lines.push("trace.cliAttempts:");
+        cliAttempts.forEach((a) => {
+          lines.push(`- round=${Number(a?.round || 0)} ok=${a?.ok === true ? "true" : "false"} code=${Number.isFinite(Number(a?.code)) ? Number(a.code) : "-"} session=${String(a?.sessionId || "-")} reason=${String(a?.reason || "-")}`);
+        });
+      }
+      if (String(t.codexThreadSessionId || "").trim()) {
+        lines.push(`trace.codexThreadSessionId: ${String(t.codexThreadSessionId || "")}`);
+      }
+      if (Number.isFinite(Number(t.codexValidationRounds))) {
+        lines.push(`trace.codexValidationRounds: ${Number(t.codexValidationRounds)}`);
+      }
+      const final = (t.final && typeof t.final === "object") ? t.final : null;
+      if (final) {
+        lines.push(`trace.final: engine=${String(final.engine || "-")} ok=${final.ok === true ? "true" : "false"} reason=${String(final.reason || "-")}`);
+      }
+      return lines.join("\n");
+    }
+
+    function flowAgentLabel(engineKey) {
+      const k = String(engineKey || "default").trim();
+      if (k === "codex") return "Codex";
+      if (k === "claude_code") return "CC";
+      return "AI";
+    }
+
+    function clipTextByLines(text, maxLines = 100) {
+      const raw = String(text || "");
+      const lines = raw.split("\n");
+      if (lines.length <= maxLines) {
+        return { text: raw, clipped: false, lineCount: lines.length, rest: 0 };
+      }
+      const rest = lines.length - maxLines;
+      const out = `${lines.slice(0, maxLines).join("\n")}\n...(已截断，剩余 ${rest} 行，点击下方“查看完整信息”)`;
+      return { text: out, clipped: true, lineCount: lines.length, rest };
+    }
+
+    function openFlowReviseDetailDialog(title, text, options = {}) {
+      const mask = $("flowReviseDetailMask");
+      const pre = $("flowReviseDetailPre");
+      const head = $("flowReviseDetailTitle");
+      const actions = $("flowReviseDetailActions");
+      if (!mask || !pre || !head) return;
+      head.textContent = String(title || "完整记录");
+      pre.textContent = String(text || "");
+      if (actions) {
+        const canRevise = options && options.enableFlowReviseFromRun === true;
+        actions.style.display = canRevise ? "flex" : "none";
+      }
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      pre.scrollTop = 0;
+    }
+
+    function closeFlowReviseDetailDialog() {
+      const mask = $("flowReviseDetailMask");
+      if (!mask) return;
+      mask.classList.remove("show");
+      mask.setAttribute("aria-hidden", "true");
+    }
+
+    function renderFlowReviseHistory() {
+      const list = $("flowReviseHistoryList");
+      if (!list) return;
+      const turns = Array.isArray(state.flowReviseTurns) ? state.flowReviseTurns : [];
+      if (!turns.length) {
+        list.textContent = "暂无历史";
+        return;
+      }
+      list.innerHTML = "";
+      for (const one of turns.slice(-20)) {
+        const ts = String(one?.ts || "").trim();
+        const role = one?.role === "assistant" ? "assistant" : "user";
+        const fullText = String(one?.text || "").trim() || "(empty)";
+        const clipped = clipTextByLines(fullText, 100);
+        const turn = document.createElement("div");
+        turn.className = "history-turn";
+        const head = document.createElement("div");
+        head.className = "history-turn-head";
+        head.textContent = `[${ts || "-"}] ${role}`;
+        const body = document.createElement("pre");
+        body.className = "history-turn-text";
+        body.textContent = clipped.text;
+        turn.appendChild(head);
+        turn.appendChild(body);
+        if (clipped.clipped) {
+          const more = document.createElement("div");
+          more.className = "history-turn-more";
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn secondary";
+          btn.textContent = "查看完整信息";
+          btn.addEventListener("click", () => {
+            openFlowReviseDetailDialog(`完整记录 [${ts || "-"}] ${role}（${clipped.lineCount} 行）`, fullText);
+          });
+          more.appendChild(btn);
+          turn.appendChild(more);
+        }
+        list.appendChild(turn);
+      }
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function refreshFlowReviseModeHint() {
+      const title = $("flowReviseTitle");
+      if (!title) return;
+      title.textContent = state.useLastFlowRunContextForRevise
+        ? "AI 对话修正当前 Flow（基于执行结果）"
+        : "AI 对话修正当前 Flow";
+    }
+
+    function openFlowReviseDialog() {
+      const mask = $("flowReviseMask");
+      if (!mask) return;
+      refreshFlowReviseModeHint();
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      loadFlowAgentEngines().catch(() => {});
+      renderFlowReviseHistory();
+      const ta = $("flowRevisePromptInput");
+      if (ta) {
+        setTimeout(() => {
+          try { ta.focus(); } catch (_) {}
+        }, 0);
+      }
+    }
+
+    function closeFlowReviseDialog() {
+      const mask = $("flowReviseMask");
+      if (!mask) return;
+      mask.classList.remove("show");
+      mask.setAttribute("aria-hidden", "true");
+      refreshFlowReviseModeHint();
+    }
+
+    function renderStepReviseHistory() {
+      const list = $("stepReviseHistoryList");
+      if (!list) return;
+      const turns = Array.isArray(state.stepReviseTurns) ? state.stepReviseTurns : [];
+      if (!turns.length) {
+        list.textContent = "暂无历史";
+        return;
+      }
+      list.innerHTML = "";
+      for (const one of turns.slice(-20)) {
+        const ts = String(one?.ts || "").trim();
+        const role = one?.role === "assistant" ? "assistant" : "user";
+        const text = String(one?.text || "").trim() || "(empty)";
+        const turn = document.createElement("div");
+        turn.className = "history-turn";
+        const head = document.createElement("div");
+        head.className = "history-turn-head";
+        head.textContent = `[${ts || "-"}] ${role}`;
+        const body = document.createElement("pre");
+        body.className = "history-turn-text";
+        body.textContent = text;
+        turn.appendChild(head);
+        turn.appendChild(body);
+        list.appendChild(turn);
+      }
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function openStepReviseDialog() {
+      if (!String(state.selectedStepId || "").trim()) throw new Error("请先选择一个步骤");
+      const mask = $("stepReviseMask");
+      if (!mask) return;
+      const engSel = $("stepReviseEngineInput");
+      if (engSel) engSel.value = String(state.preferredStepReviseEngine || "codex");
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      loadFlowAgentEngines().catch(() => {});
+      renderStepReviseHistory();
+      const ta = $("stepRevisePromptInput");
+      if (ta) {
+        setTimeout(() => {
+          try { ta.focus(); } catch (_) {}
+        }, 0);
+      }
+    }
+
+    function closeStepReviseDialog() {
+      const mask = $("stepReviseMask");
+      if (!mask) return;
+      mask.classList.remove("show");
+      mask.setAttribute("aria-hidden", "true");
+    }
+
+    async function sendStepReviseTurn() {
+      const stepId = String(state.selectedStepId || "").trim();
+      if (!stepId) throw new Error("请先选择一个步骤");
+      const instruction = String($("stepRevisePromptInput").value || "").trim();
+      if (!instruction) throw new Error("请先输入本轮修正指令");
+      const engine = String($("stepReviseEngineInput").value || "default").trim() || "default";
+      state.preferredStepReviseEngine = engine;
+      const model = String($("stepReviseModelInput").value || "advanced").trim() || "advanced";
+      const timeoutMs = Number($("stepReviseTimeoutInput").value || 600000);
+      const maxRepair = Number($("stepReviseRepairInput").value || 1);
+      const maxRegenerate = Number($("stepReviseRegenerateInput").value || 1);
+      const extraContext = String($("stepReviseContextInput").value || "").trim();
+
+      const prevFlow = getFlowFromTextarea();
+      const oldStep = (Array.isArray(prevFlow?.steps) ? prevFlow.steps : []).find((s) => String(s?.id || "") === stepId) || null;
+      const oldType = String(oldStep?.action?.type || "").trim();
+      if (!oldType) throw new Error(`当前步骤缺少 action.type: ${stepId}`);
+
+      const userTurn = { ts: new Date().toISOString(), role: "user", text: instruction };
+      state.stepReviseTurns.push(userTurn);
+      if (state.stepReviseTurns.length > 30) state.stepReviseTurns = state.stepReviseTurns.slice(-30);
+      renderStepReviseHistory();
+
+      const btn = $("stepReviseSendBtn");
+      btn.disabled = true;
+      btn.textContent = "修正中...";
+      const engLabel = flowAgentLabel(engine);
+      showBusyMask(`正在使用 ${engLabel} 修正步骤 ${stepId}（type=${oldType}）...`, "working");
+      setStatus(`步骤对话修正中（${engLabel}）...`);
+      try {
+        const data = await api("POST", "/rpaflows/api/builder/step-revise", {
+          flowDocument: prevFlow,
+          stepId,
+          userInstruction: instruction,
+          contextText: extraContext,
+          engine,
+          model,
+          timeoutMs,
+          maxRepair,
+          maxRegenerate,
+          codexThreadSessionId: (engine === "codex") ? String(state.stepReviseCodexThreadId || "") : "",
+        });
+        const nextFlow = (data && typeof data.flow === "object" && !Array.isArray(data.flow))
+          ? data.flow
+          : ((data?.document?.flow && typeof data.document.flow === "object") ? data.document.flow : null);
+        if (!nextFlow) throw new Error("step revise 返回缺少 flow");
+        const renamedStepIdTo = String(data?.renamedStepIdTo || "").trim();
+        const activeStepId = renamedStepIdTo || stepId;
+        const newStep = (Array.isArray(nextFlow?.steps) ? nextFlow.steps : []).find((s) => String(s?.id || "") === activeStepId) || null;
+        const newType = String(newStep?.action?.type || "").trim();
+        if (newType !== oldType) throw new Error(`step revise 改变了 action.type: ${oldType} -> ${newType || "-"}`);
+
+        const diff = getStepChangedSummary(prevFlow, nextFlow);
+        const renamePart = renamedStepIdTo ? `, renamed=${stepId}->${renamedStepIdTo}` : "";
+        const outcome = `step=${activeStepId}, type=${oldType}${renamePart}, changed=${diff.changed.length}, added=${diff.added.length}, removed=${diff.removed.length}, repairs=${Number(data?.repairs || 0)}, regenerates=${Number(data?.regenerates || 0)}, engine=${String(data?.engine || engine)}`;
+        const traceText = formatFlowReviseTrace(data?.trace || null);
+        if (engine === "codex") {
+          const sid = String(data?.codexThreadSessionId || data?.trace?.codexThreadSessionId || "").trim();
+          if (sid) state.stepReviseCodexThreadId = sid;
+        }
+        const assistantTurn = {
+          ts: new Date().toISOString(),
+          role: "assistant",
+          text: `步骤已修正并回填。${outcome}${traceText ? `\n\n${traceText}` : ""}`,
+        };
+        state.stepReviseTurns.push(assistantTurn);
+        if (state.stepReviseTurns.length > 30) state.stepReviseTurns = state.stepReviseTurns.slice(-30);
+        state.stepReviseSummary.push(`${assistantTurn.ts}: ${truncateText(instruction, 120)} | ${outcome}`);
+        if (state.stepReviseSummary.length > 40) state.stepReviseSummary = state.stepReviseSummary.slice(-40);
+
+        state.stepDrafts = {};
+        state.editorDirty = false;
+        state.editorTouched = false;
+        setFlow(nextFlow);
+        state.selectedStepId = activeStepId;
+        renderStepList();
+        renderGraph();
+        loadStepToEditor(activeStepId, { preferDraft: false });
+        $("stepRevisePromptInput").value = "";
+        renderStepReviseHistory();
+        setOutput({ ok: true, info: "step_revise.done", data, diff });
+        setStatus(`步骤已修正：${outcome}`);
+        showBusyMask("步骤修正完成，已回填", "success");
+        showButtonTip($("stepReviseSendBtn"), "已回填", "ok");
+        await sleepMs(900);
+      } catch (err) {
+        const traceText = formatFlowReviseTrace(err?.data?.trace || null);
+        if (engine === "codex") {
+          const sid = String(err?.data?.trace?.codexThreadSessionId || "").trim();
+          if (sid) state.stepReviseCodexThreadId = sid;
+        }
+        const assistantTurn = {
+          ts: new Date().toISOString(),
+          role: "assistant",
+          text: `步骤修正失败：${String(err?.message || err)}${traceText ? `\n\n${traceText}` : ""}`,
+        };
+        state.stepReviseTurns.push(assistantTurn);
+        if (state.stepReviseTurns.length > 30) state.stepReviseTurns = state.stepReviseTurns.slice(-30);
+        renderStepReviseHistory();
+        setOutput({ ok: false, info: "step_revise.error", error: String(err?.message || err), data: err?.data || null });
+        setStatus(`步骤修正失败：${String(err?.message || err)}`);
+        showBusyMask(`步骤修正失败：${String(err?.message || err)}`, "error");
+        showButtonTip($("stepReviseSendBtn"), "失败", "err");
+        await sleepMs(1300);
+      } finally {
+        hideBusyMask();
+        btn.disabled = false;
+        btn.textContent = "发送并修正步骤";
+      }
+    }
+
+    function applyEngineAvailabilityToSelect(selectId, hintId) {
+      const sel = $(selectId);
+      const hint = $(hintId);
+      const cfg = (state.flowAgentEngines && typeof state.flowAgentEngines === "object") ? state.flowAgentEngines : null;
+      if (!sel || !hint) return;
+      if (!cfg) {
+        hint.textContent = "引擎状态：未知";
+        return;
+      }
+      const lines = [];
+      for (const op of Array.from(sel.options || [])) {
+        const key = String(op.value || "");
+        const one = cfg[key] || null;
+        const available = !one || one.available !== false;
+        op.disabled = !available;
+        const label = one && one.label ? String(one.label) : op.textContent;
+        const reason = one && one.reason ? String(one.reason) : "";
+        lines.push(`${label}:${available ? "可用" : `不可用(${reason || "未配置"})`}`);
+      }
+      if (sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].disabled) {
+        const pref = (selectId === "flowReviseEngineInput")
+          ? String(state.preferredFlowReviseEngine || "codex")
+          : (selectId === "stepReviseEngineInput")
+            ? String(state.preferredStepReviseEngine || "codex")
+            : (selectId === "skillToFlowEngineInput" ? String(state.preferredSkillEngine || "codex") : "codex");
+        const fallback = Array.from(sel.options || []).find((x) => !x.disabled && String(x.value || "") === pref)
+          || Array.from(sel.options || []).find((x) => !x.disabled && String(x.value || "") === "codex")
+          || Array.from(sel.options || []).find((x) => !x.disabled);
+        if (fallback) sel.value = fallback.value;
+      }
+      if (selectId === "flowReviseEngineInput") state.preferredFlowReviseEngine = String(sel.value || "default");
+      if (selectId === "stepReviseEngineInput") state.preferredStepReviseEngine = String(sel.value || "default");
+      if (selectId === "skillToFlowEngineInput") state.preferredSkillEngine = String(sel.value || "default");
+      hint.textContent = `引擎状态：${lines.join("；")}`;
+    }
+
+    async function loadFlowAgentEngines() {
+      try {
+        const data = await api("GET", "/rpaflows/api/builder/flow-agent/engines");
+        state.flowAgentEngines = (data && typeof data === "object") ? data : {};
+      } catch (err) {
+        state.flowAgentEngines = {
+          default: { key: "default", label: "直接AI（内置）", available: true, reason: "" },
+          codex: { key: "codex", label: "Codex", available: false, reason: `检测失败: ${String(err?.message || err)}` },
+          claude_code: { key: "claude_code", label: "Claude Code", available: false, reason: `检测失败: ${String(err?.message || err)}` },
+        };
+      }
+      applyEngineAvailabilityToSelect("skillToFlowEngineInput", "skillToFlowEngineHint");
+      applyEngineAvailabilityToSelect("flowReviseEngineInput", "flowReviseEngineHint");
+      applyEngineAvailabilityToSelect("stepReviseEngineInput", "stepReviseEngineHint");
+    }
+
+    function bindFlowReviseDialogDrag() {
+      const mask = $("flowReviseMask");
+      const card = mask ? mask.querySelector(".picker-card") : null;
+      const handle = $("flowReviseDragHandle");
+      if (!mask || !card || !handle) return;
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+      let baseLeft = 0;
+      let baseTop = 0;
+      const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+      const ensureFixedPosition = () => {
+        const rect = card.getBoundingClientRect();
+        card.style.position = "fixed";
+        card.style.margin = "0";
+        card.style.left = `${Math.round(rect.left)}px`;
+        card.style.top = `${Math.round(rect.top)}px`;
+      };
+      const onMove = (ev) => {
+        if (!dragging) return;
+        const dx = Number(ev.clientX || 0) - startX;
+        const dy = Number(ev.clientY || 0) - startY;
+        const w = card.offsetWidth || 1;
+        const h = card.offsetHeight || 1;
+        const maxLeft = Math.max(0, window.innerWidth - w);
+        const maxTop = Math.max(0, window.innerHeight - h);
+        const left = clamp(baseLeft + dx, 0, maxLeft);
+        const top = clamp(baseTop + dy, 0, maxTop);
+        card.style.left = `${Math.round(left)}px`;
+        card.style.top = `${Math.round(top)}px`;
+      };
+      const stop = () => {
+        if (!dragging) return;
+        dragging = false;
+        document.removeEventListener("mousemove", onMove, true);
+        document.removeEventListener("mouseup", stop, true);
+      };
+      handle.addEventListener("mousedown", (ev) => {
+        if (ev.button !== 0) return;
+        const target = ev.target;
+        if (target && typeof target.closest === "function" && target.closest("button")) return;
+        ensureFixedPosition();
+        dragging = true;
+        startX = Number(ev.clientX || 0);
+        startY = Number(ev.clientY || 0);
+        baseLeft = Number(parseFloat(card.style.left || "0") || 0);
+        baseTop = Number(parseFloat(card.style.top || "0") || 0);
+        document.addEventListener("mousemove", onMove, true);
+        document.addEventListener("mouseup", stop, true);
+        ev.preventDefault();
+      });
+    }
     const STEP_EDITOR_DRAFT_FIELDS = [
-      "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
+      "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
       "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
       "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
       "fBranchDefault","fBranchCases","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput","nextJsonInput","actionJsonInput",
@@ -1449,7 +2409,7 @@
       if (!targetId) return false;
       const fromId = String(state.selectedStepId || "").trim();
       if (fromId && targetId !== fromId && opts.bypassGuard !== true) {
-        const dirty = updateEditorDirtyState({ renderList: false });
+        const dirty = state.editorTouched === true ? updateEditorDirtyState({ renderList: false }) : false;
         if (dirty) {
           const action = await chooseSwitchAction(fromId, targetId);
           if (action === "cancel") return false;
@@ -1464,6 +2424,7 @@
           if (action === "discard") {
             delete state.stepDrafts[fromId];
             state.editorDirty = false;
+            state.editorTouched = false;
           }
         }
       }
@@ -1845,7 +2806,12 @@
       if (body !== undefined) init.body = JSON.stringify(body);
       const res = await fetch(path, init);
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.reason || `HTTP ${res.status}`);
+      if (!res.ok || !data.ok) {
+        const err = new Error(data.reason || `HTTP ${res.status}`);
+        err.data = data;
+        err.status = res.status;
+        throw err;
+      }
       return data.data;
     }
 
@@ -1909,6 +2875,232 @@
     function renderSessionTag(extra = "") {
       const label = state.sessionId ? `session=${state.sessionId}${extra ? ` | ${extra}` : ""}` : "未启动";
       $("sessionTag").textContent = label;
+    }
+
+    function setSystemAuth(auth) {
+      state.systemAuth = (auth && typeof auth === "object") ? auth : null;
+      renderSystemAuthTag();
+      if (!state.systemAuth || !state.systemAuth.loginVO) return;
+      const last = String(state.systemAuth.lastAccount || state.systemAuth.loginVO.email || "").trim();
+      if (last) $("sysEmailInput").value = last;
+      const apiPath = String(state.systemAuth.loginVO.apiPath || "").trim();
+      if (apiPath) $("sysApiPathInput").value = apiPath;
+    }
+
+    function renderSystemAuthTag() {
+      const auth = (state.systemAuth && typeof state.systemAuth === "object") ? state.systemAuth : null;
+      const loginDone = !!auth?.loginDone;
+      const vo = auth?.loginVO || null;
+      const userId = String(vo?.userId || "").trim();
+      const email = String(vo?.email || auth?.lastAccount || "").trim();
+      const label = loginDone ? `已登录${email ? ` | ${email}` : ""}${userId ? ` | uid=${userId}` : ""}` : "未登录";
+      $("systemAuthTag").textContent = label;
+      updateSystemAuthUiState(loginDone);
+    }
+
+    function updateSystemAuthUiState(loginDone) {
+      const on = !!loginDone;
+      const title = $("systemLoginTitle");
+      const loginBtn = $("sysLoginBtn");
+      const checkBtn = $("sysCheckBtn");
+      const logoutBtn = $("sysLogoutBtn");
+      if (title) title.style.color = on ? "var(--green)" : "#23364d";
+      if (loginBtn) loginBtn.disabled = on;
+      if (checkBtn) checkBtn.disabled = !on;
+      if (logoutBtn) logoutBtn.disabled = !on;
+    }
+
+    function normalizeLocalLoginVO(obj, keyName = "") {
+      if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+      const userId = String(obj.userId || obj.userid || "").trim();
+      const token = String(obj.token || "").trim();
+      const apiPath = String(obj.apiPath || "").trim();
+      const tokenExpire = Number(obj.tokenExpire || obj.tokenExipre || 0);
+      if (!userId || !token) return null;
+      return {
+        sourceKey: String(keyName || ""),
+        userId,
+        token,
+        apiPath,
+        tokenExpire,
+        email: String(obj.email || "").trim(),
+        raw: {
+          ...obj,
+          userId,
+          userid: userId,
+          token,
+          apiPath,
+          tokenExpire,
+          tokenExipre: tokenExpire,
+        },
+      };
+    }
+
+    function loadLocalLoginInfoCompat() {
+      const keys = ["LoginVO", "login-Info", "loginInfo", "login_vo"];
+      for (const key of keys) {
+        let raw = "";
+        try { raw = String(localStorage.getItem(key) || "").trim(); } catch (_) { raw = ""; }
+        if (!raw) continue;
+        try {
+          const obj = JSON.parse(raw);
+          const norm = normalizeLocalLoginVO(obj, key);
+          if (norm) return norm;
+        } catch (_) {
+        }
+      }
+      return null;
+    }
+
+    function getLocalLoginSnapshot() {
+      const out = {
+        origin: String(location.origin || ""),
+        keys: {},
+      };
+      for (const k of ["LoginVO", "login-Info", "loginInfo", "login_vo"]) {
+        let v = "";
+        try { v = String(localStorage.getItem(k) || ""); } catch (_) { v = ""; }
+        out.keys[k] = {
+          exists: !!v.trim(),
+          len: v.length,
+        };
+      }
+      const saved = loadLocalLoginInfoCompat();
+      out.selected = saved ? {
+        sourceKey: String(saved.sourceKey || ""),
+        userId: String(saved.userId || ""),
+        email: String(saved.email || ""),
+        apiPath: String(saved.apiPath || ""),
+        tokenExpire: Number(saved.tokenExpire || 0),
+      } : null;
+      return out;
+    }
+
+    function saveLocalLoginInfoCompat(vo) {
+      const norm = normalizeLocalLoginVO(vo, "LoginVO");
+      if (!norm) return false;
+      const text = JSON.stringify(norm.raw);
+      try { localStorage.setItem("LoginVO", text); } catch (_) {}
+      try { localStorage.setItem("login-Info", text); } catch (_) {}
+      return true;
+    }
+
+    function clearLocalLoginInfoCompat(lastAccount = "") {
+      const acc = String(lastAccount || "").trim();
+      if (acc) {
+        try { localStorage.setItem("LastAccount", acc); } catch (_) {}
+      }
+      try { localStorage.removeItem("LoginVO"); } catch (_) {}
+      try { localStorage.removeItem("login-Info"); } catch (_) {}
+    }
+
+    function resolveWsApiPath(raw) {
+      const s = String(raw || "").trim();
+      if (!s) return "/ws/";
+      return s;
+    }
+
+    async function callSystemWs(msg, vo = {}, opts = {}) {
+      const m = String(msg || "").trim();
+      if (!m) throw new Error("msg is required");
+      const apiPath = resolveWsApiPath(opts.apiPath || "/ws/");
+      const timeoutMs = Math.max(0, Number(opts.timeoutMs || 0));
+      const payload = { msg: m, vo: (vo && typeof vo === "object" && !Array.isArray(vo)) ? vo : {}, seq: Date.now() };
+      const controller = new AbortController();
+      let timer = 0;
+      if (timeoutMs > 0) {
+        timer = window.setTimeout(() => {
+          try { controller.abort(); } catch (_) {}
+        }, timeoutMs);
+      }
+      try {
+        const resp = await fetch(apiPath, {
+          method: "POST",
+          cache: "no-cache",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        const text = await resp.text();
+        let data = {};
+        try { data = JSON.parse(text || "{}"); } catch (_) { data = { code: resp.status, info: text || "invalid json response" }; }
+        if (!Object.prototype.hasOwnProperty.call(data, "code")) data.code = resp.status;
+        return data;
+      } catch (err) {
+        if (String(err?.name || "") === "AbortError") return { code: 503, info: "Web API call time out." };
+        return { code: 0, info: String(err?.message || err || "network error") };
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+
+    async function maybeAutoLoginFromLocalStorage() {
+      if (state.systemAuth && state.systemAuth.loginDone) return false;
+      const saved = loadLocalLoginInfoCompat();
+      if (!saved) return false;
+      const now = Date.now();
+      const exp = Number(saved.tokenExpire || 0);
+      if (exp > 0 && now > exp) {
+        clearLocalLoginInfoCompat(saved.email || "");
+        setStatus("检测到本地登录信息，但 token 已过期，已清理");
+        return false;
+      }
+      setStatus("检测到本地登录信息，正在自动登录并校验 token...");
+      try {
+        const pathRet = await callSystemWs("apiPath", {}, {
+          apiPath: saved.apiPath || String($("sysApiPathInput").value || "").trim() || "/ws/",
+          timeoutMs: 15000,
+        });
+        const apiPath = String(pathRet?.path || "").trim();
+        if (Number(pathRet?.code || 0) !== 200 || !apiPath) {
+          throw new Error(`获取 apiPath 失败: ${String(pathRet?.info || pathRet?.code || "unknown")}`);
+        }
+        const loginRet = await callSystemWs("userLogin", {
+          userId: saved.userId,
+          token: saved.token,
+          time: Date.now(),
+        }, { apiPath, timeoutMs: 30000 });
+        if (Number(loginRet?.code || 0) !== 200) {
+          throw new Error(`登录失败: ${String(loginRet?.info || loginRet?.code || "unknown")}`);
+        }
+        const checkRet = await callSystemWs("userCurrency", {
+          userId: String(loginRet?.userId || loginRet?.userid || saved.userId || ""),
+          token: String(loginRet?.token || saved.token || ""),
+        }, { apiPath, timeoutMs: 15000 });
+        const loginDone = Number(checkRet?.code || 0) === 200;
+        const auth = loginDone ? {
+          loginDone: true,
+          lastAccount: String(loginRet?.email || saved.email || ""),
+          loginVO: {
+            ...loginRet,
+            userId: String(loginRet?.userId || loginRet?.userid || saved.userId || ""),
+            userid: String(loginRet?.userId || loginRet?.userid || saved.userId || ""),
+            token: String(loginRet?.token || saved.token || ""),
+            apiPath,
+            coins: Number(checkRet?.coins || loginRet?.coins || 0),
+            points: Number(checkRet?.points || loginRet?.points || 0),
+          },
+        } : null;
+        if (!loginDone || !auth?.loginVO?.token) {
+          clearLocalLoginInfoCompat(saved.email || "");
+          setSystemAuth(null);
+          setOutput({ ok: false, info: "system.auto_login.invalid", pathRet, loginRet, checkRet });
+          setStatus("本地登录信息校验失败，已清理");
+          return false;
+        }
+        setSystemAuth(auth);
+        saveLocalLoginInfoCompat(auth.loginVO);
+        setOutput({ ok: true, info: "system.auto_login", pathRet, loginRet, checkRet });
+        showButtonTip($("sysLoginBtn"), "自动登录成功", "ok");
+        setStatus("已从本地登录信息自动登录并校验通过");
+        return true;
+      } catch (err) {
+        clearLocalLoginInfoCompat(saved.email || "");
+        setSystemAuth(null);
+        setOutput({ ok: false, info: "system.auto_login.error", error: String(err?.message || err) });
+        setStatus(`本地登录信息自动登录失败，已清理：${String(err?.message || err)}`);
+        return false;
+      }
     }
 
     function renderContextTag() { $("contextTag").textContent = `active: ${state.activeContextId || "-"}`; }
@@ -2012,22 +3204,58 @@
     function normalizeInvokeFindKeysPayload(data) {
       const out = [];
       const argDefs = {};
+      const capDefs = {};
+      const rawArgDefs = (data?.argDefs && typeof data.argDefs === "object" && !Array.isArray(data.argDefs))
+        ? data.argDefs
+        : {};
+      const rawCapDefs = (data?.capDefs && typeof data.capDefs === "object" && !Array.isArray(data.capDefs))
+        ? data.capDefs
+        : {};
       const rawItems = Array.isArray(data?.items) ? data.items : [];
       for (const it of rawItems) {
         const key = String(it?.key || "").trim();
         const kind = String(it?.kind || "").trim().toLowerCase();
         if (!key) continue;
         if (kind !== "cap" && kind !== "arg") continue;
+        const baseDef = kind === "arg"
+          ? ((rawArgDefs[key] && typeof rawArgDefs[key] === "object") ? rawArgDefs[key] : {})
+          : ((rawCapDefs[key] && typeof rawCapDefs[key] === "object") ? rawCapDefs[key] : {});
         const values = Array.isArray(it?.values) ? it.values : [];
-        const type = String(it?.type || "").trim();
-        const item = { key, kind, type, values };
+        const type = String(it?.type || baseDef.type || "").trim();
+        const desc = String(it?.desc || baseDef.desc || "").trim();
+        const item = { key, kind, type, desc, values };
         out.push(item);
         if (kind === "arg") {
-          argDefs[key] = { type, values };
+          argDefs[key] = { type, desc, values };
+        } else if (kind === "cap") {
+          capDefs[key] = { desc };
+        }
+      }
+      // backward/partial compatibility: some backend versions expose desc/type only in argDefs
+      for (const key of Object.keys(rawArgDefs)) {
+        const k = String(key || "").trim();
+        if (!k) continue;
+        const base = (rawArgDefs[k] && typeof rawArgDefs[k] === "object") ? rawArgDefs[k] : {};
+        if (!argDefs[k]) {
+          argDefs[k] = {
+            type: String(base.type || "").trim(),
+            desc: String(base.desc || "").trim(),
+            values: Array.isArray(base.values) ? base.values : [],
+          };
+        }
+      }
+      for (const key of Object.keys(rawCapDefs)) {
+        const k = String(key || "").trim();
+        if (!k) continue;
+        const base = (rawCapDefs[k] && typeof rawCapDefs[k] === "object") ? rawCapDefs[k] : {};
+        if (!capDefs[k]) {
+          capDefs[k] = {
+            desc: String(base.desc || "").trim(),
+          };
         }
       }
       out.sort((a, b) => a.key.localeCompare(b.key, "zh-CN"));
-      return { items: out, argDefs };
+      return { items: out, argDefs, capDefs };
     }
 
     function currentInvokeFindKind() {
@@ -2081,8 +3309,11 @@
     function renderInvokeKeyPickerList() {
       const box = $("invokeKeyPickerList");
       if (!box) return;
+      hideInvokeKeyPickerTip();
+      box.onmouseleave = () => hideInvokeKeyPickerTip();
       const kw = String($("invokeKeyPickerSearch").value || "").trim().toLowerCase();
       const filterKind = String(state.invokeKeyPickerFilterKind || "all");
+      const single = state.invokeKeyPickerSingle === true;
       const src = Array.isArray(state.invokeFindKeys) ? state.invokeFindKeys : [];
       let list = src;
       if (filterKind === "cap" || filterKind === "arg") list = list.filter((x) => x.kind === filterKind);
@@ -2100,11 +3331,18 @@
         const row = document.createElement("label");
         row.className = "picker-item";
         const ck = document.createElement("input");
-        ck.type = "checkbox";
+        ck.type = single ? "radio" : "checkbox";
+        if (single) ck.name = "invokeKeyPickerSingle";
         ck.checked = selected.has(item.key);
         ck.addEventListener("change", () => {
-          if (ck.checked) selected.add(item.key);
-          else selected.delete(item.key);
+          if (single) {
+            selected.clear();
+            if (ck.checked) selected.add(item.key);
+            renderInvokeKeyPickerList();
+          } else {
+            if (ck.checked) selected.add(item.key);
+            else selected.delete(item.key);
+          }
           updateInvokeKeyPickerHint();
         });
         const keyEl = document.createElement("span");
@@ -2113,6 +3351,13 @@
         const kindEl = document.createElement("span");
         kindEl.className = "picker-kind";
         kindEl.textContent = item.kind;
+        const tipText = String(item?.desc || "").trim() || `${item.kind}: ${item.key}`;
+        row.addEventListener("mouseenter", (ev) => {
+          showInvokeKeyPickerTip(tipText, ev);
+        });
+        row.addEventListener("mousemove", (ev) => {
+          moveInvokeKeyPickerTip(ev);
+        });
         row.appendChild(ck);
         row.appendChild(keyEl);
         row.appendChild(kindEl);
@@ -2136,9 +3381,122 @@
       if (!mask) return;
       mask.classList.remove("show");
       mask.setAttribute("aria-hidden", "true");
+      hideInvokeKeyPickerTip();
       state.invokeKeyPickerTargetId = "";
       state.invokeKeyPickerFilterKind = "all";
       state.invokeKeyPickerSelected = new Set();
+      state.invokeKeyPickerSingle = false;
+      state.invokeKeyPickerApplyHandler = null;
+    }
+
+    function showInvokeKeyPickerTip(text, ev = null) {
+      const tip = $("invokeKeyPickerTip");
+      const card = tip ? tip.closest(".picker-card") : null;
+      if (!tip || !card) return;
+      if (invokeKeyPickerTipDelayTimer) {
+        clearTimeout(invokeKeyPickerTipDelayTimer);
+        invokeKeyPickerTipDelayTimer = null;
+      }
+      tip.textContent = String(text || "").trim();
+      tip.setAttribute("aria-hidden", "false");
+      moveInvokeKeyPickerTip(ev);
+      if (tip.classList.contains("show")) {
+        tip.style.visibility = "visible";
+        return;
+      }
+      tip.style.visibility = "hidden";
+      tip.classList.remove("show");
+      tip.style.visibility = "visible";
+      invokeKeyPickerTipDelayTimer = setTimeout(() => {
+        tip.classList.add("show");
+        invokeKeyPickerTipDelayTimer = null;
+      }, 200);
+    }
+
+    function moveInvokeKeyPickerTip(ev) {
+      const tip = $("invokeKeyPickerTip");
+      const card = tip ? tip.closest(".picker-card") : null;
+      if (!tip || !card) return;
+      const cardRect = card.getBoundingClientRect();
+      const x = Number(ev?.clientX || 0);
+      const y = Number(ev?.clientY || 0);
+      const tipRect = tip.getBoundingClientRect();
+      let left = (x || cardRect.left + 18) - cardRect.left + 12;
+      let top = (y || cardRect.top + 18) - cardRect.top + 16;
+      const maxLeft = Math.max(8, card.clientWidth - tipRect.width - 8);
+      const maxTop = Math.max(8, card.clientHeight - tipRect.height - 8);
+      left = Math.max(8, Math.min(maxLeft, left));
+      top = Math.max(8, Math.min(maxTop, top));
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+    }
+
+    function hideInvokeKeyPickerTip() {
+      const tip = $("invokeKeyPickerTip");
+      if (!tip) return;
+      if (invokeKeyPickerTipDelayTimer) {
+        clearTimeout(invokeKeyPickerTipDelayTimer);
+        invokeKeyPickerTipDelayTimer = null;
+      }
+      tip.classList.remove("show");
+      tip.setAttribute("aria-hidden", "true");
+      tip.style.visibility = "";
+      tip.style.left = "";
+      tip.style.top = "";
+    }
+
+    async function openInvokeArgKeyPickerForInput(inputEl, options = {}) {
+      const el = inputEl && typeof inputEl === "object" ? inputEl : null;
+      if (!el) throw new Error("arg key 输入框不存在");
+      const typeSelectEl = options && typeof options === "object" ? options.typeSelect : null;
+      const descInputEl = options && typeof options === "object" ? options.descInput : null;
+      state.invokeKeyPickerTargetId = "__arg_key_input__";
+      state.invokeKeyPickerFilterKind = "arg";
+      state.invokeKeyPickerSingle = true;
+      state.invokeKeyPickerApplyHandler = (keys) => {
+        const one = String((Array.isArray(keys) ? keys[0] : "") || "").trim();
+        if (!one) return;
+        el.value = one;
+        const def = (state.invokeArgDefs && typeof state.invokeArgDefs === "object") ? state.invokeArgDefs[one] : null;
+        if (def && typeof def === "object") {
+          const t = String(def.type || "").trim();
+          const d = String(def.desc || "").trim();
+          if (t && typeSelectEl) {
+            if (!Array.from(typeSelectEl.options || []).some((op) => String(op.value || "") === t)) {
+              const op = document.createElement("option");
+              op.value = t;
+              op.textContent = t;
+              typeSelectEl.appendChild(op);
+            }
+            typeSelectEl.value = t;
+          }
+          if (d && descInputEl) descInputEl.value = d;
+        }
+        const latest = readArgDefRows();
+        $("flowArgsInput").value = Object.keys(latest).join(", ");
+      };
+      state.invokeKeyPickerSelected = new Set(parseCsv(el.value || "").slice(0, 1));
+      $("invokeKeyPickerTitle").textContent = "选择 Arg Key";
+      $("invokeKeyPickerSearch").value = "";
+      document.querySelectorAll('input[name="invokeKeyKind"]').forEach((radio) => {
+        radio.checked = radio.value === "arg";
+      });
+      const mask = $("invokeKeyPickerMask");
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      updateInvokeKeyPickerHint("正在加载可选 Arg 列表...");
+      renderInvokeKeyPickerList();
+      try {
+        await fetchInvokeFindKeys("rpa");
+        renderInvokeKeyPickerList();
+        updateInvokeKeyPickerHint(`kind=${state.invokeFindKeysKind}，共 ${state.invokeFindKeys.length} 项，已选 ${(state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected.size : 0} 项`);
+      } catch (err) {
+        renderInvokeKeyPickerList();
+        updateInvokeKeyPickerHint(`加载失败：${String(err?.message || err)}`);
+        setOutput({ ok: false, info: "invoke-find-keys-load-failed", error: String(err?.message || err) }, { toLog: true });
+        setStatus("加载 invoke.find 可选项失败");
+      }
+      try { $("invokeKeyPickerSearch").focus(); } catch (_) {}
     }
 
     async function openInvokeKeyPicker(targetFieldId) {
@@ -2148,6 +3506,8 @@
       }
       state.invokeKeyPickerTargetId = id;
       state.invokeKeyPickerFilterKind = (id === "flowCapsInput") ? "cap" : "all";
+      state.invokeKeyPickerSingle = false;
+      state.invokeKeyPickerApplyHandler = null;
       const existing = parseCsv($(id).value || "");
       state.invokeKeyPickerSelected = new Set(existing);
       $("invokeKeyPickerTitle").textContent = id === "fInvokeFindMust"
@@ -2178,11 +3538,25 @@
     function applyInvokeKeyPickerSelection() {
       const targetId = String(state.invokeKeyPickerTargetId || "").trim();
       if (!targetId) return;
-      const src = parseCsv($(targetId).value || "");
       const picked = Array.from((state.invokeKeyPickerSelected instanceof Set) ? state.invokeKeyPickerSelected : []);
+      if (typeof state.invokeKeyPickerApplyHandler === "function") {
+        state.invokeKeyPickerApplyHandler(picked);
+        hideInvokeKeyPicker();
+        updateEditorDirtyState();
+        setStatus("已回填 Arg Key");
+        return;
+      }
+      const src = parseCsv($(targetId).value || "");
       const capOnly = targetId === "flowCapsInput";
       const allowed = capOnly
-        ? picked.filter((k) => Array.isArray(state.invokeFindKeys) && state.invokeFindKeys.some((x) => x.key === k && x.kind === "cap"))
+        ? picked.filter((k) => {
+          if (!Array.isArray(state.invokeFindKeys)) return true;
+          const one = state.invokeFindKeys.find((x) => x.key === k);
+          if (!one || !one.kind) return true;
+          const kind = String(one.kind || "").toLowerCase();
+          // Flow capabilities allow cap + arg; only exclude pure result keys.
+          return kind !== "result";
+        })
         : picked;
       const merged = Array.from(new Set([...src, ...allowed]));
       $(targetId).value = merged.join(",");
@@ -2220,11 +3594,31 @@
       return out;
     }
 
+    function normalizeVarDefs(raw) {
+      const src = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+      const out = {};
+      for (const key of Object.keys(src)) {
+        const k = String(key || "").trim();
+        if (!k) continue;
+        const v = src[key];
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          out[k] = {
+            type: String(v.type || "").trim(),
+            desc: String(v.desc || "").trim(),
+            from: String(v.from || "").trim(),
+          };
+        } else {
+          out[k] = { type: "", desc: "", from: "" };
+        }
+      }
+      return out;
+    }
+
     function mkArgCard(seed = {}) {
       const card = document.createElement("div");
       card.className = "arg-card";
       const keyRow = document.createElement("div");
-      keyRow.className = "arg-card-row";
+      keyRow.className = "arg-card-row arg-key-row";
       const actions = document.createElement("div");
       actions.className = "arg-card-actions";
       const descRow = document.createElement("div");
@@ -2236,6 +3630,12 @@
       keyInput.placeholder = "arg key（例如 search.query）";
       keyInput.className = "mono";
       keyInput.value = String(seed.key || "");
+
+      const pickKeyBtn = document.createElement("button");
+      pickKeyBtn.type = "button";
+      pickKeyBtn.className = "btn secondary square";
+      pickKeyBtn.textContent = "+";
+      pickKeyBtn.title = "选择 arg key";
 
       const typeSelect = document.createElement("select");
       for (const t of ["string", "number", "boolean", "object", "array"]) {
@@ -2274,9 +3674,16 @@
         const box = $("flowArgsBox");
         card.remove();
         if (!box.children.length) box.appendChild(mkArgCard({ key: "", type: "string", required: false, desc: "" }));
+        const latest = readArgDefRows();
+        $("flowArgsInput").value = Object.keys(latest).join(", ");
       });
+      pickKeyBtn.addEventListener("click", () => openInvokeArgKeyPickerForInput(keyInput, {
+        typeSelect,
+        descInput,
+      }).catch(failUi));
 
       keyRow.appendChild(keyInput);
+      keyRow.appendChild(pickKeyBtn);
       actions.appendChild(typeSelect);
       actions.appendChild(reqLabel);
       actions.appendChild(delBtn);
@@ -2292,6 +3699,69 @@
       card.__reqInput = reqInput;
       card.__descInput = descInput;
       card.__defaultInput = defaultInput;
+      return card;
+    }
+
+    function mkVarCard(seed = {}) {
+      const card = document.createElement("div");
+      card.className = "arg-card";
+      const keyRow = document.createElement("div");
+      keyRow.className = "arg-card-row";
+      const actions = document.createElement("div");
+      actions.className = "arg-card-actions";
+      const descRow = document.createElement("div");
+      descRow.className = "arg-card-row";
+      const fromRow = document.createElement("div");
+      fromRow.className = "arg-card-row";
+
+      const keyInput = document.createElement("input");
+      keyInput.placeholder = "var key（例如 searchResult）";
+      keyInput.className = "mono";
+      keyInput.value = String(seed.key || "");
+
+      const typeSelect = document.createElement("select");
+      for (const t of ["", "string", "number", "boolean", "object", "array", "any"]) {
+        const op = document.createElement("option");
+        op.value = t;
+        op.textContent = t || "(可选类型)";
+        typeSelect.appendChild(op);
+      }
+      typeSelect.value = String(seed.type || "");
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn danger";
+      delBtn.textContent = "删";
+
+      const descInput = document.createElement("input");
+      descInput.placeholder = "desc（变量说明）";
+      descInput.value = String(seed.desc || "");
+
+      const fromInput = document.createElement("input");
+      fromInput.placeholder = "from（可选，例如 step_x.saveAs）";
+      fromInput.className = "mono";
+      fromInput.value = String(seed.from || "");
+
+      delBtn.addEventListener("click", () => {
+        const box = $("flowVarsBox");
+        card.remove();
+        if (!box.children.length) box.appendChild(mkVarCard({ key: "", type: "", desc: "", from: "" }));
+      });
+
+      keyRow.appendChild(keyInput);
+      actions.appendChild(typeSelect);
+      actions.appendChild(delBtn);
+      descRow.appendChild(descInput);
+      fromRow.appendChild(fromInput);
+      card.appendChild(keyRow);
+      card.appendChild(actions);
+      card.appendChild(descRow);
+      card.appendChild(fromRow);
+
+      card.__keyInput = keyInput;
+      card.__typeSelect = typeSelect;
+      card.__descInput = descInput;
+      card.__fromInput = fromInput;
       return card;
     }
 
@@ -2892,6 +4362,26 @@
       }
     }
 
+    function renderVarDefRows(varDefs) {
+      const defs = normalizeVarDefs(varDefs);
+      const keys = Object.keys(defs);
+      const box = $("flowVarsBox");
+      box.innerHTML = "";
+      if (!keys.length) {
+        box.appendChild(mkVarCard({ key: "", type: "", desc: "", from: "" }));
+        return;
+      }
+      for (const key of keys) {
+        const d = defs[key] || {};
+        box.appendChild(mkVarCard({
+          key,
+          type: d.type || "",
+          desc: d.desc || "",
+          from: d.from || "",
+        }));
+      }
+    }
+
     function readArgDefRows() {
       const box = $("flowArgsBox");
       const out = {};
@@ -2912,6 +4402,24 @@
         }
         const def = { type, required, desc };
         if (defaultRaw) def.default = defaultValue;
+        out[key] = def;
+      }
+      return out;
+    }
+
+    function readVarDefRows() {
+      const box = $("flowVarsBox");
+      const out = {};
+      for (const card of Array.from(box.children || [])) {
+        const key = String(card.__keyInput?.value || "").trim();
+        if (!key) continue;
+        const type = String(card.__typeSelect?.value || "").trim();
+        const desc = String(card.__descInput?.value || "").trim();
+        const from = String(card.__fromInput?.value || "").trim();
+        const def = {};
+        if (type) def.type = type;
+        if (desc) def.desc = desc;
+        if (from) def.from = from;
         out[key] = def;
       }
       return out;
@@ -2943,6 +4451,21 @@
       return defs;
     }
 
+    function pickArgDefsByKeys(keys, baseArgs = {}) {
+      const keyList = (Array.isArray(keys) ? keys : []).map((x) => String(x || "").trim()).filter(Boolean);
+      const base = normalizeArgDefs(baseArgs);
+      const out = {};
+      for (const key of keyList) {
+        const prev = base[key];
+        if (prev && typeof prev === "object" && !Array.isArray(prev)) {
+          out[key] = prev;
+        } else {
+          out[key] = { type: "string", required: false, desc: `from flow shell: ${key}` };
+        }
+      }
+      return out;
+    }
+
     function applyShellEditorFromFlow(flow) {
       const f = (flow && typeof flow === "object") ? flow : {};
       $("flowGoalInput").value = String(f?.meta?.goal || f.goal || f.description || "");
@@ -2952,15 +4475,17 @@
       const argKeys = Object.keys((f.args && typeof f.args === "object" && !Array.isArray(f.args)) ? f.args : {});
       $("flowArgsInput").value = argKeys.join(", ");
       renderArgDefRows((f.args && typeof f.args === "object" && !Array.isArray(f.args)) ? f.args : {});
+      renderVarDefRows((f.vars && typeof f.vars === "object" && !Array.isArray(f.vars)) ? f.vars : {});
       renderShellFiltersRows(Array.isArray(f.filters) ? f.filters : []);
     }
 
     function syncArgDefsFromKeyInput() {
       const keyList = parseCsv($("flowArgsInput").value);
       const curDefs = readArgDefRows();
-      const merged = mergeArgDefsFromKeys(keyList, curDefs);
-      renderArgDefRows(merged);
-      const outKeys = Object.keys(merged);
+      // Sync by key list strictly: keys removed from input are removed from defs.
+      const nextDefs = pickArgDefsByKeys(keyList, curDefs);
+      renderArgDefRows(nextDefs);
+      const outKeys = Object.keys(nextDefs);
       $("flowArgsInput").value = outKeys.join(", ");
       setStatus(`参数定义已同步（${outKeys.length}）`);
     }
@@ -2975,10 +4500,13 @@
       const filters = normalizeFilters(readShellFiltersRows());
       const oldArgs = (flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {};
       const rowArgs = readArgDefRows();
+      const oldVars = (flow.vars && typeof flow.vars === "object" && !Array.isArray(flow.vars)) ? flow.vars : {};
+      const rowVars = readVarDefRows();
 
       if (flowId) flow.id = flowId;
       flow.capabilities = caps;
-      flow.args = mergeArgDefsFromKeys(argKeys, { ...oldArgs, ...rowArgs });
+      flow.args = pickArgDefsByKeys(argKeys, { ...oldArgs, ...rowArgs });
+      flow.vars = normalizeVarDefs({ ...oldVars, ...rowVars });
       $("flowArgsInput").value = Object.keys(flow.args || {}).join(", ");
       if (filters.length) flow.filters = filters;
       else delete flow.filters;
@@ -2998,7 +4526,14 @@
       else delete flow.description;
 
       setFlow(flow);
-      setOutput({ ok: true, info: "Flow 外壳已应用", id: flow.id, capabilities: flow.capabilities, args: Object.keys(flow.args || {}) });
+      setOutput({
+        ok: true,
+        info: "Flow 外壳已应用",
+        id: flow.id,
+        capabilities: flow.capabilities,
+        args: Object.keys(flow.args || {}),
+        vars: Object.keys(flow.vars || {}),
+      });
       setStatus("外壳已应用到当前 Flow");
     }
 
@@ -3010,6 +4545,7 @@
         id: String(flow.id || "flow_builder_demo").trim() || "flow_builder_demo",
         start: String(flow.start || steps[0]?.id || "").trim(),
         args: (flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {},
+        vars: (flow.vars && typeof flow.vars === "object" && !Array.isArray(flow.vars)) ? flow.vars : {},
         steps: steps
           .filter((s) => s && typeof s === "object")
           .map((s) => {
@@ -3269,6 +4805,16 @@
       if (t === "done") return action.conclusion ? `conclusion: ${shortText(action.conclusion, 52)}` : "";
       if (t === "abort") return action.reason ? `reason: ${shortText(action.reason, 52)}` : "";
       if (t === "ask_assist") return action.reason ? `reason: ${shortText(action.reason, 52)}` : "";
+      if (t === "closepage") {
+        const target = shortText(action.target || "active");
+        const cid = shortText(action.contextId || "");
+        const um = shortText(action.matchUrl || "");
+        return [
+          `target: ${target || "active"}`,
+          cid ? `contextId: ${cid}` : "",
+          um ? `match: ${um}` : "",
+        ].filter(Boolean).join(" | ");
+      }
       return "";
     }
 
@@ -3695,7 +5241,7 @@
       sourceSel.value = String(seed.source || "args");
 
       const opSel = document.createElement("select");
-      for (const one of ["exists", "truthy", "eq", "neq", "in", "contains", "match"]) {
+      for (const one of ["exists", "truthy", "eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "match"]) {
         const op = document.createElement("option");
         op.value = one;
         op.textContent = `op=${one}`;
@@ -3798,7 +5344,7 @@
         const when = { op, path };
         if (source && source !== "args") when.source = source;
         const pv = parseBranchValueText(row.__valueInput?.value);
-        if (op === "eq" || op === "neq" || op === "contains") {
+        if (op === "eq" || op === "neq" || op === "contains" || op === "gt" || op === "gte" || op === "lt" || op === "lte") {
           if (!pv.has) {
             if (strict) return { ok: false, reason: `branch case(${op}) 缺少 value`, cases: [] };
             continue;
@@ -3863,6 +5409,21 @@
       syncNextJsonFromFields();
     }
 
+    function updateClosePageFieldVisibility() {
+      const t = String($("actionTypeSelect")?.value || "").toLowerCase();
+      const rowContext = $("closePageContextRow");
+      const rowUrl = $("closePageUrlRow");
+      if (!rowContext || !rowUrl) return;
+      if (t !== "closepage") {
+        rowContext.classList.add("hidden");
+        rowUrl.classList.add("hidden");
+        return;
+      }
+      const target = String($("fCloseTarget")?.value || "active").trim().toLowerCase();
+      rowContext.classList.toggle("hidden", target !== "contextid");
+      rowUrl.classList.toggle("hidden", target !== "urlmatch");
+    }
+
     function setActionFieldVisibility() {
       const t = String($("actionTypeSelect").value || "").toLowerCase();
       let shown = 0;
@@ -3882,6 +5443,7 @@
         setNextFields({});
         $("nextJsonInput").value = "{}";
       }
+      updateClosePageFieldVisibility();
     }
 
     function applyActionToFields(action) {
@@ -3892,6 +5454,15 @@
       $("fQuery").value = String(a.query || "");
       $("fUrl").value = String(a.url || "");
       $("fGotoNewPage").checked = a.newPage === true;
+      $("fCloseTarget").value = ["active", "flow", "contextId", "urlMatch"].includes(String(a.target || ""))
+        ? String(a.target || "")
+        : "active";
+      $("fCloseContextId").value = String(a.contextId || "");
+      $("fCloseMatchUrl").value = String(a.matchUrl || "");
+      $("fCloseIfLast").value = ["skip", "fail", "allow"].includes(String(a.ifLast || ""))
+        ? String(a.ifLast || "")
+        : "skip";
+      $("fCloseActivateAfter").checked = (a.activateAfterClose !== false);
       $("fPostWaitMs").value = (a.postWaitMs == null) ? "" : String(a.postWaitMs);
       $("fText").value = String(a.text || a.reason || a.conclusion || "");
       $("fKey").value = String(a.key || "");
@@ -3947,6 +5518,24 @@
         if (strict && !url) throw new Error("goto 需要 url");
         if (url) action.url = url;
         if ($("fGotoNewPage").checked) action.newPage = true;
+      }
+      if (t === "closepage") {
+        action.type = "closePage";
+        const target = String($("fCloseTarget").value || "active").trim();
+        action.target = ["active", "flow", "contextId", "urlMatch"].includes(target) ? target : "active";
+        if (action.target === "contextId") {
+          const cid = String($("fCloseContextId").value || "").trim();
+          if (strict && !cid) throw new Error("closePage.target=contextId 需要 contextId");
+          if (cid) action.contextId = cid;
+        }
+        if (action.target === "urlMatch") {
+          const m = String($("fCloseMatchUrl").value || "").trim();
+          if (strict && !m) throw new Error("closePage.target=urlMatch 需要 matchUrl");
+          if (m) action.matchUrl = m;
+        }
+        const ifLast = String($("fCloseIfLast").value || "skip").trim();
+        if (ifLast && ifLast !== "skip") action.ifLast = ifLast;
+        if (!$("fCloseActivateAfter").checked) action.activateAfterClose = false;
       }
       if (t === "click") {
         if (by) action.by = by;
@@ -4105,6 +5694,7 @@
       const preferDraft = opts.preferDraft !== false;
       if (preferDraft && hasDraft(step.id)) {
         restoreEditorFromDraft(state.stepDrafts[step.id]);
+        state.editorTouched = true;
         updateStepTagDirty();
         return;
       }
@@ -4121,7 +5711,12 @@
       syncNextJsonFromFields();
       state.actionJsonDirty = false;
       updateEditorDirtyState({ renderList: false });
+      delete state.stepDrafts[step.id];
+      state.editorDirty = false;
+      state.editorTouched = false;
       updateStepTagDirty();
+      renderStepList();
+      renderGraph();
     }
 
     function buildStepFromEditor() {
@@ -4133,6 +5728,7 @@
           action = parseJsonText($("actionJsonInput").value, null);
           if (!action || typeof action !== "object" || Array.isArray(action)) throw new Error("action JSON 无效");
           action.type = String(action.type || $("actionTypeSelect").value || "").trim();
+          if (String(action.type).toLowerCase() === "closepage") action.type = "closePage";
           if (!action.type) throw new Error("action.type 不能为空");
         } else {
           action = buildActionFromFields(true);
@@ -4259,6 +5855,7 @@
       setStatus("刷新 Session...");
       const data = await api("GET", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}`);
       renderSessionTag(`status=${data.status || "-"}`);
+      if (data?.systemAuth?.loginDone) setSystemAuth(data.systemAuth);
       setOutput(data);
       setStatus("Session 已刷新");
     }
@@ -4310,6 +5907,7 @@
     async function startSession() {
       setStatus("启动 Session...");
       showBusyMask("正在启动 Session，请稍候...", "working");
+      const localSnap = getLocalLoginSnapshot();
       try {
         const data = await api("POST", "/rpaflows/api/builder/session/start", {
           alias: $("aliasInput").value,
@@ -4318,9 +5916,17 @@
         });
         state.sessionId = String(data.id || data.sessionId || "");
         renderSessionTag(`status=${data.status || "-"}`);
+        if (data?.systemAuth?.loginDone) setSystemAuth(data.systemAuth);
         setOutput(data);
         setStatus(data?.reused ? "已复用 Session" : "Session 已启动");
         await refreshContexts();
+        setOutput({ ok: true, info: "system.auto_login.scan", localSnap });
+        try {
+          await maybeAutoLoginFromLocalStorage();
+        } catch (autoErr) {
+          setOutput({ ok: false, info: "system.auto_login.error", error: String(autoErr?.message || autoErr) });
+          setStatus(`自动登录失败：${String(autoErr?.message || autoErr)}`);
+        }
         renderGraph();
         showBusyMask(data?.reused ? "Session 已复用" : "Session 启动成功", "success");
         await sleepMs(900);
@@ -4382,6 +5988,173 @@
       setStatus(`浏览器已激活（context=${data.contextId || "-"})`);
     }
 
+    async function systemLogin() {
+      const email = String($("sysEmailInput").value || "").trim();
+      const password = String($("sysPasswordInput").value || "");
+      const saved = (!email || !password) ? loadLocalLoginInfoCompat() : null;
+      if ((!email || !password) && !saved) throw new Error("请先输入账号和密码，或确保 localStorage 有可用登录信息");
+      setStatus("系统登录中...");
+      const inputApiPath = String($("sysApiPathInput").value || "").trim();
+      const pathRet = await callSystemWs("apiPath", {}, {
+        apiPath: inputApiPath || saved?.apiPath || "/ws/",
+        timeoutMs: 15000,
+      });
+      const apiPath = String(pathRet?.path || "").trim();
+      if (Number(pathRet?.code || 0) !== 200 || !apiPath) {
+        throw new Error(`获取 apiPath 失败: ${String(pathRet?.info || pathRet?.code || "unknown")}`);
+      }
+      let callVO = null;
+      if (email && password) {
+        const baseSha = await sha256Hex(password);
+        const time = Date.now();
+        const finalSha = await sha256Hex(`${time}${baseSha}`);
+        callVO = { email, time, passwordSHA: finalSha };
+      } else if (saved) {
+        callVO = { userId: saved.userId, token: saved.token, time: Date.now() };
+      }
+      const loginRet = await callSystemWs("userLogin", callVO || {}, { apiPath, timeoutMs: 30000 });
+      if (Number(loginRet?.code || 0) !== 200) {
+        clearLocalLoginInfoCompat(saved?.email || email || "");
+        throw new Error(`登录失败: ${String(loginRet?.info || loginRet?.code || "unknown")}`);
+      }
+      const uid = String(loginRet?.userId || loginRet?.userid || callVO?.userId || "");
+      const tk = String(loginRet?.token || callVO?.token || "");
+      const checkRet = await callSystemWs("userCurrency", { userId: uid, token: tk }, { apiPath, timeoutMs: 15000 });
+      const auth = Number(checkRet?.code || 0) === 200 ? {
+        loginDone: true,
+        lastAccount: String(loginRet?.email || email || saved?.email || ""),
+        loginVO: {
+          ...loginRet,
+          userId: uid,
+          userid: uid,
+          token: tk,
+          apiPath,
+          coins: Number(checkRet?.coins || loginRet?.coins || 0),
+          points: Number(checkRet?.points || loginRet?.points || 0),
+        },
+      } : null;
+      setSystemAuth(auth);
+      if (auth?.loginDone && auth?.loginVO?.token) {
+        saveLocalLoginInfoCompat(auth.loginVO);
+      } else {
+        clearLocalLoginInfoCompat(auth?.loginVO?.email || email || "");
+        throw new Error(String(checkRet?.info || "登录态校验失败"));
+      }
+      setOutput({ ok: true, info: "system.login", pathRet, loginRet, checkRet, auth });
+      $("sysPasswordInput").value = "";
+      setStatus("系统登录成功");
+      showButtonTip($("sysLoginBtn"), "登录成功", "ok");
+    }
+
+    async function systemCheckLogin() {
+      setStatus("检查系统登录态...");
+      const saved = loadLocalLoginInfoCompat();
+      const cur = (state.systemAuth && state.systemAuth.loginDone && state.systemAuth.loginVO)
+        ? state.systemAuth.loginVO
+        : (saved ? saved.raw : null);
+      if (!cur) {
+        setSystemAuth(null);
+        setOutput({ ok: true, info: "system.check", loginDone: false, reason: "未登录" });
+        setStatus("未登录");
+        showButtonTip($("sysCheckBtn"), "未登录", "err");
+        return;
+      }
+      const exp = Number(cur.tokenExpire || cur.tokenExipre || 0);
+      if (exp > 0 && Date.now() > exp) {
+        clearLocalLoginInfoCompat(String(cur.email || ""));
+        setSystemAuth(null);
+        setOutput({ ok: true, info: "system.check", loginDone: false, reason: "token expired" });
+        setStatus("登录已失效（token 过期）");
+        showButtonTip($("sysCheckBtn"), "已失效", "err");
+        return;
+      }
+      const pathRet = await callSystemWs("apiPath", {}, {
+        apiPath: String(cur.apiPath || $("sysApiPathInput").value || "").trim() || "/ws/",
+        timeoutMs: 15000,
+      });
+      const apiPath = String(pathRet?.path || "").trim();
+      if (Number(pathRet?.code || 0) !== 200 || !apiPath) {
+        throw new Error(`获取 apiPath 失败: ${String(pathRet?.info || pathRet?.code || "unknown")}`);
+      }
+      const uid = String(cur.userId || cur.userid || "").trim();
+      const tk = String(cur.token || "").trim();
+      const checkRet = await callSystemWs("userCurrency", { userId: uid, token: tk }, { apiPath, timeoutMs: 15000 });
+      if (Number(checkRet?.code || 0) !== 200) {
+        clearLocalLoginInfoCompat(String(cur.email || ""));
+        setSystemAuth(null);
+        setOutput({ ok: true, info: "system.check", loginDone: false, pathRet, checkRet });
+        setStatus(`未登录/离线: ${String(checkRet?.info || checkRet?.code || "-")}`);
+        showButtonTip($("sysCheckBtn"), "未登录", "err");
+        return;
+      }
+      const auth = {
+        loginDone: true,
+        lastAccount: String(cur.email || ""),
+        loginVO: {
+          ...cur,
+          userId: uid,
+          userid: uid,
+          token: tk,
+          apiPath,
+          coins: Number(checkRet?.coins || cur.coins || 0),
+          points: Number(checkRet?.points || cur.points || 0),
+        },
+      };
+      setSystemAuth(auth);
+      saveLocalLoginInfoCompat(auth.loginVO);
+      setOutput({ ok: true, info: "system.check", loginDone: true, pathRet, checkRet, auth });
+      setStatus("登录有效");
+      showButtonTip($("sysCheckBtn"), "登录有效", "ok");
+    }
+
+    async function systemLogout() {
+      setStatus("系统登出中...");
+      clearLocalLoginInfoCompat(state?.systemAuth?.loginVO?.email || $("sysEmailInput").value || "");
+      setSystemAuth(null);
+      setOutput({ ok: true, info: "system.logout", loginDone: false });
+      setStatus("已登出");
+      showButtonTip($("sysLogoutBtn"), "已登出", "ok");
+    }
+
+    async function systemCall() {
+      const msg = String($("sysCallMsgInput").value || "").trim();
+      if (!msg) throw new Error("请填写系统调用 msg");
+      const voText = String($("sysCallVoInput").value || "").trim();
+      let vo = {};
+      try {
+        vo = voText ? parseJsonText(voText, {}) : {};
+      } catch (err) {
+        throw new Error(`vo JSON 解析失败: ${String(err?.message || err)}`);
+      }
+      const timeoutMs = Math.max(0, Number($("sysCallTimeoutInput").value || 0));
+      setStatus(`系统调用中: ${msg}...`);
+      const cur = (state.systemAuth && state.systemAuth.loginDone && state.systemAuth.loginVO)
+        ? state.systemAuth.loginVO
+        : (loadLocalLoginInfoCompat()?.raw || null);
+      const pathRet = await callSystemWs("apiPath", {}, {
+        apiPath: String(($("sysApiPathInput").value || "") || (cur?.apiPath || "")).trim() || "/ws/",
+        timeoutMs: 15000,
+      });
+      const apiPath = String(pathRet?.path || "").trim();
+      if (Number(pathRet?.code || 0) !== 200 || !apiPath) {
+        throw new Error(`获取 apiPath 失败: ${String(pathRet?.info || pathRet?.code || "unknown")}`);
+      }
+      if (cur && String(cur.userId || cur.userid || "").trim() && String(cur.token || "").trim()) {
+        vo.userId = String(cur.userId || cur.userid || "").trim();
+        vo.token = String(cur.token || "").trim();
+      }
+      const response = await callSystemWs(msg, vo, { timeoutMs, apiPath });
+      setOutput({ ok: true, info: "system.call", msg, vo, pathRet, response });
+      const code = Number(response?.code || 0);
+      if (code === 200) {
+        showButtonTip($("sysCallBtn"), "调用成功", "ok");
+        setStatus(`系统调用成功: ${msg}`);
+      } else {
+        showButtonTip($("sysCallBtn"), "调用失败", "err");
+        setStatus(`系统调用失败: ${msg} (code=${code || "-"})`);
+      }
+    }
+
     async function pickSelectorForAction() {
       requireSession();
       const actionType = String($("actionTypeSelect").value || "").toLowerCase();
@@ -4419,7 +6192,9 @@
           data,
         });
         const aiNote = data?.aiUsed ? "AI已参与" : "AI未参与";
-        setStatus(`Pick 完成（${aiNote}），已回填 by/query`);
+        const applied = autoApplyCurrentStepAfterAiChange(`Pick 完成（${aiNote}），已回填 by/query 并自动写入当前步骤`, "pick.ai.auto_apply_failed");
+        if (applied.ok) setStatus(applied.message);
+        else setStatus(`Pick 完成（${aiNote}），已回填 by/query；但自动写入失败：${applied.reason}`);
         try { window.focus(); } catch (_) {}
       } finally {
         btn.disabled = false;
@@ -4464,7 +6239,9 @@
           state.actionJsonDirty = false;
           syncActionJsonFromFields(true);
           setOutput({ ok: true, info: "query-selector-confirmed", data, confirmData });
-          setStatus(`AI 生成 by 已确认（匹配 ${matchedCount} 个）`);
+          const applied = autoApplyCurrentStepAfterAiChange(`AI 生成 by 已确认（匹配 ${matchedCount} 个），并自动写入当前步骤`, "query_selector.ai.auto_apply_failed");
+          if (applied.ok) setStatus(applied.message);
+          else setStatus(`AI 生成 by 已确认（匹配 ${matchedCount} 个）；但自动写入失败：${applied.reason}`);
         } else if (confirmData?.cancelled) {
           setOutput({ ok: true, info: "query-selector-cancelled", data, confirmData });
           setStatus(`已取消使用该 selector（匹配 ${matchedCount} 个）`);
@@ -4511,7 +6288,9 @@
           renderRunJsCodeHighlight();
           state.actionJsonDirty = false;
           syncActionJsonFromFields(true);
-          setStatus("已确认并回填 run_js.code");
+          const applied = autoApplyCurrentStepAfterAiChange("已确认并回填 run_js.code，且已自动写入当前步骤", "run_js.ai.auto_apply_failed");
+          if (applied.ok) setStatus(applied.message);
+          else setStatus(`已回填 run_js.code，但自动写入失败：${applied.reason}`);
           showBusyMask("已回填 run_js.code", "success");
           await sleepMs(700);
         } else {
@@ -4615,6 +6394,310 @@
       await runStep();
     }
 
+    function buildRunFlowArgsFromDefaults(flow) {
+      const out = {};
+      const defs = (flow && flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {};
+      for (const [key, spec] of Object.entries(defs)) {
+        if (!spec || typeof spec !== "object" || Array.isArray(spec)) continue;
+        if (!Object.prototype.hasOwnProperty.call(spec, "default")) continue;
+        out[key] = spec.default;
+      }
+      return out;
+    }
+
+    function fmtBrief(v, maxLen = 800) {
+      if (v === undefined) return "(undefined)";
+      if (v === null) return "null";
+      if (typeof v === "string") return v.length > maxLen ? `${v.slice(0, maxLen)}...(truncated)` : v;
+      try {
+        const s = JSON.stringify(v, null, 2);
+        return s.length > maxLen ? `${s.slice(0, maxLen)}...(truncated)` : s;
+      } catch (_) {
+        return String(v);
+      }
+    }
+
+    function formatFlowRunSummaryText(statusData) {
+      const s = (statusData && typeof statusData.summary === "object") ? statusData.summary : {};
+      const ok = s.ok === true;
+      const steps = Array.isArray(s.steps) ? s.steps : [];
+      const q = (s.queryCache && typeof s.queryCache === "object") ? s.queryCache : {};
+      const qEvents = Array.isArray(q.events) ? q.events : [];
+      const misses = qEvents.filter((x) => String(x?.type || "") === "miss");
+      const ai = (s.ai && typeof s.ai === "object") ? s.ai : {};
+      const runMeta = (s.runMeta && typeof s.runMeta === "object") ? s.runMeta : {};
+      const lines = [];
+      lines.push(`执行结果: ${ok ? "成功" : "失败"}`);
+      lines.push(`状态: ${String(s.status || statusData?.status || "-")}`);
+      lines.push(`runId: ${String(s.runId || statusData?.runId || "-")}`);
+      lines.push(`开始: ${String(s.startedAt || statusData?.startedAt || "-")}`);
+      lines.push(`结束: ${String(s.endedAt || statusData?.endedAt || "-")}`);
+      lines.push(`耗时: ${Number(s.elapsedMs || 0)} ms`);
+      if (s.reason) lines.push(`失败原因: ${String(s.reason)}`);
+      lines.push("");
+      lines.push("结果(value):");
+      lines.push(fmtBrief(s.value, 1200));
+      lines.push("");
+      lines.push(`步骤执行明细 (${steps.length}):`);
+      if (!steps.length) {
+        lines.push("- (无步骤记录)");
+      } else {
+        steps.forEach((st, idx) => {
+          lines.push(`- [${idx + 1}] ${st.stepId || "-"} (${st.actionType || "-"}) -> ${st.status || "-"}${st.reason ? ` | ${st.reason}` : ""}${Number.isFinite(Number(st.elapsedMs)) ? ` | ${Number(st.elapsedMs)}ms` : ""}`);
+        });
+      }
+      lines.push("");
+      lines.push(`query-cache: hits=${Number(q.hits || 0)}, misses=${Number(q.misses || 0)}`);
+      if (qEvents.length) {
+        lines.push("query-cache 事件:");
+        qEvents.slice(-30).forEach((ev) => {
+          lines.push(`- [${ev.type || "-"}] ${ev.event || "-"} key=${ev.key || "-"} store=${ev.store || "-"}${ev.reason ? ` reason=${ev.reason}` : ""}`);
+        });
+      }
+      if (misses.length) {
+        lines.push("");
+        lines.push("cache 未命中详情:");
+        misses.slice(-20).forEach((ev) => {
+          lines.push(`- ${ev.event || "-"} key=${ev.key || "-"} store=${ev.store || "-"}${ev.reason ? ` reason=${ev.reason}` : ""}`);
+        });
+      }
+      lines.push("");
+      lines.push(`AI 调用: ${Number(ai.calls || 0)} 次`);
+      if (Number(ai.totalTokens || 0) > 0 || Number(ai.promptTokens || 0) > 0 || Number(ai.completionTokens || 0) > 0) {
+        lines.push(`Token: prompt=${Number(ai.promptTokens || 0)}, completion=${Number(ai.completionTokens || 0)}, total=${Number(ai.totalTokens || 0)}`);
+      } else {
+        lines.push("Token: 暂不可得（当前执行链路未返回 usage）");
+      }
+      if (Number(ai.costUsd || 0) > 0) {
+        lines.push(`费用(OpenRouter/Provider): $${Number(ai.costUsd || 0).toFixed(6)}`);
+      } else {
+        lines.push("费用(OpenRouter/Provider): 暂不可得");
+      }
+      if (runMeta && Object.keys(runMeta).length) {
+        lines.push("");
+        lines.push("运行元信息:");
+        lines.push(fmtBrief(runMeta, 1200));
+      }
+      return lines.join("\n");
+    }
+
+    function compactFlowRunSummaryForAI(statusData) {
+      const s = (statusData && typeof statusData.summary === "object") ? statusData.summary : {};
+      const steps = Array.isArray(s.steps) ? s.steps : [];
+      const q = (s.queryCache && typeof s.queryCache === "object") ? s.queryCache : {};
+      const ai = (s.ai && typeof s.ai === "object") ? s.ai : {};
+      const out = {
+        runId: String(s.runId || statusData?.runId || ""),
+        status: String(s.status || statusData?.status || ""),
+        ok: s.ok === true,
+        elapsedMs: Number(s.elapsedMs || 0),
+        reason: String(s.reason || ""),
+        stepCount: steps.length,
+        steps: steps.slice(-20).map((st) => ({
+          stepId: String(st?.stepId || ""),
+          actionType: String(st?.actionType || ""),
+          status: String(st?.status || ""),
+          reason: String(st?.reason || ""),
+          elapsedMs: Number(st?.elapsedMs || 0),
+        })),
+        queryCache: {
+          hits: Number(q.hits || 0),
+          misses: Number(q.misses || 0),
+          recentMisses: (Array.isArray(q.events) ? q.events : [])
+            .filter((x) => String(x?.type || "") === "miss")
+            .slice(-10)
+            .map((x) => ({
+              event: String(x?.event || ""),
+              key: String(x?.key || ""),
+              reason: String(x?.reason || ""),
+            })),
+        },
+        ai: {
+          calls: Number(ai.calls || 0),
+          promptTokens: Number(ai.promptTokens || 0),
+          completionTokens: Number(ai.completionTokens || 0),
+          totalTokens: Number(ai.totalTokens || 0),
+          costUsd: Number(ai.costUsd || 0),
+        },
+      };
+      return JSON.stringify(out, null, 2);
+    }
+
+    function buildFlowRunReviseContextPack(statusData, summaryText) {
+      const s = (statusData && typeof statusData.summary === "object") ? statusData.summary : {};
+      const runMeta = (s.runMeta && typeof s.runMeta === "object") ? s.runMeta : {};
+      const runId = String(s.runId || statusData?.runId || "").trim();
+      const logPath = String(runMeta.logFile || "").trim();
+      const logsBrief = String(runMeta.logsBrief || "").trim();
+      const logsCount = Number(runMeta.logsCount || 0);
+      const logsTruncated = runMeta.logsTruncated === true;
+      const compact = compactFlowRunSummaryForAI(statusData);
+      const detailChunks = [];
+      detailChunks.push("【执行总结（完整）】");
+      detailChunks.push(String(summaryText || "").trim());
+      if (logsBrief) {
+        detailChunks.push("");
+        detailChunks.push("【执行日志（详细）】");
+        detailChunks.push(logsBrief);
+      }
+      const defaultDetailedContext = detailChunks.join("\n").slice(0, 24000);
+      const defaultCompactContext = [
+        "【执行总结（压缩）】",
+        compact,
+        logPath ? `logFile: ${logPath}` : "",
+      ].filter(Boolean).join("\n");
+      const cliContext = [
+        "【执行总结（压缩）】",
+        compact,
+        logPath ? `请读取日志文件并分析失败根因/改进点：${logPath}` : "未提供日志文件路径，请先根据执行总结分析。",
+      ].join("\n");
+      return {
+        runId,
+        logPath,
+        logsCount,
+        logsTruncated,
+        defaultDetailedContext,
+        defaultCompactContext,
+        cliContext,
+        defaultDetailedUsed: false,
+      };
+    }
+
+    function getAutoRunContextForFlowRevise(engineKey) {
+      const pack = (state.lastFlowRunContext && typeof state.lastFlowRunContext === "object") ? state.lastFlowRunContext : null;
+      if (!pack) return "";
+      const engine = String(engineKey || "default").trim();
+      if (engine === "codex" || engine === "claude_code") {
+        return String(pack.cliContext || "").trim();
+      }
+      if (!pack.defaultDetailedUsed) {
+        pack.defaultDetailedUsed = true;
+        return String(pack.defaultDetailedContext || "").trim();
+      }
+      return String(pack.defaultCompactContext || "").trim();
+    }
+
+    function openFlowReviseFromLastRun() {
+      const pack = (state.lastFlowRunContext && typeof state.lastFlowRunContext === "object") ? state.lastFlowRunContext : null;
+      if (!pack) {
+        setStatus("没有可用的执行上下文，请先执行一次 Flow");
+        return;
+      }
+      state.useLastFlowRunContextForRevise = true;
+      const marker = pack.runId ? `[runId=${pack.runId}]` : "[runId=-]";
+      const note = {
+        ts: new Date().toISOString(),
+        role: "assistant",
+        text: `已切换为“基于执行结果修正”模式 ${marker}。\n- default: 首轮注入详细执行日志，后续自动压缩\n- Codex/CC: 提供日志文件路径供引擎读取`,
+      };
+      state.flowReviseTurns.push(note);
+      if (state.flowReviseTurns.length > 30) state.flowReviseTurns = state.flowReviseTurns.slice(-30);
+      closeFlowReviseDetailDialog();
+      openFlowReviseDialog();
+      const tip = `已附加本次执行上下文 ${marker}。default 引擎首轮会带详细日志，后续自动压缩；Codex/CC 将按日志路径自行读取。`;
+      setStatus(tip);
+      showButtonTip($("reviseFlowFromRunBtn"), "已附加到AI修正", "ok");
+    }
+
+    async function runFlowInSession() {
+      if (!String(state.sessionId || "").trim()) {
+        const choice = await showDecisionDialog({
+          title: "未启动 Session",
+          message: "当前没有可用 Session。是否先启动 Session，再执行 Flow？",
+          hint: "选择“启动并执行”后会自动按 Session 配置启动浏览器并继续执行。",
+          options: [
+            { value: "start", label: "启动并执行", className: "btn ok" },
+            { value: "cancel", label: "取消", className: "btn secondary" },
+          ],
+        });
+        if (choice !== "start") {
+          setStatus("已取消执行 Flow");
+          return;
+        }
+        await startSession();
+        if (!String(state.sessionId || "").trim()) {
+          throw new Error("Session 启动失败，无法执行 Flow");
+        }
+      }
+      const dirty = updateEditorDirtyState({ renderList: false });
+      const selectedId = String(state.selectedStepId || "").trim();
+      if (dirty) {
+        const action = await chooseRunDirtyAction(selectedId || String($("stepIdInput").value || "").trim());
+        if (action === "cancel") {
+          setStatus("已取消执行 Flow");
+          return;
+        }
+        if (action === "save") {
+          const step = buildStepFromEditor();
+          applyStepToFlow(step, { editedFromId: state.selectedStepId });
+        }
+      }
+      const flow = (state.flow && typeof state.flow === "object") ? state.flow : null;
+      if (!flow) throw new Error("没有可执行的 Flow");
+      const args = buildRunFlowArgsFromDefaults(flow);
+      await activateSessionBrowser();
+      const token = Date.now();
+      flowRunPollToken = token;
+      setStatus("正在启动 Flow 执行...");
+      showBusyMask("正在启动 Flow 执行...", "working");
+      let runId = "";
+      let lastStatus = null;
+      try {
+        const startRet = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-flow/start`, {
+          flow,
+          args,
+          opts: {},
+        });
+        runId = String(startRet?.runId || "").trim();
+        if (!runId) throw new Error("启动执行失败：缺少 runId");
+        const maxWaitMs = 20 * 60 * 1000;
+        const startedAt = Date.now();
+        while (flowRunPollToken === token) {
+          await sleepMs(600);
+          const st = await api("GET", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-flow/status?runId=${encodeURIComponent(runId)}`);
+          lastStatus = st;
+          const curStep = String(st?.currentStepId || "").trim();
+          const curType = String(st?.currentActionType || "").trim();
+          if (st?.running) {
+            const tip = curStep
+              ? `执行Flow中：${curStep}${curType ? ` (${curType})` : ""}`
+              : "执行Flow中：准备/收尾中...";
+            showBusyMask(tip, "working");
+          } else {
+            break;
+          }
+          if (Date.now() - startedAt > maxWaitMs) {
+            throw new Error("执行超时（超过 20 分钟）");
+          }
+        }
+        if (flowRunPollToken !== token) return;
+        const ok = lastStatus?.summary?.ok === true;
+        const finalStatus = String(lastStatus?.summary?.status || lastStatus?.status || "-");
+        showBusyMask(ok ? `Flow 执行完成：${finalStatus}` : `Flow 执行结束：${finalStatus}`, ok ? "success" : "error");
+        await sleepMs(ok ? 800 : 1200);
+        setOutput(lastStatus || { ok: true, runId, status: finalStatus });
+        setStatus(`Flow 执行完成：${finalStatus}`);
+        const summaryText = formatFlowRunSummaryText(lastStatus || {});
+        state.lastFlowRunStatus = lastStatus || null;
+        state.lastFlowRunSummaryText = summaryText;
+        state.lastFlowRunContext = buildFlowRunReviseContextPack(lastStatus || {}, summaryText);
+        state.useLastFlowRunContextForRevise = false;
+        openFlowReviseDetailDialog(
+          `Flow 执行总结（${ok ? "成功" : "失败"}）`,
+          summaryText,
+          { enableFlowReviseFromRun: true }
+        );
+      } catch (err) {
+        showBusyMask(`Flow 执行失败：${String(err?.message || err)}`, "error");
+        await sleepMs(1200);
+        throw err;
+      } finally {
+        if (flowRunPollToken === token) {
+          hideBusyMask();
+        }
+      }
+    }
+
     async function loadFlow(pathIn = "") {
       const path = String(pathIn || $("savedFlowSelect").value || "").trim();
       if (!path) throw new Error("请先选择 Flow");
@@ -4694,6 +6777,318 @@
       await saveFlow();
     }
 
+    function getCurrentFlowForPublish() {
+      const flow = (state.flow && typeof state.flow === "object") ? state.flow : null;
+      if (!flow) throw new Error("当前没有可发布的 Flow");
+      if (!String(flow.id || "").trim()) throw new Error("flow.id 不能为空");
+      if (!Array.isArray(flow.steps) || !flow.steps.length) throw new Error("flow.steps 不能为空");
+      return flow;
+    }
+
+    async function refreshPublishServerInfo() {
+      const pre = $("publishServerInfoPre");
+      if (pre) pre.textContent = "加载中...";
+      try {
+        const flow = getCurrentFlowForPublish();
+        const sourcePath = String($("savePathInput").value || "").trim();
+        const data = await api("GET", `/rpaflows/api/builder/publish/version?flowId=${encodeURIComponent(String(flow.id || "").trim())}&sourcePath=${encodeURIComponent(sourcePath)}`);
+        state.publishServerInfo = data || null;
+        const lines = [];
+        lines.push(`flowId: ${String(data?.flowId || flow.id || "-")}`);
+        lines.push(`currentVersion: ${Number(data?.currentVersion || 0)}`);
+        lines.push(`nextVersion: ${Number(data?.nextVersion || 1)}`);
+        lines.push(`candidatePath: ${String(data?.candidatePath || sourcePath || "-")}`);
+        lines.push(`serverLatestPath: ${String(data?.latestPath || "-")}`);
+        lines.push(`serverLatestTime: ${String(data?.latestTime || "-")}`);
+        lines.push(`serverDigest: ${String(data?.latestDigest || "-")}`);
+        lines.push(`matchedCount: ${Number(data?.matchedCount || 0)}`);
+        if (pre) pre.textContent = lines.join("\n");
+      } catch (err) {
+        if (pre) pre.textContent = `加载失败: ${String(err?.message || err)}`;
+        throw err;
+      }
+    }
+
+    async function runPreAuditForPublish() {
+      const flow = getCurrentFlowForPublish();
+      const mode = String($("preAuditModeInput").value || "warn").trim() || "warn";
+      const aiEnabled = $("preAuditAiEnabledInput").checked === true;
+      const tag = $("preAuditSummaryTag");
+      const pre = $("preAuditResultPre");
+      if (tag) tag.textContent = "审计中...";
+      if (pre) pre.textContent = "正在预审计...";
+      const body = {
+        flowText: JSON.stringify(flow, null, 2),
+        args: buildRunFlowArgsFromDefaults(flow),
+        audit: {
+          mode,
+          aiEnabled,
+          aiIncludeRunJsWithCode: true,
+          aiTier: "quality",
+        },
+      };
+      const res = await fetch("/rpaflows/api/audit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.reason || "预审计失败");
+      state.publishLastAudit = data.report || null;
+      const result = (data.report && typeof data.report.result === "object") ? data.report.result : {};
+      const maxRisk = String(result?.overview?.maxRiskLevel || "info");
+      const findings = Number(result?.findings?.length || 0);
+      const wouldBlock = result?.wouldBlock === true;
+      if (tag) tag.textContent = `${maxRisk} | findings=${findings} | wouldBlock=${wouldBlock}`;
+      if (pre) pre.textContent = JSON.stringify(data.report, null, 2);
+      setStatus(`预审计完成：${maxRisk}, findings=${findings}, wouldBlock=${wouldBlock}`);
+      return data.report;
+    }
+
+    async function signFlowForPublish() {
+      const flow = getCurrentFlowForPublish();
+      const dev = String($("publishDevSignerInput").value || "").trim();
+      const sys = String($("publishSystemSignerInput").value || "").trim();
+      if (!dev && !sys) throw new Error("请至少填写 developer 或 system signer");
+      const payload = {
+        flowId: String(flow.id || ""),
+        flowDigest: await sha256Hex(JSON.stringify(flow)),
+        at: new Date().toISOString(),
+      };
+      const signatures = {
+        ...(flow.signatures && typeof flow.signatures === "object" ? flow.signatures : {}),
+      };
+      if (dev) signatures.developer = { signer: dev, payload, sig: await sha256Hex(`dev:${dev}:${JSON.stringify(payload)}`) };
+      if (sys) signatures.system = { signer: sys, payload, sig: await sha256Hex(`sys:${sys}:${JSON.stringify(payload)}`) };
+      const nextFlow = { ...flow, signatures };
+      setFlow(nextFlow);
+      $("publishResultPre").textContent = JSON.stringify({ ok: true, info: "签名已写入Flow", signatures }, null, 2);
+      setStatus("签名已写入当前 Flow（未发布）");
+      showButtonTip($("signFlowBtn"), "已签名", "ok");
+    }
+
+    async function publishFlowToServer() {
+      const flow = getCurrentFlowForPublish();
+      const sourcePath = String($("savePathInput").value || "").trim();
+      const developerSigner = String($("publishDevSignerInput").value || "").trim();
+      const systemSigner = String($("publishSystemSignerInput").value || "").trim();
+      const note = String($("publishNoteInput").value || "").trim();
+      const body = {
+        flow,
+        sourcePath: sourcePath || undefined,
+        releaseNote: note,
+        developerSigner,
+        systemSigner,
+        auditSummary: state.publishLastAudit || null,
+      };
+      const data = await api("POST", "/rpaflows/api/builder/publish", body);
+      $("publishResultPre").textContent = JSON.stringify(data, null, 2);
+      if (data?.flow && typeof data.flow === "object") {
+        setFlow(data.flow);
+      }
+      if (data?.path) {
+        $("savePathInput").value = String(data.path || "");
+      }
+      await refreshFlows();
+      await refreshPublishServerInfo().catch(() => {});
+      setStatus(`发布完成：version=${Number(data?.version || 0)} path=${String(data?.path || "-")}`);
+      showButtonTip($("publishFlowBtn"), "已发布", "ok");
+    }
+
+    function openSkillToFlowDialog() {
+      const mask = $("skillToFlowMask");
+      if (!mask) return;
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      loadFlowAgentEngines().catch(() => {});
+      const ta = $("skillToFlowInput");
+      if (ta) {
+        setTimeout(() => {
+          try { ta.focus(); } catch (_) {}
+        }, 0);
+      }
+    }
+
+    function closeSkillToFlowDialog() {
+      const mask = $("skillToFlowMask");
+      if (!mask) return;
+      mask.classList.remove("show");
+      mask.setAttribute("aria-hidden", "true");
+    }
+
+    async function generateFlowFromSkill() {
+      const skillText = String($("skillToFlowInput").value || "").trim();
+      if (!skillText) throw new Error("请先输入 Skill 文本");
+      const overwrite = await showDecisionDialog({
+        title: "确认覆盖当前 Flow",
+        message: "将使用 Skill 新生成的 Flow 覆盖当前编辑内容（不会自动保存到文件）。",
+        hint: "建议确认后再继续；如需保留当前版本，请先保存。",
+        options: [
+          { value: "confirm", label: "继续生成", className: "btn ok" },
+          { value: "cancel", label: "取消", className: "btn secondary" },
+        ],
+      });
+      if (overwrite !== "confirm") {
+        setStatus("已取消 Skill 生成");
+        return;
+      }
+      const btn = $("skillToFlowBtn");
+      btn.disabled = true;
+      btn.textContent = "生成中...";
+      const engine = String($("skillToFlowEngineInput").value || "default").trim() || "default";
+      state.preferredSkillEngine = engine;
+      const model = String($("skillToFlowModelInput").value || "advanced").trim() || "advanced";
+      const timeoutMs = Number($("skillToFlowTimeoutInput").value || 600000);
+      const maxRepair = Number($("skillToFlowRepairInput").value || 1);
+      const maxRegenerate = Number($("skillToFlowRegenerateInput").value || 1);
+      const engLabel = flowAgentLabel(engine);
+      showBusyMask(`正在使用 ${engLabel} 根据 Skill 生成 Flow，请稍候...`, "working");
+      setStatus(`Skill -> Flow 生成中（${engLabel}）...`);
+      try {
+        const data = await api("POST", "/rpaflows/api/builder/skill-to-flow", {
+          skillText,
+          engine,
+          model,
+          timeoutMs,
+          maxRepair,
+          maxRegenerate,
+        });
+        const flow = (data && typeof data.flow === "object" && !Array.isArray(data.flow)) ? data.flow : null;
+        if (!flow) throw new Error("未返回可用 flow");
+        $("savePathInput").value = "";
+        $("savedFlowSelect").value = "";
+        state.stepDrafts = {};
+        state.editorDirty = false;
+        setFlow(flow);
+        setOutput({ ok: true, info: "skill_to_flow.generated", data });
+        setStatus(`Skill 生成完成：${String(flow.id || "-")}（steps=${Array.isArray(flow.steps) ? flow.steps.length : 0}，engine=${engine}）`);
+        showBusyMask("Flow 生成完成，已载入编辑器", "success");
+        showButtonTip($("skillToFlowBtn"), "已载入", "ok");
+        closeSkillToFlowDialog();
+        await sleepMs(900);
+      } catch (err) {
+        showBusyMask(`Skill 生成失败：${String(err?.message || err)}`, "error");
+        showButtonTip($("skillToFlowBtn"), "失败", "err");
+        await sleepMs(1300);
+        throw err;
+      } finally {
+        hideBusyMask();
+        btn.disabled = false;
+        btn.textContent = "从 Skill 生成并载入";
+      }
+    }
+
+    async function sendFlowReviseTurn() {
+      const instruction = String($("flowRevisePromptInput").value || "").trim();
+      if (!instruction) throw new Error("请先输入本轮修正指令");
+      const engine = String($("flowReviseEngineInput").value || "default").trim() || "default";
+      state.preferredFlowReviseEngine = engine;
+      const model = String($("flowReviseModelInput").value || "advanced").trim() || "advanced";
+      const timeoutMs = Number($("flowReviseTimeoutInput").value || 600000);
+      const maxRepair = Number($("flowReviseRepairInput").value || 1);
+      const maxRegenerate = Number($("flowReviseRegenerateInput").value || 1);
+      const extraContext = String($("flowReviseContextInput").value || "").trim();
+
+      const prevFlow = getFlowFromTextarea();
+      const userTurn = {
+        ts: new Date().toISOString(),
+        role: "user",
+        text: instruction,
+      };
+      state.flowReviseTurns.push(userTurn);
+      if (state.flowReviseTurns.length > 30) state.flowReviseTurns = state.flowReviseTurns.slice(-30);
+      renderFlowReviseHistory();
+
+      const btn = $("flowReviseSendBtn");
+      btn.disabled = true;
+      btn.textContent = "修正中...";
+      const engLabel = flowAgentLabel(engine);
+      showBusyMask(`正在使用 ${engLabel} 分析对话并修正 Flow，请稍候...`, "working");
+      setStatus(`Flow 对话修正中（${engLabel}）...`);
+      try {
+        const autoRunContext = state.useLastFlowRunContextForRevise ? getAutoRunContextForFlowRevise(engine) : "";
+        const mergedExtraContext = [extraContext, autoRunContext].filter((x) => String(x || "").trim()).join("\n\n");
+        const contextText = buildFlowReviseContextText(mergedExtraContext, 4);
+        const data = await api("POST", "/rpaflows/api/builder/flow-revise", {
+          flowDocument: prevFlow,
+          userInstruction: instruction,
+          contextText,
+          engine,
+          model,
+          timeoutMs,
+          maxRepair,
+          maxRegenerate,
+          codexThreadSessionId: (engine === "codex") ? String(state.flowReviseCodexThreadId || "") : "",
+        });
+        const nextFlow = (data && typeof data.flow === "object" && !Array.isArray(data.flow))
+          ? data.flow
+          : ((data?.document?.flow && typeof data.document.flow === "object") ? data.document.flow : null);
+        if (!nextFlow) throw new Error("flow revise 返回缺少 flow");
+        const diff = getStepChangedSummary(prevFlow, nextFlow);
+        const requestedEngine = String(data?.requestedEngine || engine || "default");
+        const usedEngine = String(data?.engine || requestedEngine || "default");
+        const repairEngine = String(data?.repairEngine || "");
+        const fallbackRepair = data?.fallbackRepair === true;
+        const engineChain = (fallbackRepair && requestedEngine && usedEngine && requestedEngine !== usedEngine)
+          ? `${requestedEngine}->${usedEngine}${repairEngine ? `(repair=${repairEngine})` : ""}`
+          : usedEngine;
+        const outcome = `repairs=${Number(data?.repairs || 0)}, regenerates=${Number(data?.regenerates || 0)}, changed=${diff.changed.length}, added=${diff.added.length}, removed=${diff.removed.length}, engine=${engineChain}`;
+        const traceText = formatFlowReviseTrace(data?.trace || null);
+        if (engine === "codex") {
+          const sid = String(data?.codexThreadSessionId || data?.trace?.codexThreadSessionId || "").trim();
+          if (sid) state.flowReviseCodexThreadId = sid;
+        }
+        let engineNote = "";
+        if (fallbackRepair && requestedEngine !== usedEngine) {
+          engineNote = `\n\n提示：本轮先使用 ${requestedEngine}，因校验失败自动回退到 ${usedEngine} 完成修复。`;
+        } else if (usedEngine !== "codex") {
+          engineNote = `\n\n提示：本轮引擎为 ${usedEngine}，不会包含 Codex CLI 对话详情。`;
+        }
+        const assistantTurn = {
+          ts: new Date().toISOString(),
+          role: "assistant",
+          text: `Flow 已修正并回填。${outcome}${engineNote}${traceText ? `\n\n${traceText}` : ""}`,
+        };
+        state.flowReviseTurns.push(assistantTurn);
+        if (state.flowReviseTurns.length > 30) state.flowReviseTurns = state.flowReviseTurns.slice(-30);
+        state.flowReviseSummary.push(`${assistantTurn.ts}: ${truncateText(instruction, 120)} | ${outcome}`);
+        if (state.flowReviseSummary.length > 40) state.flowReviseSummary = state.flowReviseSummary.slice(-40);
+
+        state.stepDrafts = {};
+        state.editorDirty = false;
+        setFlow(nextFlow);
+        $("flowRevisePromptInput").value = "";
+        renderFlowReviseHistory();
+        setOutput({ ok: true, info: "flow_revise.done", data, diff });
+        setStatus(`Flow 已修正：${outcome}，engine=${engine}`);
+        showBusyMask("Flow 修正完成，已回填", "success");
+        showButtonTip($("flowReviseSendBtn"), "已回填", "ok");
+        await sleepMs(900);
+      } catch (err) {
+        const traceText = formatFlowReviseTrace(err?.data?.trace || null);
+        if (engine === "codex") {
+          const sid = String(err?.data?.trace?.codexThreadSessionId || "").trim();
+          if (sid) state.flowReviseCodexThreadId = sid;
+        }
+        const assistantTurn = {
+          ts: new Date().toISOString(),
+          role: "assistant",
+          text: `修正失败：${String(err?.message || err)}${traceText ? `\n\n${traceText}` : ""}`,
+        };
+        state.flowReviseTurns.push(assistantTurn);
+        if (state.flowReviseTurns.length > 30) state.flowReviseTurns = state.flowReviseTurns.slice(-30);
+        renderFlowReviseHistory();
+        showBusyMask(`Flow 修正失败：${String(err?.message || err)}`, "error");
+        showButtonTip($("flowReviseSendBtn"), "失败", "err");
+        await sleepMs(1200);
+        throw err;
+      } finally {
+        hideBusyMask();
+        btn.disabled = false;
+        btn.textContent = "发送并修正";
+      }
+    }
+
     function addStep() {
       if (!state.flow) setFlow(getFlowFromTextarea());
       let i = 1;
@@ -4732,6 +7127,18 @@
       setStatus(`step ${step.id} 已写入${renameMsg}`);
     }
 
+    function autoApplyCurrentStepAfterAiChange(okMsg, failInfo = "ai.auto_apply_failed") {
+      try {
+        applyEditorStep();
+        return { ok: true, message: String(okMsg || "AI 回填内容已自动写入当前步骤") };
+      } catch (saveErr) {
+        updateEditorDirtyState({ renderList: false });
+        const reason = String(saveErr?.message || saveErr || "");
+        setOutput({ ok: false, info: failInfo, reason }, { toLog: true });
+        return { ok: false, reason };
+      }
+    }
+
     function restoreEditorStep() {
       const stepId = String($("stepIdInput").value || state.selectedStepId || "").trim();
       if (!stepId) throw new Error("当前没有可还原的 step");
@@ -4739,6 +7146,7 @@
       if (!step) throw new Error(`flow 中不存在 step: ${stepId}`);
       delete state.stepDrafts[stepId];
       if (state.selectedStepId === stepId) state.editorDirty = false;
+      state.editorTouched = false;
       state.selectedStepId = stepId;
       loadStepToEditor(stepId, { preferDraft: false });
       renderStepList();
@@ -4750,6 +7158,7 @@
     function reparseFlow() {
       state.stepDrafts = {};
       state.editorDirty = false;
+      state.editorTouched = false;
       setFlow(getFlowFromTextarea());
       setStatus("Flow 解析完成");
       setOutput({ ok: true, info: "flow re-parsed" });
@@ -4763,7 +7172,7 @@
 
     function bindActionEditorEvents() {
       [
-        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
+        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
         "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
         "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
         "fBranchDefault","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput",
@@ -4771,9 +7180,13 @@
       ].forEach((id) => {
         const el = $(id);
         const ev = (el.tagName === "SELECT") ? "change" : "input";
-        el.addEventListener(ev, () => {
+        el.addEventListener(ev, (e) => {
+          if (e?.isTrusted !== false) state.editorTouched = true;
           if (id === "actionTypeSelect") {
             setActionFieldVisibility();
+          }
+          if (id === "fCloseTarget") {
+            updateClosePageFieldVisibility();
           }
           if (id === "nextDoneInput" || id === "nextFailedInput" || id === "nextSkippedInput" || id === "nextTimeoutInput" || id === "nextDefaultInput") {
             syncNextJsonFromFields();
@@ -4806,6 +7219,7 @@
       $("fRunJsCode").addEventListener("keydown", (ev) => {
         if (ev.key !== "Tab") return;
         ev.preventDefault();
+        state.editorTouched = true;
         const ta = ev.currentTarget;
         if (!ta) return;
         const start = Number(ta.selectionStart || 0);
@@ -4818,21 +7232,25 @@
         updateEditorDirtyState();
       });
       $("nextJsonInput").addEventListener("change", () => {
+        state.editorTouched = true;
         syncNextFieldsFromJson();
         syncActionJsonFromFields(false);
         updateEditorDirtyState();
       });
       $("actionJsonInput").addEventListener("input", () => {
+        state.editorTouched = true;
         state.actionJsonDirty = true;
         updateEditorDirtyState();
       });
       $("actionTypeSelect").addEventListener("change", () => {
+        state.editorTouched = true;
         state.actionJsonDirty = false;
         updateEditorDirtyState();
       });
       $("addBranchCaseBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
+        state.editorTouched = true;
         $("fBranchCasesWrap").appendChild(createBranchCaseRow({ source: "args", op: "exists" }));
         refreshStepIdOptions();
         syncBranchCasesJsonFromRows(false);
@@ -4840,6 +7258,7 @@
         updateEditorDirtyState();
       });
       $("fBranchCases").addEventListener("change", () => {
+        state.editorTouched = true;
         const raw = String($("fBranchCases").value || "").trim();
         const parsed = parseJsonText(raw, null);
         if (!Array.isArray(parsed)) return;
@@ -4848,16 +7267,19 @@
         updateEditorDirtyState();
       });
       $("fInvokeFind").addEventListener("change", () => {
+        state.editorTouched = true;
         syncInvokeFindFieldsFromJson();
         syncActionJsonFromFields(false);
         updateEditorDirtyState();
       });
       $("fInvokeArgs").addEventListener("change", () => {
+        state.editorTouched = true;
         syncInvokeArgsRowsFromJson();
         syncActionJsonFromFields(false);
         updateEditorDirtyState();
       });
       $("fRunJsArgs").addEventListener("change", () => {
+        state.editorTouched = true;
         syncRunJsArgsRowsFromJson();
         syncActionJsonFromFields(false);
         updateEditorDirtyState();
@@ -4865,6 +7287,7 @@
       $("addInvokeFilterBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
+        state.editorTouched = true;
         $("fInvokeFiltersBox").appendChild(createInvokeFilterRow({ key: "", value: "" }));
         syncInvokeFindJsonFromFields(false);
         syncActionJsonFromFields(false);
@@ -4873,6 +7296,7 @@
       $("addRunJsArgBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
+        state.editorTouched = true;
         $("fRunJsArgsBox").appendChild(createRunJsArgRow({ value: "" }));
         refreshRunJsArgRowIndex();
         syncRunJsArgsJsonFromRows(false);
@@ -4882,6 +7306,7 @@
       $("runAiPagePresetBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
+        state.editorTouched = true;
         $("fRunAiPageUrl").checked = true;
         $("fRunAiPageHtml").checked = true;
         $("fRunAiPageScreenshot").checked = false;
@@ -4893,6 +7318,7 @@
       $("addInvokeArgBtn").addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
+        state.editorTouched = true;
         $("fInvokeArgsBox").appendChild(createInvokeArgRow({ key: "", value: "" }));
         syncInvokeArgsJsonFromRows(false);
         syncActionJsonFromFields(false);
@@ -4905,6 +7331,7 @@
       $("invokeKeyPickerCancelBtn").addEventListener("click", () => hideInvokeKeyPicker());
       $("invokeKeyPickerApplyBtn").addEventListener("click", () => applyInvokeKeyPickerSelection());
       $("invokeKeyPickerSearch").addEventListener("input", () => renderInvokeKeyPickerList());
+      $("invokeKeyPickerList").addEventListener("scroll", () => hideInvokeKeyPickerTip());
       document.querySelectorAll('input[name="invokeKeyKind"]').forEach((el) => {
         el.addEventListener("change", () => {
           if (!el.checked) return;
@@ -4924,6 +7351,15 @@
       $("decisionMask").addEventListener("click", (ev) => {
         if (ev.target === $("decisionMask")) closeDecisionDialog("cancel");
       });
+      $("flowReviseDetailCloseBtn").addEventListener("click", () => closeFlowReviseDetailDialog());
+      $("reviseFlowFromRunBtn").addEventListener("click", () => openFlowReviseFromLastRun());
+      $("flowReviseDetailMask").addEventListener("click", (ev) => {
+        if (ev.target === $("flowReviseDetailMask")) closeFlowReviseDetailDialog();
+      });
+      $("stepReviseCloseBtn").addEventListener("click", () => closeStepReviseDialog());
+      $("stepReviseMask").addEventListener("click", (ev) => {
+        if (ev.target === $("stepReviseMask")) closeStepReviseDialog();
+      });
       document.addEventListener("keydown", (ev) => {
         if (ev.key !== "Escape") return;
         const mask = $("invokeKeyPickerMask");
@@ -4932,6 +7368,10 @@
         if (mask2 && mask2.classList.contains("show")) closeRunJsPreviewDialog(false);
         const mask3 = $("decisionMask");
         if (mask3 && mask3.classList.contains("show")) closeDecisionDialog("cancel");
+        const mask4 = $("flowReviseDetailMask");
+        if (mask4 && mask4.classList.contains("show")) closeFlowReviseDetailDialog();
+        const mask5 = $("stepReviseMask");
+        if (mask5 && mask5.classList.contains("show")) closeStepReviseDialog();
       });
       renderInvokeFilterRows([]);
       syncInvokeFindJsonFromFields(true);
@@ -4949,6 +7389,7 @@
     bindTabs();
     bindGraphPan();
     bindActionEditorEvents();
+    bindFlowReviseDialogDrag();
 
     $("startSessionBtn").addEventListener("click", () => startSession().catch(failUi));
     $("refreshSessionBtn").addEventListener("click", () => refreshSession().catch(failUi));
@@ -4957,16 +7398,94 @@
     $("selectContextBtn").addEventListener("click", () => selectContext().catch(failUi));
     $("openPageBtn").addEventListener("click", () => openPage().catch(failUi));
     $("activateBrowserBtn").addEventListener("click", () => activateSessionBrowser().catch(failUi));
+    $("runFlowBtn").addEventListener("click", () => runFlowInSession().catch(failUi));
+    const publishTabBtn = document.querySelector('.tabs[data-tab-group="right"] .tab[data-tab="right-publish"]');
+    if (publishTabBtn) {
+      publishTabBtn.addEventListener("click", () => {
+        refreshPublishServerInfo().catch((err) => {
+          setOutput({ ok: false, info: "publish.version.error", error: String(err?.message || err) });
+        });
+      });
+    }
+    $("sysLoginBtn").addEventListener("click", () => systemLogin().catch(failUi));
+    $("sysCheckBtn").addEventListener("click", () => systemCheckLogin().catch(failUi));
+    $("sysLogoutBtn").addEventListener("click", () => systemLogout().catch(failUi));
+    $("sysCallBtn").addEventListener("click", () => systemCall().catch(failUi));
+    $("refreshPublishInfoBtn").addEventListener("click", () => refreshPublishServerInfo().catch(failUi));
+    $("runPreAuditBtn").addEventListener("click", () => runPreAuditForPublish().catch(failUi));
+    $("signFlowBtn").addEventListener("click", () => signFlowForPublish().catch(failUi));
+    $("publishFlowBtn").addEventListener("click", () => publishFlowToServer().catch(failUi));
 
     $("refreshFlowsBtn").addEventListener("click", () => refreshFlows().catch(failUi));
+    $("openSkillToFlowBtn").addEventListener("click", () => openSkillToFlowDialog());
+    $("openFlowReviseBtn").addEventListener("click", () => openFlowReviseDialog());
+    $("openFlowReviseBtnMid").addEventListener("click", () => openFlowReviseDialog());
+    $("flowReviseEngineInput").addEventListener("change", () => {
+      state.preferredFlowReviseEngine = String($("flowReviseEngineInput").value || "default");
+    });
+    $("stepReviseEngineInput").addEventListener("change", () => {
+      state.preferredStepReviseEngine = String($("stepReviseEngineInput").value || "default");
+    });
+    $("skillToFlowEngineInput").addEventListener("change", () => {
+      state.preferredSkillEngine = String($("skillToFlowEngineInput").value || "default");
+    });
     $("savedFlowSelect").addEventListener("change", () => {
       const path = String($("savedFlowSelect").value || "").trim();
       if (!path) return;
       loadFlow(path).catch(failUi);
     });
     $("newFlowBtn").addEventListener("click", () => { try { newFlow(); } catch (err) { failUi(err); } });
-    $("saveFlowBtn").addEventListener("click", () => saveFlow().catch(failUi));
-    $("saveAsFlowBtn").addEventListener("click", () => saveFlowAs().catch(failUi));
+    $("saveFlowBtn").addEventListener("click", async () => {
+      try {
+        await saveFlow();
+        showButtonTip($("saveFlowBtn"), "已保存", "ok");
+      } catch (err) {
+        failUi(err);
+      }
+    });
+    $("saveAsFlowBtn").addEventListener("click", async () => {
+      try {
+        await saveFlowAs();
+        showButtonTip($("saveAsFlowBtn"), "已另存为", "ok");
+      } catch (err) {
+        failUi(err);
+      }
+    });
+    $("skillToFlowBtn").addEventListener("click", () => generateFlowFromSkill().catch(failUi));
+    $("skillToFlowCloseBtn").addEventListener("click", () => closeSkillToFlowDialog());
+    $("cancelSkillToFlowBtn").addEventListener("click", () => closeSkillToFlowDialog());
+    $("clearSkillToFlowBtn").addEventListener("click", () => {
+      $("skillToFlowInput").value = "";
+      setStatus("已清空 Skill 文本");
+    });
+    $("flowReviseSendBtn").addEventListener("click", () => sendFlowReviseTurn().catch(failUi));
+    $("flowReviseCloseBtn").addEventListener("click", () => closeFlowReviseDialog());
+    $("openStepReviseBtn").addEventListener("click", () => { try { openStepReviseDialog(); } catch (err) { failUi(err); } });
+    $("stepReviseSendBtn").addEventListener("click", () => sendStepReviseTurn().catch(failUi));
+    $("clearStepRevisePromptBtn").addEventListener("click", () => {
+      $("stepRevisePromptInput").value = "";
+      setStatus("已清空步骤修正输入");
+    });
+    $("clearStepReviseHistoryBtn").addEventListener("click", () => {
+      state.stepReviseTurns = [];
+      state.stepReviseSummary = [];
+      state.stepReviseCodexThreadId = "";
+      renderStepReviseHistory();
+      setStatus("已清空步骤修正历史");
+    });
+    $("clearFlowRevisePromptBtn").addEventListener("click", () => {
+      $("flowRevisePromptInput").value = "";
+      setStatus("已清空本轮指令");
+    });
+    $("clearFlowReviseHistoryBtn").addEventListener("click", () => {
+      state.flowReviseTurns = [];
+      state.flowReviseSummary = [];
+      state.flowReviseCodexThreadId = "";
+      state.useLastFlowRunContextForRevise = false;
+      refreshFlowReviseModeHint();
+      renderFlowReviseHistory();
+      setStatus("已清空对话历史");
+    });
     $("reparseFlowBtn").addEventListener("click", () => { try { reparseFlow(); } catch (err) { failUi(err); } });
     $("syncArgsBtn").addEventListener("click", () => { try { syncArgDefsFromKeyInput(); } catch (err) { failUi(err); } });
     $("addArgBtn").addEventListener("click", () => {
@@ -4978,19 +7497,42 @@
       renderArgDefRows(cur);
       $("flowArgsInput").value = Object.keys(cur).join(", ");
     });
+    $("addVarBtn").addEventListener("click", () => {
+      const cur = readVarDefRows();
+      let idx = 1;
+      let key = `var_${idx}`;
+      while (cur[key]) { idx += 1; key = `var_${idx}`; }
+      cur[key] = { type: "", desc: "", from: "" };
+      renderVarDefRows(cur);
+    });
     $("addFilterBtn").addEventListener("click", () => {
       const cur = readShellFiltersRows();
       cur.push({ key: "", value: "" });
       renderShellFiltersRows(cur);
     });
-    $("applyShellBtn").addEventListener("click", () => { try { applyShellToFlow(); } catch (err) { failUi(err); } });
+    $("applyShellBtn").addEventListener("click", () => {
+      try {
+        applyShellToFlow();
+        showButtonTip($("applyShellBtn"), "已应用", "ok");
+      } catch (err) { failUi(err); }
+    });
 
     $("addStepBtn").addEventListener("click", () => { try { addStep(); } catch (err) { failUi(err); } });
     $("deleteStepBtn").addEventListener("click", () => { try { deleteCurrentStep(); } catch (err) { failUi(err); } });
     $("setStartBtn").addEventListener("click", () => { try { setStartFromCurrent(); } catch (err) { failUi(err); } });
 
-    $("applyStepBtn").addEventListener("click", () => { try { applyEditorStep(); } catch (err) { failUi(err); } });
-    $("restoreStepBtn").addEventListener("click", () => { try { restoreEditorStep(); } catch (err) { failUi(err); } });
+    $("applyStepBtn").addEventListener("click", () => {
+      try {
+        applyEditorStep();
+        showButtonTip($("applyStepBtn"), "已写入", "ok");
+      } catch (err) { failUi(err); }
+    });
+    $("restoreStepBtn").addEventListener("click", () => {
+      try {
+        restoreEditorStep();
+        showButtonTip($("restoreStepBtn"), "已还原", "ok");
+      } catch (err) { failUi(err); }
+    });
     $("runStepBtn").addEventListener("click", () => runStep().catch(failUi));
     $("pickByBtn").addEventListener("click", () => pickSelectorForAction().catch(failUi));
     $("genByFromQueryBtn").addEventListener("click", () => generateByFromQuery().catch(failUi));
@@ -5000,11 +7542,15 @@
     $("confirmPickBtn").addEventListener("click", () => confirmPickElement().catch(failUi));
 
     renderSessionTag();
+    renderSystemAuthTag();
     renderContextTag();
     setFlow(getFlowFromTextarea());
     setActionFieldVisibility();
     renderRunJsCodeHighlight();
     loadLogMeta();
+    maybeAutoLoginFromLocalStorage().catch((err) => {
+      setOutput({ ok: false, info: "system.auto_login.init_error", error: String(err?.message || err) });
+    });
     refreshFlows().catch(failUi);
   </script>
 </body>
