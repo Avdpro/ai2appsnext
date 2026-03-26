@@ -2,6 +2,8 @@ import pathLib from "path";
 import { fileURLToPath } from "url";
 import { promises as fsp } from "fs";
 import { runFlow } from "./FlowRunner.mjs";
+import { executeStepAction } from "./FlowStepExecutor.mjs";
+import { parseFlowVal } from "./FlowExpr.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathLib.dirname(__filename);
@@ -212,19 +214,87 @@ function buildSingleStepProbeFlow(step) {
 	};
 }
 
-async function runBuilderStepOnce({ webRpa, page, session, step }) {
-	const flow = buildSingleStepProbeFlow(step);
-	const ret = await runFlow({
-		flow,
+async function runBuilderStepOnce({ webRpa, page, session, step, args: inputArgs = {}, opts: inputOpts = {}, vars: inputVars = {}, lastResult: inputLastResult = null, logger = null }) {
+	const normalizeObj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? { ...v } : {});
+	const normalizeStatus = (status) => {
+		const s = String(status || "failed").toLowerCase();
+		return (s === "done" || s === "failed" || s === "skipped" || s === "timeout") ? s : "failed";
+	};
+	const normalizeSaveAsVarKey = (key) => {
+		const s = String(key || "").trim();
+		if (!s) return "";
+		if (s === "__proto__" || s === "constructor" || s === "prototype") return "";
+		if (s.startsWith("vars.")) {
+			const trimmed = s.slice(5).trim();
+			if (!trimmed || trimmed === "__proto__" || trimmed === "constructor" || trimmed === "prototype") return "";
+			return trimmed;
+		}
+		return s;
+	};
+	const mapSaveAs = (saveAs, stepResult, args, opts, vars) => {
+		if (!saveAs) return;
+		if (typeof saveAs === "string") {
+			const k = normalizeSaveAsVarKey(saveAs);
+			if (!k) return;
+			vars[k] = stepResult?.value;
+			return;
+		}
+		if (saveAs && typeof saveAs === "object") {
+			for (const key of Object.keys(saveAs)) {
+				const k = normalizeSaveAsVarKey(key);
+				if (!k) continue;
+				vars[k] = parseFlowVal(saveAs[key], args, opts, vars, stepResult);
+			}
+		}
+	};
+
+	const action = (step && step.action && typeof step.action === "object") ? step.action : null;
+	if (!action) throw new Error("step.action is required");
+	const stepId = String(step?.id || "step_1").trim() || "step_1";
+	const args = normalizeObj(inputArgs);
+	const opts = normalizeObj(inputOpts);
+	const vars = normalizeObj(inputVars);
+	const lastResultRaw = inputLastResult;
+	const lastResult = (lastResultRaw && typeof lastResultRaw === "object" && !Array.isArray(lastResultRaw))
+		? { ...lastResultRaw }
+		: { status: "done", value: true };
+
+	const stepResult = await executeStepAction({
 		webRpa,
 		page,
 		session,
-		args: {},
-		opts: {},
-		maxSteps: 8,
-		logger: null,
+		action,
+		args,
+		opts,
+		vars,
+		lastResult,
+		stepId,
+		logger,
 	});
-	return ret || { status: "failed", reason: "empty run result" };
+	const normalized = {
+		...(stepResult || {}),
+		status: normalizeStatus(stepResult?.status),
+	};
+	if (normalized.status === "done") {
+		mapSaveAs(step?.saveAs, normalized, args, opts, vars);
+	}
+	const nextStepId = (String(action?.type || "").toLowerCase() === "branch")
+		? String(normalized?.value || "").trim()
+		: "";
+	return {
+		status: normalized.status,
+		reason: normalized.reason || "",
+		value: normalized.value,
+		vars,
+		history: [{ stepId, actionType: action?.type, result: normalized }],
+		lastResult: normalized,
+		...(nextStepId ? { nextStepId } : {}),
+		meta: {
+			mode: "single_step",
+			stepId,
+			actionType: String(action?.type || ""),
+		},
+	};
 }
 
 export {

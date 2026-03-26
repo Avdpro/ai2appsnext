@@ -138,10 +138,10 @@ function buildFlowRunSummary(state) {
 	const status = normalizeFlowRunStatus(result.status || state?.status || "failed");
 	const ai = state?.ai && typeof state.ai === "object" ? state.ai : {};
 	const queryCache = state?.queryCache && typeof state.queryCache === "object" ? state.queryCache : { hits: 0, misses: 0, events: [] };
-	return {
-		ok: status === "done",
-		status,
-		elapsedMs,
+		return {
+			ok: status === "done",
+			status,
+			elapsedMs,
 		startedAt: state?.startedAtIso || "",
 		endedAt: state?.endedAtIso || nowIso(),
 		runId: asText(state?.runId || ""),
@@ -153,16 +153,18 @@ function buildFlowRunSummary(state) {
 			misses: Number(queryCache.misses || 0),
 			events: Array.isArray(queryCache.events) ? queryCache.events.slice(-120) : [],
 		},
-		ai: {
-			calls: Number(ai.calls || 0),
-			promptTokens: Number(ai.promptTokens || 0),
-			completionTokens: Number(ai.completionTokens || 0),
-			totalTokens: Number(ai.totalTokens || 0),
-			costUsd: Number(ai.costUsd || 0),
-		},
-		runMeta: cloneJson(result.meta || null, null),
-	};
-}
+			ai: {
+				calls: Number(ai.calls || 0),
+				promptTokens: Number(ai.promptTokens || 0),
+				completionTokens: Number(ai.completionTokens || 0),
+				totalTokens: Number(ai.totalTokens || 0),
+				costUsd: Number(ai.costUsd || 0),
+			},
+			vars: cloneJson((result && typeof result.vars === "object" && !Array.isArray(result.vars)) ? result.vars : {}, {}),
+			lastResult: cloneJson((result && result.lastResult && typeof result.lastResult === "object" && !Array.isArray(result.lastResult)) ? result.lastResult : null, null),
+			runMeta: cloneJson(result.meta || null, null),
+		};
+	}
 
 let builderLoggerPromise = null;
 async function getBuilderLogger() {
@@ -341,7 +343,9 @@ function getStepReviseActionGuidance(targetType) {
 	const t = asText(targetType).toLowerCase();
 	const full = {
 		goto: "goto: 必须是 {type:'goto', url:string[, newPage:boolean]}。url 建议绝对 https URL。不要改成其它动作类型。",
-		closePage: "closePage: 常用键 {target,contextId,matchUrl,ifLast,activateAfterClose,postWaitMs}。target 仅 active|flow|contextId|urlMatch；contextId/urlMatch 按 target 填写。",
+		closepage: "closePage: 常用键 {target,contextId,matchUrl,ifLast,activateAfterClose,postWaitMs}。target 仅 active|flow|contextId|urlMatch；contextId/urlMatch 按 target 填写。",
+		uploadfile: "uploadFile: 常用键 {query,by,files,uploadMode,timeoutMs,allowSetFilesFallback,postWaitMs}。files 建议为数组，每项是 path 字符串或 {path|data,filename?}。",
+		selector: "selector: 常用键 {query,by,state,scope,autoSwitch,multi,pick,postWaitMs}。用于存在性探测，不做点击。",
 		click: "click: 常用键 {query,by,expectInputFocus,timeoutMs}。若 by 存在必须以 css:/xpath: 开头。query 与 by 并存时要确保一致指向。",
 		hover: "hover: 常用键 {query,by,timeoutMs}。by 规则同 click。",
 		input: "input: 常用键 {query/by,text,pressEnter,timeoutMs,postWaitMs}。若 pressEnter=true，postWaitMs 建议 1000~3000。",
@@ -1478,6 +1482,12 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			if (!step) throw new Error("step is required");
 			if (!asText(step?.id)) throw new Error("step.id is required");
 			if (!asText(step?.action?.type)) throw new Error("step.action.type is required");
+			const runArgs = (body.args && typeof body.args === "object" && !Array.isArray(body.args)) ? cloneJson(body.args, {}) : {};
+			const runOpts = (body.opts && typeof body.opts === "object" && !Array.isArray(body.opts)) ? cloneJson(body.opts, {}) : {};
+			const runVars = (body.vars && typeof body.vars === "object" && !Array.isArray(body.vars)) ? cloneJson(body.vars, {}) : {};
+			const runLastResult = (body.lastResult && typeof body.lastResult === "object" && !Array.isArray(body.lastResult))
+				? cloneJson(body.lastResult, null)
+				: null;
 
 			const mgr = getMgr();
 			const runtime = await getActivePageRuntime(mgr, req.params.id, { autoOpenPage: true });
@@ -1486,6 +1496,10 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 				page: runtime.page,
 				session: runtime.session,
 				step,
+				args: runArgs,
+				opts: runOpts,
+				vars: runVars,
+				lastResult: runLastResult,
 			});
 			const elapsedMs = Date.now() - t0;
 			console.log(

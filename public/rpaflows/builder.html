@@ -214,6 +214,13 @@
       border-radius: 999px;
       opacity: 0.95;
     }
+    .context-divider {
+      height: 0;
+      border-top: 3px solid #94a3b8;
+      margin: 10px 2px 10px;
+      border-radius: 999px;
+      opacity: 0.95;
+    }
 
     .step-list {
       border: 1px solid var(--line);
@@ -473,6 +480,11 @@
       grid-template-columns: 140px auto auto;
       gap: 6px;
       align-items: center;
+    }
+    .ctx-key-label {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
     }
     .flow-shell-divider {
       height: 0;
@@ -979,10 +991,10 @@
             <button class="btn secondary square" id="pickFlowCapsBtn" type="button" title="选择并添加 Capabilities">+</button>
           </div>
           <hr class="flow-shell-divider" aria-hidden="true">
-          <label style="margin-top:8px;">参数键（逗号分隔，用于批量补全）</label>
-          <input id="flowArgsInput" placeholder="search.query,read.minItems">
+          <label style="margin-top:8px;">参数键（自动展示）</label>
+          <input id="flowArgsInput" placeholder="search.query,read.minItems" readonly>
           <div class="row" style="margin-top:8px;">
-            <button class="btn secondary" id="syncArgsBtn" type="button">按参数键补全定义</button>
+            <button class="btn secondary" id="syncArgsBtn" type="button">刷新参数键</button>
             <button class="btn secondary" id="addArgBtn" type="button">+ 添加参数定义</button>
           </div>
           <label style="margin-top:8px;">参数定义（args）</label>
@@ -1071,6 +1083,7 @@
     <div class="col">
       <div class="tabs" data-tab-group="right">
         <div class="tab active" data-tab="right-action">Action & Test</div>
+        <div class="tab" data-tab="right-context">Context</div>
         <div class="tab" data-tab="right-publish">Publish</div>
         <div class="tab" data-tab="right-log">Log</div>
       </div>
@@ -1092,6 +1105,8 @@
               <select id="actionTypeSelect">
                 <option>goto</option>
                 <option value="closepage">closePage</option>
+                <option value="uploadfile">uploadFile</option>
+                <option>selector</option>
                 <option>click</option>
                 <option>hover</option>
                 <option>input</option>
@@ -1110,7 +1125,7 @@
           </div>
 
           <div class="field-grid" style="margin-top:8px;">
-            <div class="field-row" data-types="click,input,hover">
+            <div class="field-row" data-types="selector,click,input,hover,uploadfile">
               <label>by</label>
               <div class="input-with-btn">
                 <input id="fBy" placeholder="css: button.search">
@@ -1118,7 +1133,7 @@
                 <button class="btn secondary" id="confirmPickBtn" type="button">选中确认</button>
               </div>
             </div>
-            <div class="field-row" data-types="click,input,hover">
+            <div class="field-row" data-types="selector,click,input,hover,uploadfile">
               <label>query</label>
               <div class="input-with-btn">
                 <input id="fQuery" placeholder="可见的搜索框">
@@ -1156,6 +1171,22 @@
             </div>
             <div class="field-row" data-types="closepage">
               <label class="checkbox-inline"><input id="fCloseActivateAfter" type="checkbox" checked><span>activateAfterClose（关闭后激活剩余页面）</span></label>
+            </div>
+            <div class="field-row" data-types="uploadfile">
+              <label>uploadFile.files（JSON 数组，或每行一个 path；当前执行器仅支持 path）</label>
+              <textarea id="fUploadFiles" placeholder='[{"path":"./demo.png"},{"path":"hub://disk/path/a.pdf","filename":"a.pdf"}]'></textarea>
+            </div>
+            <div class="field-row" data-types="uploadfile">
+              <label>uploadFile.mode（可选）</label>
+              <select id="fUploadMode">
+                <option value="chooser">chooser（默认）</option>
+                <option value="setFiles">setFiles</option>
+                <option value="auto">auto（先 chooser，失败回退）</option>
+              </select>
+            </div>
+            <div class="field-row" data-types="uploadfile"><label>uploadFile.timeoutMs（可选）</label><input id="fUploadTimeout" placeholder="12000"></div>
+            <div class="field-row" data-types="uploadfile">
+              <label class="checkbox-inline"><input id="fUploadSetFilesFallback" type="checkbox" checked><span>allowSetFilesFallback（chooser 失败时回退 setFiles）</span></label>
             </div>
             <div class="field-row" data-types="input,done,abort,ask_assist"><label>text / conclusion / reason</label><textarea id="fText"></textarea></div>
 
@@ -1315,6 +1346,31 @@
             <pre id="runJsResultPre">暂无 run_js 结果</pre>
           </div>
         </div>
+        </div>
+      </div>
+
+      <div id="right-context" class="tab-content">
+        <div class="section">
+          <p class="section-title">Step Mock Context</p>
+          <div class="row" style="margin-bottom:8px;">
+            <button class="btn secondary" id="ctxLoadDefaultsBtn" type="button">用Flow默认Args</button>
+            <button class="btn secondary" id="ctxPullRunBtn" type="button">用最近执行结果</button>
+            <button class="btn secondary" id="ctxClearVarsBtn" type="button">清空Vars/Result</button>
+            <button class="btn ok" id="ctxApplyBtn" type="button">应用上下文</button>
+          </div>
+          <label>args（按 Flow 外壳定义逐项编辑）</label>
+          <div id="ctxArgsBox" class="arg-list"></div>
+          <div class="context-divider"></div>
+          <label style="margin-top:8px;">vars（按 Flow 外壳定义逐项编辑，saveAs 会写回）</label>
+          <div id="ctxVarsBox" class="arg-list"></div>
+          <label style="margin-top:8px;">lastResult（分支/模板可引用，可为空）</label>
+          <textarea id="mockLastResultInput" style="min-height:110px;">null</textarea>
+          <label style="margin-top:8px;">当前 Context JSON（只读）</label>
+          <pre id="ctxJsonPreviewPre">{
+  "args": {},
+  "vars": {},
+  "lastResult": null
+}</pre>
         </div>
       </div>
 
@@ -1658,9 +1714,12 @@
       useLastFlowRunContextForRevise: false,
       publishLastAudit: null,
       publishServerInfo: null,
+      mockArgs: {},
+      mockVars: {},
+      mockLastResult: null,
     };
 
-    const actionTypes = ["goto","closepage","click","hover","input","press_key","wait","scroll","invoke","run_js","run_ai","branch","ask_assist","done","abort"];
+    const actionTypes = ["goto","closepage","uploadfile","selector","click","hover","input","press_key","wait","scroll","invoke","run_js","run_ai","branch","ask_assist","done","abort"];
     let graphPanning = false;
     let invokeKeyPickerTipDelayTimer = null;
     let flowRunPollToken = 0;
@@ -2209,7 +2268,7 @@
       });
     }
     const STEP_EDITOR_DRAFT_FIELDS = [
-      "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
+      "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fUploadFiles","fUploadMode","fUploadTimeout","fUploadSetFilesFallback","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
       "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
       "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
       "fBranchDefault","fBranchCases","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput","nextJsonInput","actionJsonInput",
@@ -2685,20 +2744,268 @@
     function beautifyRunJsCodeTabs() {
       const ta = $("fRunJsCode");
       if (!ta) return;
-      const lines = String(ta.value || "").split(/\r?\n/);
-      const out = lines.map((line) => {
-        const m = line.match(/^ +/);
-        if (!m) return line.replace(/[ \t]+$/g, "");
-        const spaces = m[0].length;
-        const tabs = Math.floor(spaces / 2);
-        const rest = line.slice(spaces).replace(/[ \t]+$/g, "");
-        return `${"\t".repeat(tabs)}${spaces % 2 ? " " : ""}${rest}`;
-      }).join("\n");
+      const src = String(ta.value || "");
+      const unit = "\t";
+      let i = 0;
+      let depth = 0;
+      let out = "";
+      let lineHasToken = false;
+      let quote = "";
+      let escaped = false;
+      let inLineComment = false;
+      let inBlockComment = false;
+      let suppressWs = false;
+      const bracketStack = [];
+
+      const peekNonSpace = (from) => {
+        for (let k = from; k < src.length; k += 1) {
+          const ch = src[k];
+          if (!/\s/.test(ch)) return ch;
+        }
+        return "";
+      };
+      const peekNonSpaceIndex = (from) => {
+        for (let k = from; k < src.length; k += 1) {
+          const ch = src[k];
+          if (!/\s/.test(ch)) return k;
+        }
+        return -1;
+      };
+      const prevNonSpaceOut = () => {
+        for (let k = out.length - 1; k >= 0; k -= 1) {
+          const ch = out[k];
+          if (!/\s/.test(ch)) return ch;
+        }
+        return "";
+      };
+      const topBracket = () => (bracketStack.length ? bracketStack[bracketStack.length - 1] : "");
+      const maybeSpaceBeforeBrace = () => {
+        const prev = prevNonSpaceOut();
+        if (!prev) return;
+        if (!"({[ \n\t".includes(prev)) out += " ";
+      };
+      const readWord = (from) => {
+        let s = "";
+        for (let k = from; k < src.length; k += 1) {
+          const ch = src[k];
+          if (!/[A-Za-z0-9_$]/.test(ch)) break;
+          s += ch;
+        }
+        return s;
+      };
+
+      const ensureIndent = () => {
+        if (!lineHasToken) {
+          out += unit.repeat(Math.max(0, depth));
+          lineHasToken = true;
+        }
+      };
+      const trimLineRight = () => {
+        while (out.endsWith(" ") || out.endsWith("\t")) out = out.slice(0, -1);
+      };
+      const newline = () => {
+        trimLineRight();
+        if (!out.endsWith("\n")) out += "\n";
+        lineHasToken = false;
+      };
+
+      while (i < src.length) {
+        const ch = src[i];
+        const next = src[i + 1] || "";
+
+        if (inLineComment) {
+          ensureIndent();
+          out += ch;
+          if (ch === "\n") {
+            inLineComment = false;
+            lineHasToken = false;
+          }
+          i += 1;
+          continue;
+        }
+        if (inBlockComment) {
+          ensureIndent();
+          out += ch;
+          if (ch === "*" && next === "/") {
+            out += "/";
+            i += 2;
+            inBlockComment = false;
+            continue;
+          }
+          if (ch === "\n") lineHasToken = false;
+          i += 1;
+          continue;
+        }
+        if (quote) {
+          ensureIndent();
+          out += ch;
+          if (escaped) {
+            escaped = false;
+          } else if (ch === "\\") {
+            escaped = true;
+          } else if (ch === quote) {
+            quote = "";
+          }
+          if (ch === "\n") lineHasToken = false;
+          i += 1;
+          continue;
+        }
+
+        if (ch === "/" && next === "/") {
+          ensureIndent();
+          out += "//";
+          inLineComment = true;
+          suppressWs = false;
+          i += 2;
+          continue;
+        }
+        if (ch === "/" && next === "*") {
+          ensureIndent();
+          out += "/*";
+          inBlockComment = true;
+          suppressWs = false;
+          i += 2;
+          continue;
+        }
+        if (ch === "'" || ch === "\"" || ch === "`") {
+          ensureIndent();
+          out += ch;
+          quote = ch;
+          suppressWs = false;
+          i += 1;
+          continue;
+        }
+        if (ch === "\r") {
+          i += 1;
+          continue;
+        }
+        if (ch === "\n") {
+          if (suppressWs) {
+            i += 1;
+            continue;
+          }
+          newline();
+          i += 1;
+          continue;
+        }
+        if (/\s/.test(ch)) {
+          if (suppressWs) {
+            i += 1;
+            continue;
+          }
+          if (lineHasToken && !out.endsWith(" ") && !out.endsWith("\n")) out += " ";
+          i += 1;
+          continue;
+        }
+        suppressWs = false;
+        if (ch === "{") {
+          ensureIndent();
+          const j = peekNonSpaceIndex(i + 1);
+          if (j >= 0 && src[j] === "}") {
+            trimLineRight();
+            maybeSpaceBeforeBrace();
+            out += "{}";
+            const t = peekNonSpaceIndex(j + 1);
+            if (t >= 0 && (src[t] === ";" || src[t] === "," || src[t] === ")" || src[t] === "]")) {
+              suppressWs = true;
+            }
+            i = j + 1;
+            continue;
+          }
+          trimLineRight();
+          maybeSpaceBeforeBrace();
+          out += "{";
+          bracketStack.push("{");
+          depth += 1;
+          newline();
+          i += 1;
+          continue;
+        }
+        if (ch === "}") {
+          if (topBracket() === "{") bracketStack.pop();
+          depth = Math.max(0, depth - 1);
+          if (lineHasToken) newline();
+          ensureIndent();
+          out += "}";
+          const look = peekNonSpace(i + 1);
+          const lookWord = readWord(peekNonSpaceIndex(i + 1));
+          if (!look || look === ";" || look === "," || look === ")" || look === "]") {
+            // Keep `};`, `},`, `})`, `}]` on the same line.
+            suppressWs = true;
+          } else if (lookWord === "else" || lookWord === "catch" || lookWord === "finally" || lookWord === "while") {
+            out += " ";
+          } else {
+            newline();
+          }
+          i += 1;
+          continue;
+        }
+        if (ch === "(") {
+          ensureIndent();
+          out += "(";
+          bracketStack.push("(");
+          i += 1;
+          continue;
+        }
+        if (ch === ")") {
+          if (topBracket() === "(") bracketStack.pop();
+          ensureIndent();
+          out += ")";
+          i += 1;
+          continue;
+        }
+        if (ch === "[") {
+          ensureIndent();
+          out += "[";
+          bracketStack.push("[");
+          i += 1;
+          continue;
+        }
+        if (ch === "]") {
+          if (topBracket() === "[") bracketStack.pop();
+          ensureIndent();
+          out += "]";
+          i += 1;
+          continue;
+        }
+        if (ch === ";") {
+          ensureIndent();
+          trimLineRight();
+          out += ";";
+          newline();
+          i += 1;
+          continue;
+        }
+        if (ch === ",") {
+          ensureIndent();
+          trimLineRight();
+          out += ",";
+          if (topBracket() === "{") {
+            newline();
+          } else {
+            out += " ";
+          }
+          i += 1;
+          continue;
+        }
+
+        ensureIndent();
+        out += ch;
+        i += 1;
+      }
+
+      out = out
+        .split("\n")
+        .map((line) => line.replace(/[ \t]+$/g, ""))
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
       ta.value = out;
       state.actionJsonDirty = false;
       renderRunJsCodeHighlight();
       syncActionJsonFromFields(true);
-      setStatus("run_js.code 已按 Tab 缩进美化");
+      setStatus("run_js.code 已按语法展开并美化");
       showButtonTip($("formatRunJsCodeBtn"), "已完成", "ok");
     }
 
@@ -3201,6 +3508,42 @@
       ));
     }
 
+    function parseUploadFilesInput(raw) {
+      const text = String(raw || "").trim();
+      if (!text) return [];
+      let list = [];
+      if (/^[\[{]/.test(text)) {
+        const parsed = parseJsonText(text, null);
+        if (Array.isArray(parsed)) list = parsed;
+        else if (parsed && typeof parsed === "object") list = [parsed];
+      } else {
+        list = text
+          .split(/\r?\n/)
+          .map((x) => String(x || "").trim())
+          .filter(Boolean);
+      }
+      const out = [];
+      for (const item of list) {
+        if (typeof item === "string") {
+          const path = String(item || "").trim();
+          if (path) out.push(path);
+          continue;
+        }
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const path = String(item.path || "").trim();
+        const data = String(item.data || "").trim();
+        const filename = String(item.filename || "").trim();
+        if (!path && !data) continue;
+        if (path && data) continue;
+        const one = {};
+        if (path) one.path = path;
+        if (data) one.data = data;
+        if (filename) one.filename = filename;
+        out.push(one);
+      }
+      return out;
+    }
+
     function normalizeInvokeFindKeysPayload(data) {
       const out = [];
       const argDefs = {};
@@ -3472,8 +3815,7 @@
           }
           if (d && descInputEl) descInputEl.value = d;
         }
-        const latest = readArgDefRows();
-        $("flowArgsInput").value = Object.keys(latest).join(", ");
+        refreshFlowArgsInputFromRows();
       };
       state.invokeKeyPickerSelected = new Set(parseCsv(el.value || "").slice(0, 1));
       $("invokeKeyPickerTitle").textContent = "选择 Arg Key";
@@ -3674,8 +4016,10 @@
         const box = $("flowArgsBox");
         card.remove();
         if (!box.children.length) box.appendChild(mkArgCard({ key: "", type: "string", required: false, desc: "" }));
-        const latest = readArgDefRows();
-        $("flowArgsInput").value = Object.keys(latest).join(", ");
+        refreshFlowArgsInputFromRows();
+      });
+      keyInput.addEventListener("input", () => {
+        refreshFlowArgsInputFromRows();
       });
       pickKeyBtn.addEventListener("click", () => openInvokeArgKeyPickerForInput(keyInput, {
         typeSelect,
@@ -3762,6 +4106,7 @@
       card.__typeSelect = typeSelect;
       card.__descInput = descInput;
       card.__fromInput = fromInput;
+      card.__origKey = String(seed.key || "").trim();
       return card;
     }
 
@@ -4425,6 +4770,34 @@
       return out;
     }
 
+    function readVarDefRowsWithRenameMeta() {
+      const box = $("flowVarsBox");
+      const defs = {};
+      const renameMap = {};
+      for (const card of Array.from(box.children || [])) {
+        const key = String(card.__keyInput?.value || "").trim();
+        if (!key) continue;
+        const type = String(card.__typeSelect?.value || "").trim();
+        const desc = String(card.__descInput?.value || "").trim();
+        const from = String(card.__fromInput?.value || "").trim();
+        const origKey = String(card.__origKey || "").trim();
+        const def = {};
+        if (type) def.type = type;
+        if (desc) def.desc = desc;
+        if (from) def.from = from;
+        defs[key] = def;
+        if (origKey && origKey !== key) renameMap[origKey] = key;
+      }
+      return { defs, renameMap };
+    }
+
+    function refreshFlowArgsInputFromRows() {
+      const defs = readArgDefRows();
+      const keys = Object.keys(defs).sort((a, b) => a.localeCompare(b, "zh-CN"));
+      $("flowArgsInput").value = keys.join(", ");
+      return keys;
+    }
+
     function readShellFiltersRows() {
       const box = $("flowFiltersBox");
       const out = [];
@@ -4472,22 +4845,15 @@
       $("flowDescInput").value = String(f.description || "");
       $("flowIdInput").value = String(f.id || "");
       $("flowCapsInput").value = (Array.isArray(f.capabilities) ? f.capabilities : []).join(", ");
-      const argKeys = Object.keys((f.args && typeof f.args === "object" && !Array.isArray(f.args)) ? f.args : {});
-      $("flowArgsInput").value = argKeys.join(", ");
       renderArgDefRows((f.args && typeof f.args === "object" && !Array.isArray(f.args)) ? f.args : {});
+      refreshFlowArgsInputFromRows();
       renderVarDefRows((f.vars && typeof f.vars === "object" && !Array.isArray(f.vars)) ? f.vars : {});
       renderShellFiltersRows(Array.isArray(f.filters) ? f.filters : []);
     }
 
     function syncArgDefsFromKeyInput() {
-      const keyList = parseCsv($("flowArgsInput").value);
-      const curDefs = readArgDefRows();
-      // Sync by key list strictly: keys removed from input are removed from defs.
-      const nextDefs = pickArgDefsByKeys(keyList, curDefs);
-      renderArgDefRows(nextDefs);
-      const outKeys = Object.keys(nextDefs);
-      $("flowArgsInput").value = outKeys.join(", ");
-      setStatus(`参数定义已同步（${outKeys.length}）`);
+      const outKeys = refreshFlowArgsInputFromRows();
+      setStatus(`参数键已刷新（${outKeys.length}）`);
     }
 
     function applyShellToFlow() {
@@ -4496,20 +4862,42 @@
       const desc = String($("flowDescInput").value || "").trim();
       const flowId = String($("flowIdInput").value || "").trim();
       const caps = parseCsv($("flowCapsInput").value);
-      const argKeys = parseCsv($("flowArgsInput").value);
       const filters = normalizeFilters(readShellFiltersRows());
       const oldArgs = (flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {};
       const rowArgs = readArgDefRows();
+      const argKeys = Object.keys(rowArgs);
       const oldVars = (flow.vars && typeof flow.vars === "object" && !Array.isArray(flow.vars)) ? flow.vars : {};
-      const rowVars = readVarDefRows();
+      const rowVarPack = readVarDefRowsWithRenameMeta();
+      const rowVars = rowVarPack.defs;
+      const renameMap = normalizePlainObject(rowVarPack.renameMap, {});
 
       if (flowId) flow.id = flowId;
       flow.capabilities = caps;
       flow.args = pickArgDefsByKeys(argKeys, { ...oldArgs, ...rowArgs });
-      flow.vars = normalizeVarDefs({ ...oldVars, ...rowVars });
-      $("flowArgsInput").value = Object.keys(flow.args || {}).join(", ");
+      flow.vars = normalizeVarDefs(rowVars);
+      $("flowArgsInput").value = Object.keys(flow.args || {}).sort((a, b) => a.localeCompare(b, "zh-CN")).join(", ");
       if (filters.length) flow.filters = filters;
       else delete flow.filters;
+
+      // Keep mock vars aligned with current flow vars, and migrate renamed keys.
+      const oldMockVars = normalizePlainObject(state.mockVars, {});
+      const nextMockVars = {};
+      const varKeys = Object.keys(flow.vars || {});
+      for (const key of varKeys) {
+        let value = getByDottedPath(oldMockVars, key);
+        if (value === undefined) {
+          for (const [oldKey, newKey] of Object.entries(renameMap)) {
+            if (String(newKey || "").trim() !== key) continue;
+            const moved = getByDottedPath(oldMockVars, oldKey);
+            if (moved !== undefined) {
+              value = moved;
+              break;
+            }
+          }
+        }
+        if (value !== undefined) setByDottedPath(nextMockVars, key, value);
+      }
+      state.mockVars = nextMockVars;
 
       if (goal) {
         flow.goal = goal;
@@ -4566,6 +4954,7 @@
 
     function setFlow(flowObj) {
       state.flow = normalizeFlow(flowObj);
+      syncMockArgsWithFlowDefaults(state.flow, { force: false });
       const liveIds = new Set((Array.isArray(state.flow?.steps) ? state.flow.steps : []).map((s) => String(s?.id || "").trim()).filter(Boolean));
       for (const key of Object.keys(state.stepDrafts || {})) {
         if (!liveIds.has(key)) delete state.stepDrafts[key];
@@ -4814,6 +5203,23 @@
           cid ? `contextId: ${cid}` : "",
           um ? `match: ${um}` : "",
         ].filter(Boolean).join(" | ");
+      }
+      if (t === "uploadfile") {
+        const q = shortText(action.query || "");
+        const by = shortText(action.by || "");
+        const files = Array.isArray(action.files) ? action.files.length : 0;
+        const mode = shortText(action.uploadMode || action.mode || "");
+        return [
+          q ? `query: ${q}` : "",
+          by ? `by: ${by}` : "",
+          files ? `files: ${files}` : "",
+          mode ? `mode: ${mode}` : "",
+        ].filter(Boolean).join(" | ");
+      }
+      if (t === "selector") {
+        const q = shortText(action.query || "");
+        const by = shortText(action.by || "");
+        return [q ? `query: ${q}` : "", by ? `by: ${by}` : ""].filter(Boolean).join(" | ");
       }
       return "";
     }
@@ -5463,6 +5869,17 @@
         ? String(a.ifLast || "")
         : "skip";
       $("fCloseActivateAfter").checked = (a.activateAfterClose !== false);
+      const uploadFiles = (() => {
+        if (Array.isArray(a.files)) return a.files;
+        if (a.file !== undefined && a.file !== null) return [a.file];
+        if (a.value !== undefined && a.value !== null) return [a.value];
+        return [];
+      })();
+      $("fUploadFiles").value = uploadFiles.length ? JSON.stringify(uploadFiles, null, 2) : "";
+      const uploadMode = String(a.uploadMode || a.mode || "").trim();
+      $("fUploadMode").value = ["chooser", "setFiles", "auto"].includes(uploadMode) ? uploadMode : "chooser";
+      $("fUploadTimeout").value = (a.timeoutMs == null) ? "" : String(a.timeoutMs);
+      $("fUploadSetFilesFallback").checked = (a.allowSetFilesFallback !== false);
       $("fPostWaitMs").value = (a.postWaitMs == null) ? "" : String(a.postWaitMs);
       $("fText").value = String(a.text || a.reason || a.conclusion || "");
       $("fKey").value = String(a.key || "");
@@ -5536,6 +5953,42 @@
         const ifLast = String($("fCloseIfLast").value || "skip").trim();
         if (ifLast && ifLast !== "skip") action.ifLast = ifLast;
         if (!$("fCloseActivateAfter").checked) action.activateAfterClose = false;
+      }
+      if (t === "uploadfile") {
+        action.type = "uploadFile";
+        if (by) action.by = by;
+        if (query) action.query = query;
+        if (strict && !action.by && !action.query) throw new Error("uploadFile 需要 query 或 by");
+        const filesRaw = parseUploadFilesInput($("fUploadFiles").value);
+        const files = [];
+        for (const one of filesRaw) {
+          if (typeof one === "string") {
+            const p = String(one || "").trim();
+            if (p) files.push(p);
+            continue;
+          }
+          const path = String(one?.path || "").trim();
+          const data = String(one?.data || "").trim();
+          if (path) {
+            files.push(path);
+            continue;
+          }
+          if (data) {
+            if (strict) throw new Error("当前执行器仅支持路径上传（path）；暂不支持 dataURL 上传");
+          }
+        }
+        if (strict && !files.length) throw new Error("uploadFile 需要 files（至少 1 个 path）");
+        if (files.length) action.files = files;
+        const mode = String($("fUploadMode").value || "").trim();
+        if (mode && mode !== "chooser") action.uploadMode = mode;
+        const timeoutMs = Number($("fUploadTimeout").value || 0);
+        if (timeoutMs > 0) action.timeoutMs = Math.floor(timeoutMs);
+        if (!$("fUploadSetFilesFallback").checked) action.allowSetFilesFallback = false;
+      }
+      if (t === "selector") {
+        if (by) action.by = by;
+        if (query) action.query = query;
+        if (strict && !action.by && !action.query) throw new Error("selector 需要 query 或 by");
       }
       if (t === "click") {
         if (by) action.by = by;
@@ -5729,6 +6182,7 @@
           if (!action || typeof action !== "object" || Array.isArray(action)) throw new Error("action JSON 无效");
           action.type = String(action.type || $("actionTypeSelect").value || "").trim();
           if (String(action.type).toLowerCase() === "closepage") action.type = "closePage";
+          if (String(action.type).toLowerCase() === "uploadfile") action.type = "uploadFile";
           if (!action.type) throw new Error("action.type 不能为空");
         } else {
           action = buildActionFromFields(true);
@@ -6158,8 +6612,8 @@
     async function pickSelectorForAction() {
       requireSession();
       const actionType = String($("actionTypeSelect").value || "").toLowerCase();
-      if (!["click", "input", "hover"].includes(actionType)) {
-        throw new Error("当前 action.type 不支持 Pick（仅 click / input / hover）");
+      if (!["selector", "click", "input", "hover", "uploadfile"].includes(actionType)) {
+        throw new Error("当前 action.type 不支持 Pick（仅 selector / click / input / hover / uploadFile）");
       }
       const btn = $("pickByBtn");
       btn.disabled = true;
@@ -6205,8 +6659,8 @@
     async function generateByFromQuery() {
       requireSession();
       const actionType = String($("actionTypeSelect").value || "").toLowerCase();
-      if (!["click", "input", "hover"].includes(actionType)) {
-        throw new Error("当前 action.type 不支持此功能（仅 click / input / hover）");
+      if (!["selector", "click", "input", "hover", "uploadfile"].includes(actionType)) {
+        throw new Error("当前 action.type 不支持此功能（仅 selector / click / input / hover / uploadFile）");
       }
       const query = String($("fQuery").value || "").trim();
       if (!query) throw new Error("请先填写 query");
@@ -6368,9 +6822,42 @@
       setActionRunResult({ running: true, stepId: stepForRun.id, actionType: stepForRun?.action?.type || "" });
       showBusyMask(`正在执行步骤：${stepForRun.id}...`, "working");
       try {
-        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-step`, { step: stepForRun });
+        const mock = readMockContextFromEditor(true);
+        state.mockArgs = mock.args;
+        state.mockVars = mock.vars;
+        state.mockLastResult = mock.lastResult;
+        const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-step`, {
+          step: stepForRun,
+          args: mock.args,
+          vars: mock.vars,
+          lastResult: mock.lastResult,
+          opts: {},
+        });
+        if (data && typeof data === "object") {
+          if (data.vars && typeof data.vars === "object" && !Array.isArray(data.vars)) {
+            state.mockVars = expandDottedObject(data.vars);
+          }
+          if (data.lastResult && typeof data.lastResult === "object" && !Array.isArray(data.lastResult)) {
+            state.mockLastResult = data.lastResult;
+          } else if (data.status) {
+            state.mockLastResult = {
+              status: String(data.status || "failed"),
+              reason: String(data.reason || ""),
+              value: data.value,
+            };
+          }
+          renderMockContextEditor();
+        }
         setActionRunResult(data);
-        setOutput(data);
+        const debugOut = (data && typeof data === "object") ? { ...data } : data;
+        if (debugOut && typeof debugOut === "object" && debugOut.vars && typeof debugOut.vars === "object" && !Array.isArray(debugOut.vars)) {
+          const keys = Object.keys(debugOut.vars || {}).map((k) => String(k || "").trim()).filter(Boolean);
+          debugOut.__debugVars = {
+            keysCount: keys.length,
+            keysPreview: keys.slice(0, 24),
+          };
+        }
+        setOutput(debugOut);
         setStatus(`执行完成：${data.status || "-"}`);
         showBusyMask(`步骤执行完成：${data.status || "done"}`, "success");
         await sleepMs(700);
@@ -6403,6 +6890,339 @@
         out[key] = spec.default;
       }
       return out;
+    }
+
+    function normalizePlainObject(v, fallback = {}) {
+      return (v && typeof v === "object" && !Array.isArray(v)) ? v : fallback;
+    }
+
+    function splitDottedKey(key) {
+      return String(key || "").split(".").map((x) => String(x || "").trim()).filter(Boolean);
+    }
+
+    function getByDottedPath(obj, key) {
+      const src = normalizePlainObject(obj, {});
+      const rawKey = String(key || "").trim();
+      if (!rawKey) return undefined;
+      if (Object.prototype.hasOwnProperty.call(src, rawKey)) return src[rawKey];
+      const parts = splitDottedKey(rawKey);
+      if (!parts.length) return undefined;
+      let cur = src;
+      for (const p of parts) {
+        if (!cur || typeof cur !== "object" || Array.isArray(cur)) return undefined;
+        if (!Object.prototype.hasOwnProperty.call(cur, p)) return undefined;
+        cur = cur[p];
+      }
+      return cur;
+    }
+
+    function setByDottedPath(obj, key, value) {
+      const out = normalizePlainObject(obj, {});
+      const parts = splitDottedKey(key);
+      if (!parts.length) return out;
+      if (parts.length === 1) {
+        out[parts[0]] = value;
+        return out;
+      }
+      let cur = out;
+      for (let i = 0; i < parts.length - 1; i += 1) {
+        const p = parts[i];
+        const old = cur[p];
+        if (!old || typeof old !== "object" || Array.isArray(old)) cur[p] = {};
+        cur = cur[p];
+      }
+      cur[parts[parts.length - 1]] = value;
+      return out;
+    }
+
+    function expandDottedObject(raw) {
+      const src = normalizePlainObject(raw, {});
+      const out = {};
+      for (const [k, v] of Object.entries(src)) {
+        const key = String(k || "").trim();
+        if (!key) continue;
+        setByDottedPath(out, key, v);
+      }
+      return out;
+    }
+
+    function mergePlainObjectDeep(base, ext) {
+      const a = normalizePlainObject(base, {});
+      const b = normalizePlainObject(ext, {});
+      const out = { ...a };
+      for (const [k, v] of Object.entries(b)) {
+        const key = String(k || "").trim();
+        if (!key) continue;
+        const old = out[key];
+        if (old && typeof old === "object" && !Array.isArray(old) && v && typeof v === "object" && !Array.isArray(v)) {
+          out[key] = mergePlainObjectDeep(old, v);
+        } else {
+          out[key] = v;
+        }
+      }
+      return out;
+    }
+
+    function collectDottedLeafPaths(node, prefix = "", out = []) {
+      if (Array.isArray(node)) {
+        if (prefix) out.push(prefix);
+        return out;
+      }
+      if (!node || typeof node !== "object") {
+        if (prefix) out.push(prefix);
+        return out;
+      }
+      const entries = Object.entries(node);
+      if (!entries.length) {
+        if (prefix) out.push(prefix);
+        return out;
+      }
+      for (const [k, v] of entries) {
+        const key = String(k || "").trim();
+        if (!key) continue;
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          collectDottedLeafPaths(v, path, out);
+        } else {
+          out.push(path);
+        }
+      }
+      return out;
+    }
+
+    function contextValueKind(typeRaw = "") {
+      const t = String(typeRaw || "").trim().toLowerCase();
+      if (!t) return "string";
+      if (t === "boolean" || t === "bool") return "boolean";
+      if (t === "number" || t === "int" || t === "integer" || t === "float" || t === "double") return "number";
+      if (t === "object" || t === "array" || t === "json" || t === "map" || t === "list") return "json";
+      return "string";
+    }
+
+    function renderContextRows(scope, defs = {}, values = {}) {
+      const box = scope === "vars" ? $("ctxVarsBox") : $("ctxArgsBox");
+      if (!box) return;
+      box.innerHTML = "";
+      const mapDefs = normalizePlainObject(defs, {});
+      const mapValues = normalizePlainObject(values, {});
+      const defKeys = Object.keys(mapDefs).map((k) => String(k || "").trim()).filter(Boolean);
+      const valueKeys = collectDottedLeafPaths(mapValues, "", []);
+      let sortedKeys = [];
+      if (scope === "vars") {
+        const all = new Set([...defKeys, ...valueKeys]);
+        sortedKeys = Array.from(all).filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
+      } else {
+        sortedKeys = (defKeys.length ? defKeys : valueKeys).sort((a, b) => a.localeCompare(b, "zh-CN"));
+      }
+      if (!sortedKeys.length) {
+        const empty = document.createElement("div");
+        empty.className = "tag";
+        empty.textContent = "当前 Flow 未定义该上下文键";
+        box.appendChild(empty);
+        return;
+      }
+      for (const key of sortedKeys) {
+        const spec = (mapDefs[key] && typeof mapDefs[key] === "object" && !Array.isArray(mapDefs[key])) ? mapDefs[key] : {};
+        const got = getByDottedPath(mapValues, key);
+        const hasValue = got !== undefined;
+        const rawValue = hasValue ? got : (Object.prototype.hasOwnProperty.call(spec, "default") ? spec.default : undefined);
+        let kind = contextValueKind(spec.type || "");
+        if (!spec.type && rawValue && typeof rawValue === "object") kind = "json";
+
+        const card = document.createElement("div");
+        card.className = "arg-card";
+        const keyRow = document.createElement("div");
+        keyRow.className = "arg-key-row";
+        const keyEl = document.createElement("div");
+        keyEl.className = "mono ctx-key-label";
+        keyEl.textContent = key;
+        const metaEl = document.createElement("div");
+        metaEl.className = "tag";
+        const reqTag = (scope === "args" && spec.required === true) ? "required" : "optional";
+        const typeTag = String(spec.type || kind || "string");
+        const fromTag = String(spec.from || "").trim();
+        metaEl.textContent = fromTag ? `${typeTag} | ${reqTag} | from:${fromTag}` : `${typeTag} | ${reqTag}`;
+        keyRow.appendChild(keyEl);
+        keyRow.appendChild(metaEl);
+        card.appendChild(keyRow);
+
+        const desc = String(spec.desc || "").trim();
+        if (desc) {
+          const descEl = document.createElement("div");
+          descEl.style.fontSize = "12px";
+          descEl.style.color = "#5b6d83";
+          descEl.textContent = desc;
+          card.appendChild(descEl);
+        }
+
+        let control = null;
+        if (kind === "boolean") {
+          const wrap = document.createElement("label");
+          wrap.className = "checkbox-inline";
+          const ck = document.createElement("input");
+          ck.type = "checkbox";
+          ck.checked = !!rawValue;
+          const span = document.createElement("span");
+          span.textContent = "true / false";
+          wrap.appendChild(ck);
+          wrap.appendChild(span);
+          control = ck;
+          card.appendChild(wrap);
+        } else if (kind === "number") {
+          const ipt = document.createElement("input");
+          ipt.type = "number";
+          ipt.placeholder = "number";
+          ipt.value = (rawValue === undefined || rawValue === null || rawValue === "") ? "" : String(rawValue);
+          control = ipt;
+          card.appendChild(ipt);
+        } else if (kind === "json") {
+          const ta = document.createElement("textarea");
+          ta.className = "mono";
+          ta.style.minHeight = "88px";
+          ta.placeholder = "JSON（可留空）";
+          if (rawValue === undefined) ta.value = "";
+          else ta.value = JSON.stringify(rawValue, null, 2);
+          control = ta;
+          card.appendChild(ta);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.className = "mono";
+          ta.style.minHeight = "72px";
+          ta.placeholder = "string（支持换行，可留空）";
+          ta.value = (rawValue === undefined || rawValue === null) ? "" : String(rawValue);
+          control = ta;
+          card.appendChild(ta);
+        }
+
+        card.__ctxKey = key;
+        card.__ctxKind = kind;
+        card.__ctxControl = control;
+        box.appendChild(card);
+      }
+    }
+
+    function readContextRows(scope, strict = true) {
+      const box = scope === "vars" ? $("ctxVarsBox") : $("ctxArgsBox");
+      const out = {};
+      for (const card of Array.from(box?.children || [])) {
+        const key = String(card.__ctxKey || "").trim();
+        const kind = String(card.__ctxKind || "string");
+        const ctrl = card.__ctxControl;
+        if (!key || !ctrl) continue;
+        if (kind === "boolean") {
+          setByDottedPath(out, key, ctrl.checked === true);
+          continue;
+        }
+        const raw = String(ctrl.value || "").trim();
+        if (!raw) continue;
+        if (kind === "number") {
+          const n = Number(raw);
+          if (!Number.isFinite(n)) {
+            if (strict) throw new Error(`Context.${scope}.${key} 不是合法 number`);
+            continue;
+          }
+          setByDottedPath(out, key, n);
+          continue;
+        }
+        if (kind === "json") {
+          let parsed = null;
+          try {
+            parsed = JSON.parse(raw);
+          } catch (_) {
+            if (strict) throw new Error(`Context.${scope}.${key} 不是合法 JSON`);
+            continue;
+          }
+          setByDottedPath(out, key, parsed);
+          continue;
+        }
+        setByDottedPath(out, key, raw);
+      }
+      return out;
+    }
+
+    function renderMockContextEditor() {
+      const flow = normalizePlainObject(state.flow, {});
+      const argDefs = normalizePlainObject(flow.args, {});
+      const varDefs = normalizePlainObject(flow.vars, {});
+      renderContextRows("args", argDefs, normalizePlainObject(state.mockArgs, {}));
+      renderContextRows("vars", varDefs, normalizePlainObject(state.mockVars, {}));
+      if (state.mockLastResult && typeof state.mockLastResult === "object" && !Array.isArray(state.mockLastResult)) {
+        $("mockLastResultInput").value = JSON.stringify(state.mockLastResult, null, 2);
+      } else {
+        $("mockLastResultInput").value = "null";
+      }
+      renderContextJsonPreviewFromState();
+    }
+
+    function readMockContextFromEditor(strict = true) {
+      const args = readContextRows("args", strict);
+      const vars = readContextRows("vars", strict);
+      const lastResultRaw = parseJsonText($("mockLastResultInput").value, null);
+      if (strict && lastResultRaw !== null && (!lastResultRaw || typeof lastResultRaw !== "object" || Array.isArray(lastResultRaw))) {
+        throw new Error("Context.lastResult 必须是 JSON Object 或 null");
+      }
+      const lastResult = (lastResultRaw && typeof lastResultRaw === "object" && !Array.isArray(lastResultRaw)) ? lastResultRaw : null;
+      return {
+        args,
+        vars,
+        lastResult,
+      };
+    }
+
+    function renderContextJsonPreviewFromState() {
+      const pre = $("ctxJsonPreviewPre");
+      if (!pre) return;
+      const pack = {
+        args: normalizePlainObject(state.mockArgs, {}),
+        vars: normalizePlainObject(state.mockVars, {}),
+        lastResult: (state.mockLastResult && typeof state.mockLastResult === "object" && !Array.isArray(state.mockLastResult))
+          ? state.mockLastResult
+          : null,
+      };
+      pre.textContent = JSON.stringify(pack, null, 2);
+    }
+
+    function refreshContextJsonPreviewFromEditor() {
+      const pre = $("ctxJsonPreviewPre");
+      if (!pre) return;
+      try {
+        const pack = readMockContextFromEditor(true);
+        pre.textContent = JSON.stringify(pack, null, 2);
+      } catch (err) {
+        pre.textContent = `Context 解析错误: ${String(err?.message || err)}`;
+      }
+    }
+
+    function syncMockArgsWithFlowDefaults(flow, { force = false } = {}) {
+      const defaults = expandDottedObject(buildRunFlowArgsFromDefaults(flow || {}));
+      const cur = normalizePlainObject(state.mockArgs, {});
+      state.mockArgs = force ? defaults : mergePlainObjectDeep(defaults, cur);
+      renderMockContextEditor();
+      renderContextJsonPreviewFromState();
+    }
+
+    function pullMockContextFromLastRun() {
+      const summary = (state.lastFlowRunStatus?.summary && typeof state.lastFlowRunStatus.summary === "object")
+        ? state.lastFlowRunStatus.summary
+        : null;
+      if (!summary) throw new Error("暂无可用的最近执行结果");
+      state.mockVars = expandDottedObject(normalizePlainObject(summary.vars, {}));
+      state.mockLastResult = (summary.lastResult && typeof summary.lastResult === "object" && !Array.isArray(summary.lastResult))
+        ? summary.lastResult
+        : null;
+      renderMockContextEditor();
+      renderContextJsonPreviewFromState();
+      setStatus("已加载最近执行结果到 Context");
+    }
+
+    function applyMockContextFromEditor() {
+      const next = readMockContextFromEditor(true);
+      state.mockArgs = next.args;
+      state.mockVars = next.vars;
+      state.mockLastResult = next.lastResult;
+      renderMockContextEditor();
+      renderContextJsonPreviewFromState();
+      setStatus("Context 已应用");
     }
 
     function fmtBrief(v, maxLen = 800) {
@@ -7172,7 +7992,7 @@
 
     function bindActionEditorEvents() {
       [
-        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
+        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fUploadFiles","fUploadMode","fUploadTimeout","fUploadSetFilesFallback","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
         "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
         "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
         "fBranchDefault","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput",
@@ -7399,6 +8219,44 @@
     $("openPageBtn").addEventListener("click", () => openPage().catch(failUi));
     $("activateBrowserBtn").addEventListener("click", () => activateSessionBrowser().catch(failUi));
     $("runFlowBtn").addEventListener("click", () => runFlowInSession().catch(failUi));
+    $("ctxLoadDefaultsBtn").addEventListener("click", () => {
+      try {
+        syncMockArgsWithFlowDefaults(state.flow || {}, { force: true });
+        showButtonTip($("ctxLoadDefaultsBtn"), "已填充", "ok");
+        setStatus("已用 Flow 默认值重置 Context.args");
+      } catch (err) {
+        failUi(err);
+      }
+    });
+    $("ctxPullRunBtn").addEventListener("click", () => {
+      try {
+        pullMockContextFromLastRun();
+        showButtonTip($("ctxPullRunBtn"), "已加载", "ok");
+      } catch (err) {
+        failUi(err);
+      }
+    });
+    $("ctxClearVarsBtn").addEventListener("click", () => {
+      state.mockVars = {};
+      state.mockLastResult = null;
+      renderMockContextEditor();
+      setStatus("已清空 Context.vars / lastResult");
+      showButtonTip($("ctxClearVarsBtn"), "已清空", "ok");
+    });
+    $("ctxApplyBtn").addEventListener("click", () => {
+      try {
+        applyMockContextFromEditor();
+        showButtonTip($("ctxApplyBtn"), "已应用", "ok");
+      } catch (err) {
+        failUi(err);
+      }
+    });
+    $("ctxArgsBox").addEventListener("input", () => refreshContextJsonPreviewFromEditor());
+    $("ctxArgsBox").addEventListener("change", () => refreshContextJsonPreviewFromEditor());
+    $("ctxVarsBox").addEventListener("input", () => refreshContextJsonPreviewFromEditor());
+    $("ctxVarsBox").addEventListener("change", () => refreshContextJsonPreviewFromEditor());
+    $("mockLastResultInput").addEventListener("input", () => refreshContextJsonPreviewFromEditor());
+    $("mockLastResultInput").addEventListener("change", () => refreshContextJsonPreviewFromEditor());
     const publishTabBtn = document.querySelector('.tabs[data-tab-group="right"] .tab[data-tab="right-publish"]');
     if (publishTabBtn) {
       publishTabBtn.addEventListener("click", () => {
@@ -7495,7 +8353,7 @@
       while (cur[key]) { idx += 1; key = `arg_${idx}`; }
       cur[key] = { type: "string", required: false, desc: "" };
       renderArgDefRows(cur);
-      $("flowArgsInput").value = Object.keys(cur).join(", ");
+      refreshFlowArgsInputFromRows();
     });
     $("addVarBtn").addEventListener("click", () => {
       const cur = readVarDefRows();
