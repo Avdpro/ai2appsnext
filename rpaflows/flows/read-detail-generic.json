@@ -75,8 +75,25 @@
         },
         "saveAs": "targetNorm",
         "next": {
-          "done": "route_target",
+          "done": "init_summary_cfg",
           "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "init_summary_cfg",
+        "desc": "规范化 summary 策略与模型（默认 ai + fast）",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(read){ function asText(v){ return String(v==null?'':v).trim(); } const r=(read&&typeof read==='object')?read:{}; const rawMode=asText(r.summaryMode).toLowerCase(); const mode=(rawMode==='rule' || rawMode==='auto' || rawMode==='ai') ? rawMode : 'ai'; const model=asText(r.summaryModel||'fast') || 'fast'; return { mode, model }; }",
+          "args": [
+            "${read}"
+          ]
+        },
+        "saveAs": "summaryCfg",
+        "next": {
+          "done": "route_target",
+          "failed": "route_target"
         }
       },
       {
@@ -148,7 +165,7 @@
         },
         "saveAs": "detailOut",
         "next": {
-          "done": "done",
+          "done": "route_summary_enhance",
           "failed": "extract_page_level"
         }
       },
@@ -169,7 +186,7 @@
         },
         "saveAs": "detailOut",
         "next": {
-          "done": "done",
+          "done": "route_summary_enhance",
           "failed": "extract_page_level"
         }
       },
@@ -206,7 +223,7 @@
         },
         "saveAs": "detailOut",
         "next": {
-          "done": "done",
+          "done": "route_summary_enhance",
           "failed": "ai_fallback_detail"
         }
       },
@@ -215,7 +232,7 @@
         "desc": "页面/target 提取失败时，用 run_ai 兜底抽取 detail",
         "action": {
           "type": "run_ai",
-          "model": "balanced",
+          "model": "${{ (args && args.read && args.read.summaryModel) || 'fast' }}",
           "prompt": "你是网页详情提取器。请基于输入 page 上下文与 target 信息提取单条 detail，严格返回 JSON envelope。status='ok' 时 result 必须是对象：{url:string,title:string,summary:string,content:string,author:string,time:string,id:string}。无法判断的字段用空字符串。",
           "input": {
             "target": "${read.target}",
@@ -290,8 +307,289 @@
         },
         "saveAs": "detailOut",
         "next": {
-          "done": "done",
+          "done": "route_summary_enhance",
           "failed": "abort_failed"
+        }
+      },
+      {
+        "id": "route_summary_enhance",
+        "desc": "按 summaryMode 决定是否用 AI 生成/改写 summary",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(detailOut, read, cfg){ function asText(v){ return String(v==null?'':v).trim(); } const out=(detailOut&&typeof detailOut==='object')?detailOut:{}; const data=(out.data&&typeof out.data==='object')?out.data:{}; const fields=Array.isArray(read&&read.fields)?read.fields.map((x)=>asText(x)).filter(Boolean):[]; const needSummaryField=(!fields.length) || fields.includes('summary') || fields.includes('content') || fields.includes('article') || fields.includes('text'); const mode=asText(cfg&&cfg.mode).toLowerCase() || 'ai'; const summary=asText(data.summary); const content=asText(data.content || data.article || data.text); const weakSummary = !summary || summary.length < 48; const richContent = content.length >= 220; const needByAuto = weakSummary && richContent; const needAI = needSummaryField && (mode === 'ai' || (mode === 'auto' && needByAuto)); return { mode, needAI, model: asText(cfg&&cfg.model||'fast') || 'fast', weakSummary, richContent }; }",
+          "args": [
+            "${{ vars.detailOut || {} }}",
+            "${{ args.read || {} }}",
+            "${{ vars.summaryCfg || {} }}"
+          ]
+        },
+        "saveAs": "summaryPlan",
+        "next": {
+          "done": "route_summary_enhance_branch",
+          "failed": "done"
+        }
+      },
+      {
+        "id": "route_summary_enhance_branch",
+        "desc": "summaryMode=rule 或 auto 判定不需要 AI 时直接返回",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "summaryPlan.needAI"
+              },
+              "to": "route_explore_gate"
+            }
+          ],
+          "default": "done"
+        },
+        "next": {}
+      },
+      {
+        "id": "route_explore_gate",
+        "desc": "开启 allowExplore 且有 summaryQuery 时，先由 AI 判断是否需要 find.until",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(read, summaryPlan, meta){ function asText(v){ return String(v==null?'':v).trim(); } function asBool(v){ if(v===true) return true; const s=asText(v).toLowerCase(); return s==='1'||s==='true'||s==='yes'||s==='on'; } const r=(read&&typeof read==='object')?read:{}; const sp=(summaryPlan&&typeof summaryPlan==='object')?summaryPlan:{}; const m=(meta&&typeof meta==='object')?meta:{}; const summaryQuery=asText(r.summaryQuery); const allowExplore=asBool(r.allowExplore); const alreadyTried=!!m.exploreAttempted; const canPlan = !!(allowExplore && summaryQuery && !alreadyTried && sp.needAI); return { allowExplore, summaryQuery, alreadyTried, canPlan }; }",
+          "args": [
+            "${{ args.read || {} }}",
+            "${{ vars.summaryPlan || {} }}",
+            "${{ vars.detailOut && vars.detailOut.meta || {} }}"
+          ]
+        },
+        "saveAs": "exploreGate",
+        "next": {
+          "done": "route_explore_gate_branch",
+          "failed": "summary_ai_refine"
+        }
+      },
+      {
+        "id": "route_explore_gate_branch",
+        "desc": "仅在满足开关与 query 条件时进入探索判定",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "exploreGate.canPlan"
+              },
+              "to": "ai_plan_explore"
+            }
+          ],
+          "default": "summary_ai_refine"
+        },
+        "next": {}
+      },
+      {
+        "id": "ai_plan_explore",
+        "desc": "AI 判断是否需要先探索页面（find.until）",
+        "action": {
+          "type": "run_ai",
+          "model": "${{ (vars.summaryPlan && vars.summaryPlan.model) || 'fast' }}",
+          "prompt": "你是网页信息补全规划器。任务：判断为了回答 summaryQuery，是否需要先执行页面探索。严格返回 JSON：{needExplore:boolean,reason:string,goal:string,maxSteps:number,allowedActions:string[]}。规则：1) 若现有 summary/content 足够回答，needExplore=false；2) needExplore=true 时，goal 必须具体、可验证；3) maxSteps 建议 1~5；4) allowedActions 仅可包含 click/scroll/goto；5) 不输出额外文本。",
+          "input": {
+            "summaryQuery": "${{ vars.exploreGate && vars.exploreGate.summaryQuery }}",
+            "query": "${query}",
+            "summaryPlan": "${{ vars.summaryPlan || {} }}",
+            "detail": "${{ vars.detailOut && vars.detailOut.data || {} }}"
+          },
+          "schema": {
+            "type": "object",
+            "required": [
+              "needExplore",
+              "reason",
+              "goal",
+              "maxSteps",
+              "allowedActions"
+            ],
+            "properties": {
+              "needExplore": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              },
+              "maxSteps": {
+                "type": "number"
+              },
+              "allowedActions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "saveAs": "exploreAIPlanOut",
+        "next": {
+          "done": "merge_explore_plan",
+          "failed": "summary_ai_refine"
+        }
+      },
+      {
+        "id": "merge_explore_plan",
+        "desc": "规范化探索计划（步数/动作白名单）",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(gate, aiPlan, read){ function asText(v){ return String(v==null?'':v).trim(); } function asBool(v){ if(v===true) return true; const s=asText(v).toLowerCase(); return s==='1'||s==='true'||s==='yes'||s==='on'; } function asNum(v,d,min,max){ let n=Number(v); if(!Number.isFinite(n)) n=d; if(Number.isFinite(min)) n=Math.max(min,n); if(Number.isFinite(max)) n=Math.min(max,n); return n; } const g=(gate&&typeof gate==='object')?gate:{}; const a=(aiPlan&&typeof aiPlan==='object')?aiPlan:{}; const r=(read&&typeof read==='object')?read:{}; const allowedRaw = Array.isArray(a.allowedActions) ? a.allowedActions : []; const allowedAll = ['click','scroll','goto']; const allowed=[]; const seen=new Set(); for(const one of allowedRaw){ const k=asText(one).toLowerCase(); if(!allowedAll.includes(k) || seen.has(k)) continue; seen.add(k); allowed.push(k); } const needExplore = asBool(a.needExplore); const goal = asText(a.goal || g.summaryQuery || ''); const maxByRead = asNum(r.exploreMaxSteps, 3, 1, 5); const maxByAI = asNum(a.maxSteps, maxByRead, 1, 5); return { needExplore: !!(g.canPlan && needExplore && goal), reason: asText(a.reason || ''), goal, maxSteps: maxByAI, allowedActions: allowed.length ? allowed : ['click','scroll','goto'] }; }",
+          "args": [
+            "${{ vars.exploreGate || {} }}",
+            "${{ vars.exploreAIPlanOut || {} }}",
+            "${{ args.read || {} }}"
+          ]
+        },
+        "saveAs": "explorePlan",
+        "next": {
+          "done": "route_explore_plan_branch",
+          "failed": "summary_ai_refine"
+        }
+      },
+      {
+        "id": "route_explore_plan_branch",
+        "desc": "决定是否执行 find.until",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "explorePlan.needExplore"
+              },
+              "to": "mark_explore_attempted"
+            }
+          ],
+          "default": "summary_ai_refine"
+        },
+        "next": {}
+      },
+      {
+        "id": "mark_explore_attempted",
+        "desc": "标记已尝试探索，避免重复循环",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(detailOut, plan){ const out=(detailOut&&typeof detailOut==='object')?{...detailOut}:{}; const meta=(out.meta&&typeof out.meta==='object')?{...out.meta}:{}; const p=(plan&&typeof plan==='object')?plan:{}; meta.exploreAttempted = true; meta.exploreUsed = true; meta.exploreStatus = 'planned'; meta.exploreReason = String(p.reason || ''); meta.exploreGoal = String(p.goal || ''); out.meta = meta; return out; }",
+          "args": [
+            "${{ vars.detailOut || {} }}",
+            "${{ vars.explorePlan || {} }}"
+          ]
+        },
+        "saveAs": "detailOut",
+        "next": {
+          "done": "invoke_find_until",
+          "failed": "invoke_find_until"
+        }
+      },
+      {
+        "id": "invoke_find_until",
+        "desc": "执行 find.until 进行页面探索（best-effort）",
+        "action": {
+          "type": "invoke",
+          "target": "find_until_generic",
+          "args": {
+            "find": {
+              "goal": "${{ vars.explorePlan && vars.explorePlan.goal }}",
+              "maxSteps": "${{ vars.explorePlan && vars.explorePlan.maxSteps }}",
+              "allowedActions": "${{ vars.explorePlan && vars.explorePlan.allowedActions }}"
+            }
+          },
+          "onError": "return",
+          "returnTo": "caller"
+        },
+        "saveAs": "exploreInvokeOut",
+        "next": {
+          "done": "finalize_explore_meta",
+          "failed": "finalize_explore_meta"
+        }
+      },
+      {
+        "id": "finalize_explore_meta",
+        "desc": "记录探索执行结果并回到提取流程",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(detailOut, invokeOut){ const out=(detailOut&&typeof detailOut==='object')?{...detailOut}:{}; const meta=(out.meta&&typeof out.meta==='object')?{...out.meta}:{}; const iv=(invokeOut&&typeof invokeOut==='object')?invokeOut:{}; const found = iv.found===true || iv.ok===true || (iv.value&&iv.value.found===true); meta.exploreStatus = found ? 'done' : 'failed'; meta.exploreFound = !!found; out.meta = meta; return out; }",
+          "args": [
+            "${{ vars.detailOut || {} }}",
+            "${{ vars.exploreInvokeOut || {} }}"
+          ]
+        },
+        "saveAs": "detailOut",
+        "next": {
+          "done": "route_target",
+          "failed": "route_target"
+        }
+      },
+      {
+        "id": "summary_ai_refine",
+        "desc": "使用便宜模型对 summary 做统一提炼",
+        "action": {
+          "type": "run_ai",
+          "model": "${{ (vars.summaryPlan && vars.summaryPlan.model) || 'fast' }}",
+          "prompt": "你是网页内容摘要助手。请基于给定标题与正文，返回 JSON：{summary:string}。若提供了 summaryQuery，请优先围绕该问题作答，尽量给出直接结论与关键依据；若信息不足，请明确说明不确定点。要求中文，2~4句，信息密度高，不要编造事实，不要输出 markdown。",
+          "input": {
+            "url": "${vars.detailOut.data.url}",
+            "title": "${vars.detailOut.data.title}",
+            "summary": "${vars.detailOut.data.summary}",
+            "content": "${vars.detailOut.data.content}",
+            "query": "${query}",
+            "summaryQuery": "${{ args.read && args.read.summaryQuery }}"
+          },
+          "schema": {
+            "type": "object",
+            "required": [
+              "summary"
+            ],
+            "properties": {
+              "summary": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "saveAs": "summaryAIOut",
+        "next": {
+          "done": "merge_summary_ai",
+          "failed": "done"
+        }
+      },
+      {
+        "id": "merge_summary_ai",
+        "desc": "把 AI summary 写回 detailOut",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(detailOut, aiOut){ function asText(v){ return String(v==null?'':v).trim(); } const out=(detailOut&&typeof detailOut==='object')?detailOut:{}; const data=(out.data&&typeof out.data==='object')?{...out.data}:{}; const ai=(aiOut&&typeof aiOut==='object')?aiOut:{}; const s=asText(ai.summary); if(s) data.summary=s; const meta=(out.meta&&typeof out.meta==='object')?{...out.meta}:{}; meta.summaryBy = s ? 'ai' : (meta.summaryBy || 'rule'); return { ...out, data, meta }; }",
+          "args": [
+            "${{ vars.detailOut || {} }}",
+            "${{ vars.summaryAIOut || {} }}"
+          ]
+        },
+        "saveAs": "detailOut",
+        "next": {
+          "done": "done",
+          "failed": "done"
         }
       },
       {
@@ -343,6 +641,41 @@
         "type": "object",
         "desc": "AI 兜底结果",
         "from": "ai_fallback_detail.saveAs"
+      },
+      "summaryCfg": {
+        "type": "object",
+        "desc": "summary 策略与模型配置",
+        "from": "init_summary_cfg.saveAs"
+      },
+      "summaryPlan": {
+        "type": "object",
+        "desc": "是否需要 AI 摘要增强",
+        "from": "route_summary_enhance.saveAs"
+      },
+      "exploreGate": {
+        "type": "object",
+        "desc": "探索开关与条件判定",
+        "from": "route_explore_gate.saveAs"
+      },
+      "exploreAIPlanOut": {
+        "type": "object",
+        "desc": "AI 返回的探索计划草案",
+        "from": "ai_plan_explore.saveAs"
+      },
+      "explorePlan": {
+        "type": "object",
+        "desc": "规范化后的探索计划",
+        "from": "merge_explore_plan.saveAs"
+      },
+      "exploreInvokeOut": {
+        "type": "object",
+        "desc": "find.until 探索结果",
+        "from": "invoke_find_until.saveAs"
+      },
+      "summaryAIOut": {
+        "type": "object",
+        "desc": "AI 摘要结果",
+        "from": "summary_ai_refine.saveAs"
       },
       "detailOut": {
         "type": "object",

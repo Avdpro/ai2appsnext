@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "url";
 import { createFlowLogger } from "../rpaflows/FlowLogger.mjs";
 import {
 	getDefaultBuilderFlowsDir,
+	listBuilderFlowEntries,
 	listSavedBuilderFlows,
 	loadSavedBuilderFlowFromPath,
 	saveBuilderFlowToFile,
@@ -14,28 +15,130 @@ import {
 } from "../rpaflows/FlowBuilderCore.mjs";
 import { resolveSelectorByAI, runAIAction } from "../rpaflows/FlowAIResolver.mjs";
 import { runFlowAgent } from "../rpaflows/flow-agent/index.mjs";
-import rpaKindSpec from "../agentspec/kinds/rpa.mjs";
+import rpaKindSpec from "../rpaflows/rpa.mjs";
 import { execRunJsAction, parseFlowVal } from "../rpaflows/FlowExpr.mjs";
 import { runFlow } from "../rpaflows/FlowRunner.mjs";
+import { runGoalDrivenLoop } from "../rpaflows/FlowGoalDrivenLoop.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathLib.dirname(__filename);
 const PROJECT_ROOT = pathLib.resolve(__dirname, "..");
 const BUILDER_PAGE_PATH = pathLib.join(PROJECT_ROOT, "public", "rpaflows", "builder.html");
+const RUNNER_PAGE_PATH = pathLib.join(PROJECT_ROOT, "public", "rpaflows", "runner.html");
+const HOME_PAGE_PATH = pathLib.join(PROJECT_ROOT, "public", "rpaflows", "home.html");
+const CONFIG_PAGE_PATH = pathLib.join(PROJECT_ROOT, "public", "rpaflows", "config.html");
 const BUILDER_LOG_DIR = process.env.FLOW_LOG_DIR || pathLib.join(PROJECT_ROOT, "rpaflows", "flow-logs");
 const BUILDER_FLOWS_DIR = getDefaultBuilderFlowsDir();
+const BUILDER_UPLOADS_DIR = pathLib.join(PROJECT_ROOT, "rpaflows", "uploads");
 const AGENT_KIND_DIR = pathLib.join(PROJECT_ROOT, "agentspec", "kinds");
-const BUILDER_ROUTES_BUILD_TAG = "builder-routes-2026-03-24-publish-tab-v1";
+const BUILDER_ROUTES_BUILD_TAG = "builder-routes-2026-04-07-profile-run-queue-v1";
 const kindSpecCache = new Map();
 const flowRunStateBySession = new Map();
+const goalRunStateBySession = new Map();
+const profileRunSlotTailByAlias = new Map();
 
 function nowIso() {
 	return new Date().toISOString();
 }
 
+async function acquireProfileRunSlot(aliasKey) {
+	const key = asText(aliasKey || "");
+	if (!key) throw new Error("profile alias is required for run slot");
+	const prevTail = profileRunSlotTailByAlias.get(key) || Promise.resolve();
+	let releaseRaw = null;
+	const hold = new Promise((resolve) => {
+		releaseRaw = resolve;
+	});
+	const nextTail = prevTail.catch(() => {}).then(() => hold);
+	profileRunSlotTailByAlias.set(key, nextTail);
+	await prevTail.catch(() => {});
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		try { releaseRaw?.(); } catch (_) {}
+		if (profileRunSlotTailByAlias.get(key) === nextTail) {
+			profileRunSlotTailByAlias.delete(key);
+		}
+	};
+}
+
+function safeSessionId(v) {
+	const s = asText(v || "").trim();
+	if (!s) return "";
+	return s.replace(/[^a-zA-Z0-9_-]/g, "");
+}
+
+function sanitizeUploadName(name, fallbackExt = ".bin") {
+	let base = pathLib.basename(asText(name || "") || "file");
+	base = base.replace(/[^\w.\-()+ ]+/g, "_").trim();
+	if (!base) base = "file";
+	base = base.replace(/\s+/g, "_");
+	if (base.length > 96) {
+		const ext = pathLib.extname(base);
+		const stem = base.slice(0, Math.max(1, 96 - ext.length));
+		base = `${stem}${ext}`;
+	}
+	if (!pathLib.extname(base) && fallbackExt) {
+		base = `${base}${fallbackExt}`;
+	}
+	return base;
+}
+
+function guessExtFromMime(mime) {
+	const m = asText(mime || "").toLowerCase();
+	if (!m) return ".bin";
+	if (m === "image/jpeg") return ".jpg";
+	if (m === "image/png") return ".png";
+	if (m === "image/webp") return ".webp";
+	if (m === "image/gif") return ".gif";
+	if (m === "image/bmp") return ".bmp";
+	if (m === "image/svg+xml") return ".svg";
+	if (m === "video/mp4") return ".mp4";
+	if (m === "video/quicktime") return ".mov";
+	if (m === "application/pdf") return ".pdf";
+	if (m === "text/plain") return ".txt";
+	return ".bin";
+}
+
+function toUploadBuffer(raw) {
+	if (typeof raw !== "string") return null;
+	const s = raw.trim();
+	if (!s) return null;
+	const m = s.match(/^data:([^;]+);base64,(.+)$/i);
+	try {
+		if (m) return Buffer.from(String(m[2] || ""), "base64");
+		return Buffer.from(s, "base64");
+	} catch (_) {
+		return null;
+	}
+}
+
+function getSessionUploadsDir(sessionId) {
+	const sid = safeSessionId(sessionId);
+	if (!sid) return "";
+	return pathLib.join(BUILDER_UPLOADS_DIR, sid);
+}
+
+async function cleanupSessionUploads(sessionId) {
+	const dir = getSessionUploadsDir(sessionId);
+	if (!dir) return false;
+	try {
+		await fs.promises.rm(dir, { recursive: true, force: true });
+		return true;
+	} catch (_) {
+		return false;
+	}
+}
+
 function newFlowRunId() {
 	const rnd = Math.random().toString(36).slice(2, 8);
 	return `fr_${Date.now().toString(36)}_${rnd}`;
+}
+
+function newGoalRunId() {
+	const rnd = Math.random().toString(36).slice(2, 8);
+	return `gr_${Date.now().toString(36)}_${rnd}`;
 }
 
 function cloneJson(v, fallback = null) {
@@ -44,7 +147,7 @@ function cloneJson(v, fallback = null) {
 
 function normalizeFlowRunStatus(status) {
 	const s = asText(status || "failed").toLowerCase();
-	if (s === "running" || s === "done" || s === "failed" || s === "timeout" || s === "skipped") return s;
+	if (s === "running" || s === "done" || s === "failed" || s === "timeout" || s === "skipped" || s === "aborted") return s;
 	return "failed";
 }
 
@@ -91,10 +194,33 @@ function onFlowRunLog(state, level, event, data = {}) {
 			endedAt: ts,
 			elapsedMs: Number(state.currentStepStartedAt || 0) > 0 ? Math.max(0, ts - Number(state.currentStepStartedAt || 0)) : null,
 		};
+		if (String(rec.actionType || "").toLowerCase() === "invoke") {
+			const m = state.invokeMetaByStepId && rec.stepId ? state.invokeMetaByStepId[rec.stepId] : null;
+			if (m && typeof m === "object") {
+				rec.invokeFlowId = asText(m.flowId || "");
+				rec.invokeEntryId = asText(m.entryId || "");
+				rec.invokeSource = asText(m.source || "");
+				rec.invokeSourceRef = asText(m.sourceRef || "");
+			}
+		}
 		state.steps.push(rec);
 		state.currentStepId = "";
 		state.currentActionType = "";
 		state.currentStepStartedAt = 0;
+		return;
+	}
+	if (ev === "invoke.start") {
+		const sid = asText(data.stepId || state.currentStepId || "");
+		if (!sid) return;
+		const meta = {
+			flowId: asText(data.targetFlowId || data.flowId || ""),
+			entryId: asText(data.targetEntryId || data.entryId || ""),
+			source: asText(data.source || ""),
+			sourceRef: asText(data.sourceRef || ""),
+			at: nowIso(),
+		};
+		if (!state.invokeMetaByStepId || typeof state.invokeMetaByStepId !== "object") state.invokeMetaByStepId = {};
+		state.invokeMetaByStepId[sid] = meta;
 		return;
 	}
 	if (ev === "run_ai.start") {
@@ -138,6 +264,9 @@ function buildFlowRunSummary(state) {
 	const status = normalizeFlowRunStatus(result.status || state?.status || "failed");
 	const ai = state?.ai && typeof state.ai === "object" ? state.ai : {};
 	const queryCache = state?.queryCache && typeof state.queryCache === "object" ? state.queryCache : { hits: 0, misses: 0, events: [] };
+		const invokeByStep = (state?.invokeMetaByStepId && typeof state.invokeMetaByStepId === "object")
+			? cloneJson(state.invokeMetaByStepId, {})
+			: {};
 		return {
 			ok: status === "done",
 			status,
@@ -162,9 +291,43 @@ function buildFlowRunSummary(state) {
 			},
 			vars: cloneJson((result && typeof result.vars === "object" && !Array.isArray(result.vars)) ? result.vars : {}, {}),
 			lastResult: cloneJson((result && result.lastResult && typeof result.lastResult === "object" && !Array.isArray(result.lastResult)) ? result.lastResult : null, null),
-			runMeta: cloneJson(result.meta || null, null),
+			runMeta: {
+				...(cloneJson(result.meta || null, {}) || {}),
+				invokeByStep,
+			},
 		};
 	}
+
+function normalizeGoalRunStatus(status) {
+	const s = asText(status || "failed").toLowerCase();
+	if (s === "running" || s === "done" || s === "failed" || s === "aborted" || s === "max_steps") return s;
+	return "failed";
+}
+
+function buildGoalRunSummary(state) {
+	const startedAt = Number(state?.startedAt || 0);
+	const endedAt = Number(state?.endedAt || Date.now());
+	const elapsedMs = Math.max(0, endedAt - (startedAt || endedAt));
+	const result = state?.result && typeof state.result === "object" ? state.result : {};
+	const status = normalizeGoalRunStatus(result.status || state?.status || "failed");
+	return {
+		ok: status === "done",
+		status,
+		elapsedMs,
+		startedAt: state?.startedAtIso || "",
+		endedAt: state?.endedAtIso || nowIso(),
+		runId: asText(state?.runId || ""),
+		reason: asText(result.reason || state?.error || ""),
+		stepsUsed: Number(result?.stepsUsed || 0),
+		currentStepId: asText(state?.currentStepId || ""),
+		currentActionType: asText(state?.currentActionType || ""),
+		history: Array.isArray(state?.steps) ? state.steps : [],
+		value: result?.value,
+		ctx: cloneJson(result?.ctx || null, null),
+		lastResult: cloneJson(result?.lastResult || null, null),
+		autoClose: cloneJson(state?.autoClose || null, null),
+	};
+}
 
 let builderLoggerPromise = null;
 async function getBuilderLogger() {
@@ -524,8 +687,305 @@ function toObject(v, fallback = {}) {
 	return fallback;
 }
 
+function parseBool(raw, fallback = false) {
+	if (raw === undefined || raw === null || raw === "") return !!fallback;
+	if (typeof raw === "boolean") return raw;
+	if (typeof raw === "number") return Number.isFinite(raw) ? raw !== 0 : !!fallback;
+	const s = asText(raw).toLowerCase();
+	if (!s) return !!fallback;
+	if (["1", "true", "yes", "y", "on"].includes(s)) return true;
+	if (["0", "false", "no", "n", "off"].includes(s)) return false;
+	return !!fallback;
+}
+
+async function listLivePagesBestEffort(webRpa, fallbackPage = null) {
+	const out = [];
+	const seen = new Set();
+	const pushOne = (p) => {
+		if (!p || typeof p !== "object") return;
+		const cid = asText(p.context || "");
+		if (!cid || seen.has(cid)) return;
+		seen.add(cid);
+		out.push(p);
+	};
+	try {
+		if (webRpa?.browser && typeof webRpa.browser.getPages === "function") {
+			const pages = await webRpa.browser.getPages();
+			for (const p of (Array.isArray(pages) ? pages : [])) pushOne(p);
+		}
+	} catch (_) {}
+	if (!out.length && Array.isArray(webRpa?.sessionPages)) {
+		for (const p of webRpa.sessionPages) pushOne(p);
+	}
+	pushOne(webRpa?.currentPage || null);
+	pushOne(fallbackPage || null);
+	return out;
+}
+
+function isAboutBlankUrl(url) {
+	const u = asText(url).toLowerCase();
+	return u === "about:blank" || u.startsWith("about:blank#");
+}
+
+async function snapshotPageBaselines(webRpa, fallbackPage = null) {
+	const pages = await listLivePagesBestEffort(webRpa, fallbackPage);
+	const out = [];
+	for (const p of pages) {
+		const contextId = asText(p?.context || "");
+		if (!contextId) continue;
+		let url = "";
+		try { url = asText(await p.url()); } catch (_) {}
+		out.push({ contextId, url });
+	}
+	return out;
+}
+
+async function closeOpenedPagesAfterGoalRun({
+	webRpa,
+	fallbackPage = null,
+	baselinePages = null,
+	logger = null,
+} = {}) {
+	const baselineList = Array.isArray(baselinePages) ? baselinePages : [];
+	const baseline = new Set();
+	const baselineUrlByCtx = new Map();
+	for (const one of baselineList) {
+		const cid = asText(one?.contextId || one?.id || one?.context || "");
+		if (!cid) continue;
+		baseline.add(cid);
+		baselineUrlByCtx.set(cid, asText(one?.url || ""));
+	}
+	const pages = await listLivePagesBestEffort(webRpa, fallbackPage);
+	const toClose = pages.filter((p) => {
+		const cid = asText(p?.context || "");
+		return !!cid && !baseline.has(cid);
+	});
+	const closed = [];
+	const failed = [];
+	const resetToBlank = [];
+	const resetFailed = [];
+	for (const p of toClose) {
+		const cid = asText(p?.context || "");
+		if (!cid) continue;
+		try {
+			await webRpa?.closePage?.(p);
+			closed.push(cid);
+		} catch (e) {
+			failed.push({ contextId: cid, reason: asText(e?.message || e) });
+		}
+	}
+	let remainPages = await listLivePagesBestEffort(webRpa, fallbackPage);
+	let remainCount = remainPages.length;
+	for (const p of remainPages) {
+		const cid = asText(p?.context || "");
+		if (!cid || !baseline.has(cid)) continue;
+		const oldUrl = baselineUrlByCtx.get(cid) || "";
+		if (!isAboutBlankUrl(oldUrl)) continue;
+		let curUrl = "";
+		try { curUrl = asText(await p.url()); } catch (_) {}
+		if (!curUrl || isAboutBlankUrl(curUrl)) continue;
+		if (remainCount > 1) {
+			try {
+				await webRpa?.closePage?.(p);
+				closed.push(cid);
+				remainCount = Math.max(0, remainCount - 1);
+			} catch (e) {
+				resetFailed.push({ contextId: cid, reason: asText(e?.message || e) });
+			}
+			continue;
+		}
+		try {
+			await p.goto("about:blank", { timeout: 15000 });
+			resetToBlank.push(cid);
+		} catch (e) {
+			resetFailed.push({ contextId: cid, reason: asText(e?.message || e) });
+		}
+	}
+	remainPages = await listLivePagesBestEffort(webRpa, fallbackPage);
+	let activatedContextId = "";
+	const activeCtx = asText(webRpa?.currentPage?.context || "");
+	const aliveSet = new Set(remainPages.map((p) => asText(p?.context || "")).filter(Boolean));
+	if (!activeCtx || !aliveSet.has(activeCtx)) {
+		const preferred = remainPages.find((p) => baseline.has(asText(p?.context || ""))) || remainPages[0] || null;
+		if (preferred) {
+			try { webRpa?.setCurrentPage?.(preferred); } catch (_) {}
+			try { await webRpa?.browser?.activate?.(); } catch (_) {}
+			try { await preferred?.bringToFront?.({ focusBrowser: true }); } catch (_) {}
+			activatedContextId = asText(preferred?.context || "");
+		}
+	}
+	await logger?.info?.("goal.run.autoclose.pages", {
+		baselineCount: baseline.size,
+		closedCount: closed.length,
+		failedCount: failed.length + resetFailed.length,
+		closedContextIds: closed,
+		resetToBlankCount: resetToBlank.length,
+		resetToBlankContextIds: resetToBlank,
+		failed: [...failed, ...resetFailed],
+		activatedContextId,
+	});
+	return {
+		closedContextIds: closed,
+		resetToBlankContextIds: resetToBlank,
+		failed: [...failed, ...resetFailed],
+		activatedContextId,
+	};
+}
+
 function fail(res, status, reason) {
 	res.status(status).json({ ok: false, reason: asText(reason || "request failed") });
+}
+
+const USER_ENV_KEYS = [
+	{ key: "RPAFLOWS", desc: "启用 RPA Flows Web 功能", scope: "app", defaultValue: "true" },
+	{ key: "FLOW_BUILDER_MAX_SESSIONS", desc: "最大并发 Session 数", scope: "app", defaultValue: "5" },
+	{ key: "FLOW_BUILDER_IDLE_TIMEOUT_MS", desc: "Session 空闲自动清理时间（毫秒）", scope: "app", defaultValue: "1800000" },
+	{ key: "OPENAI_API_KEY", desc: "内置 AI 调用密钥", scope: "app", defaultValue: "" },
+	{ key: "OPENROUTER_API_KEY", desc: "OpenRouter 调用密钥（可选）", scope: "app", defaultValue: "" },
+	{ key: "FLOW_AGENT_CODEX_CMD", desc: "Codex CLI 命令（默认 codex）", scope: "app", defaultValue: "codex" },
+	{ key: "FLOW_AGENT_CC_CMD", desc: "Claude Code CLI 命令（默认 claude）", scope: "app", defaultValue: "claude" },
+	{ key: "AI_PROVIDER", desc: "默认 AI Provider（openai/openrouter/anthropic/google/ollama）", scope: "rpaflows", defaultValue: "openai" },
+	{ key: "AI_PROVIDER_RUN_AI", desc: "run_ai 专用 Provider（可覆盖 AI_PROVIDER）", scope: "rpaflows", defaultValue: "openai" },
+	{ key: "AI_PROVIDER_RUN_AI_FALLBACK", desc: "run_ai 失败时回退 Provider（可空）", scope: "rpaflows", defaultValue: "" },
+	{ key: "OPENAI_API_KEY", desc: "OpenAI API Key", scope: "rpaflows", defaultValue: "" },
+	{ key: "OPENAI_BASE_URL", desc: "OpenAI Base URL（可选）", scope: "rpaflows", defaultValue: "https://api.openai.com/v1" },
+	{ key: "OPENROUTER_API_KEY", desc: "OpenRouter API Key", scope: "rpaflows", defaultValue: "" },
+	{ key: "OPENROUTER_BASE_URL", desc: "OpenRouter Base URL（可选）", scope: "rpaflows", defaultValue: "https://openrouter.ai/api/v1" },
+	{ key: "ANTHROPIC_API_KEY", desc: "Anthropic API Key（Claude）", scope: "rpaflows", defaultValue: "" },
+	{ key: "CLAUDE_API_KEY", desc: "Claude API Key（ANTHROPIC_API_KEY 别名）", scope: "rpaflows", defaultValue: "" },
+	{ key: "GOOGLE_API_KEY", desc: "Google AI API Key（Gemini）", scope: "rpaflows", defaultValue: "" },
+	{ key: "GEMINI_API_KEY", desc: "Gemini API Key（GOOGLE_API_KEY 别名）", scope: "rpaflows", defaultValue: "" },
+	{ key: "FLOW_SOURCE_POLICY", desc: "invoke 查找来源策略（prefer_local/prefer_cloud/local/cloud）", scope: "rpaflows", defaultValue: "prefer_local" },
+	{ key: "FLOW_CLOUD_CACHE_ENABLE", desc: "云端 Flow 本地缓存开关", scope: "rpaflows", defaultValue: "true" },
+	{ key: "FLOW_CLOUD_CACHE_TTL_MS", desc: "云端 Flow 缓存有效期（毫秒）", scope: "rpaflows", defaultValue: "86400000" },
+	{ key: "FLOW_RISK_ASK_ABOVE_LEVEL", desc: "风险询问阈值（1-5）", scope: "rpaflows", defaultValue: "2" },
+	{ key: "FLOW_RISK_BLOCK_ABOVE_LEVEL", desc: "风险阻断阈值（1-5）", scope: "rpaflows", defaultValue: "5" },
+];
+
+function resolveAppEnvPath(app) {
+	const configured = asText(app?.get?.("EnvFilePath") || "");
+	if (configured) return configured;
+	const arg = asText(process.argv?.[2] || "");
+	if (arg) return pathLib.isAbsolute(arg) ? arg : pathLib.resolve(PROJECT_ROOT, arg);
+	return pathLib.join(PROJECT_ROOT, ".env");
+}
+
+function resolveRpaEnvPath() {
+	return pathLib.join(PROJECT_ROOT, "rpaflows", ".env");
+}
+
+function resolveEnvScopeFile(scope, app) {
+	const s = asText(scope || "app").toLowerCase();
+	if (s === "rpaflows" || s === "rpa") {
+		return { scope: "rpaflows", filePath: resolveRpaEnvPath(), label: "rpaflows/.env" };
+	}
+	return { scope: "app", filePath: resolveAppEnvPath(app), label: ".env" };
+}
+
+function parseEnvLine(line) {
+	const raw = String(line == null ? "" : line);
+	const m = raw.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+	if (!m) return null;
+	const key = String(m[1] || "").trim();
+	let valueRaw = String(m[2] || "");
+	let value = valueRaw;
+	if ((valueRaw.startsWith("\"") && valueRaw.endsWith("\"")) || (valueRaw.startsWith("'") && valueRaw.endsWith("'"))) {
+		try {
+			value = JSON.parse(valueRaw.replace(/^'/, "\"").replace(/'$/, "\""));
+		} catch (_) {
+			value = valueRaw.slice(1, -1);
+		}
+	}
+	return { key, value: String(value), valueRaw };
+}
+
+async function readEnvFileData(filePath) {
+	let text = "";
+	try {
+		text = await fs.promises.readFile(filePath, "utf8");
+	} catch (err) {
+		if (String(err?.code || "") !== "ENOENT") throw err;
+		text = "";
+	}
+	const lines = text ? text.split(/\r?\n/) : [];
+	const kv = new Map();
+	lines.forEach((line, idx) => {
+		const p = parseEnvLine(line);
+		if (!p) return;
+		kv.set(p.key, { ...p, lineIndex: idx });
+	});
+	return { text, lines, kv };
+}
+
+function serializeEnvValue(value) {
+	const s = String(value == null ? "" : value);
+	if (!s) return "\"\"";
+	if (/^[A-Za-z0-9_./:@\-]+$/.test(s)) return s;
+	return JSON.stringify(s);
+}
+
+function collectEnvItems({ scope, kv, mode }) {
+	const current = [];
+	const wantedSet = new Set();
+	if (mode === "user") {
+		for (const row of USER_ENV_KEYS) {
+			if (row.scope !== scope) continue;
+			wantedSet.add(row.key);
+			const cur = kv.get(row.key);
+			current.push({
+				key: row.key,
+				value: cur ? asText(cur.value) : asText(row.defaultValue),
+				desc: row.desc,
+				exists: !!cur,
+			});
+		}
+		return current;
+	}
+	for (const [key, row] of kv.entries()) {
+		wantedSet.add(key);
+		current.push({
+			key,
+			value: asText(row.value),
+			desc: "",
+			exists: true,
+		});
+	}
+	for (const row of USER_ENV_KEYS) {
+		if (row.scope !== scope) continue;
+		if (wantedSet.has(row.key)) continue;
+		current.push({
+			key: row.key,
+			value: asText(row.defaultValue),
+			desc: row.desc,
+			exists: false,
+		});
+	}
+	current.sort((a, b) => String(a.key || "").localeCompare(String(b.key || "")));
+	return current;
+}
+
+async function updateEnvFileValues(filePath, patchObj) {
+	const patch = toObject(patchObj, {});
+	const data = await readEnvFileData(filePath);
+	const lines = Array.isArray(data.lines) ? data.lines.slice() : [];
+	const touched = [];
+	for (const [kRaw, vRaw] of Object.entries(patch)) {
+		const key = asText(kRaw);
+		if (!key || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+		const value = serializeEnvValue(vRaw);
+		const nextLine = `${key}=${value}`;
+		const cur = data.kv.get(key);
+		if (cur && Number.isFinite(cur.lineIndex)) {
+			lines[cur.lineIndex] = nextLine;
+		} else {
+			lines.push(nextLine);
+		}
+		touched.push(key);
+	}
+	const out = lines.join("\n");
+	await fs.promises.mkdir(pathLib.dirname(filePath), { recursive: true });
+	await fs.promises.writeFile(filePath, out, "utf8");
+	return { savedKeys: touched };
 }
 
 function toDisplayFlowPath(inPath) {
@@ -645,9 +1105,21 @@ function ensureSystemAuth(session) {
 			loginDone: false,
 			loginVO: null,
 			lastAccount: "",
+			authVersion: 1,
 		};
 	}
+	if (!Number.isFinite(Number(session.systemAuth.authVersion)) || Number(session.systemAuth.authVersion) < 1) {
+		session.systemAuth.authVersion = 1;
+	}
 	return session.systemAuth;
+}
+
+function bumpSystemAuthVersion(auth) {
+	if (!auth || typeof auth !== "object") return 1;
+	const cur = Number(auth.authVersion || 1);
+	const next = Number.isFinite(cur) ? (Math.max(1, Math.floor(cur)) + 1) : 2;
+	auth.authVersion = next;
+	return next;
 }
 
 function getTokenExpireTs(loginVO) {
@@ -663,6 +1135,7 @@ function toSystemAuthView(auth) {
 	return {
 		loginDone: !!auth?.loginDone,
 		lastAccount: asText(auth?.lastAccount || ""),
+		authVersion: Number(auth?.authVersion || 1),
 		loginVO: vo ? {
 			userId: asText(vo.userId || vo.userid || ""),
 			userid: asText(vo.userId || vo.userid || ""),
@@ -679,6 +1152,24 @@ function toSystemAuthView(auth) {
 	};
 }
 
+function buildFlowRunSystemAuthSnapshot(req, auth, fallbackApiPath = "") {
+	const vo = (auth?.loginVO && typeof auth.loginVO === "object") ? auth.loginVO : null;
+	const userId = asText(vo?.userId || vo?.userid || "");
+	const token = asText(vo?.token || "");
+	const apiPath = asText(vo?.apiPath || fallbackApiPath || "");
+	const wsUrl = resolveWsUrl(req, apiPath || "/ws/");
+	return {
+		loginDone: !!(auth?.loginDone && userId && token),
+		authVersion: Number(auth?.authVersion || 1),
+		userId,
+		token,
+		apiPath,
+		wsUrl,
+		tokenExpire: Number(getTokenExpireTs(vo) || 0),
+		rank: asText(vo?.rank || ""),
+	};
+}
+
 function normalizeKindName(rawKind) {
 	const raw = asText(rawKind).toLowerCase();
 	if (!raw) return "rpa";
@@ -689,7 +1180,7 @@ function normalizeKindName(rawKind) {
 async function loadKindSpec(kindName) {
 	const normalized = normalizeKindName(kindName);
 	if (normalized === "rpa") {
-		return { requestedKind: normalized, resolvedKind: "rpa", source: "agentspec/kinds/rpa.mjs", fallback: false, spec: rpaKindSpec };
+		return { requestedKind: normalized, resolvedKind: "rpa", source: "rpaflows/rpa.mjs", fallback: false, spec: rpaKindSpec };
 	}
 	if (kindSpecCache.has(normalized)) return kindSpecCache.get(normalized);
 	const relFile = `${normalized}.mjs`;
@@ -710,7 +1201,7 @@ async function loadKindSpec(kindName) {
 		const ret = {
 			requestedKind: normalized,
 			resolvedKind: "rpa",
-			source: "agentspec/kinds/rpa.mjs",
+			source: "rpaflows/rpa.mjs",
 			fallback: true,
 			spec: rpaKindSpec,
 		};
@@ -772,7 +1263,7 @@ function listInvokeFindKeysFromSpec(specPack) {
 	return {
 		requestedKind: asText(specPack?.requestedKind || "rpa"),
 		kind: asText(specPack?.resolvedKind || "rpa"),
-		source: asText(specPack?.source || "agentspec/kinds/rpa.mjs"),
+		source: asText(specPack?.source || "rpaflows/rpa.mjs"),
 		fallback: specPack?.fallback === true,
 		capKeys,
 		argKeys,
@@ -1043,12 +1534,74 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 	void logBuilder("info", "builder.routes.loaded", {
 		buildTag: BUILDER_ROUTES_BUILD_TAG,
 		page: BUILDER_PAGE_PATH,
+		runnerPage: RUNNER_PAGE_PATH,
+		homePage: HOME_PAGE_PATH,
+		configPage: CONFIG_PAGE_PATH,
 		logDir: BUILDER_LOG_DIR,
 		flowsDir: BUILDER_FLOWS_DIR,
 	});
 
 	router.get("/builder", async (req, res) => {
 		res.sendFile(BUILDER_PAGE_PATH);
+	});
+
+	router.get("/runner", async (req, res) => {
+		res.sendFile(RUNNER_PAGE_PATH);
+	});
+
+	router.get("/home", async (req, res) => {
+		res.sendFile(HOME_PAGE_PATH);
+	});
+
+	router.get("/config", async (req, res) => {
+		res.sendFile(CONFIG_PAGE_PATH);
+	});
+
+	router.get("/api/config/env", async (req, res) => {
+		try {
+			const mode = asText(req.query?.mode || "user").toLowerCase() === "developer" ? "developer" : "user";
+			const resolved = resolveEnvScopeFile(req.query?.scope, app);
+			const envData = await readEnvFileData(resolved.filePath);
+			const items = collectEnvItems({ scope: resolved.scope, kv: envData.kv, mode });
+			res.json({
+				ok: true,
+				data: {
+					mode,
+					scope: resolved.scope,
+					filePath: resolved.filePath,
+					fileLabel: resolved.label,
+					items,
+				},
+			});
+		} catch (err) {
+			fail(res, 500, err?.message || err);
+		}
+	});
+
+	router.post("/api/config/env/save", async (req, res) => {
+		try {
+			const body = toObject(req.body, {});
+			const resolved = resolveEnvScopeFile(body.scope, app);
+			const values = toObject(body.values, {});
+			const ret = await updateEnvFileValues(resolved.filePath, values);
+			await logBuilder("info", "config.env.save", {
+				scope: resolved.scope,
+				filePath: resolved.filePath,
+				savedKeys: ret.savedKeys.slice(0, 24),
+				savedCount: ret.savedKeys.length,
+			});
+			res.json({
+				ok: true,
+				data: {
+					scope: resolved.scope,
+					filePath: resolved.filePath,
+					savedKeys: ret.savedKeys,
+				},
+			});
+		} catch (err) {
+			await logBuilder("warn", "config.env.save.error", { reason: asText(err?.message || err) });
+			fail(res, 400, err?.message || err);
+		}
 	});
 
 	router.get("/api/builder/log-meta", async (req, res) => {
@@ -1125,11 +1678,70 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 		try {
 			const mgr = getMgr();
 			const data = await mgr.closeSession(req.params.id);
+			const cleanedUploads = await cleanupSessionUploads(req.params.id);
 			await logBuilder("info", "session.close", { sessionId: req.params.id, elapsedMs: Date.now() - t0 });
-			res.json({ ok: true, data });
+			res.json({ ok: true, data: { ...(toObject(data, {})), cleanedUploads } });
 		} catch (err) {
 			await logBuilder("warn", "session.close.error", { sessionId: req.params.id, reason: asText(err?.message || err), elapsedMs: Date.now() - t0 });
 			fail(res, 404, err?.message || err);
+		}
+	});
+
+	router.post("/api/builder/session/:id/uploads", async (req, res) => {
+		const t0 = Date.now();
+		const sessionId = asText(req.params.id || "");
+		try {
+			const mgr = getMgr();
+			mgr.getSessionRuntime(sessionId);
+			const body = toObject(req.body, {});
+			const rows = Array.isArray(body.files) ? body.files : [];
+			if (!rows.length) throw new Error("missing files");
+			const maxFiles = Math.max(1, Math.min(20, Number(body.maxFiles || 12)));
+			const maxFileBytes = Math.max(1024, Math.min(80 * 1024 * 1024, Number(body.maxFileBytes || (30 * 1024 * 1024))));
+			const uploadDir = getSessionUploadsDir(sessionId);
+			if (!uploadDir) throw new Error("invalid sessionId");
+			await fs.promises.mkdir(uploadDir, { recursive: true });
+
+			const out = [];
+			let used = 0;
+			for (const oneRaw of rows.slice(0, maxFiles)) {
+				const one = toObject(oneRaw, {});
+				const mime = asText(one.mime || "application/octet-stream");
+				const ext = guessExtFromMime(mime);
+				const rawName = asText(one.name || one.filename || "");
+				const name = sanitizeUploadName(rawName, ext);
+				const buf = toUploadBuffer(asText(one.data || one.base64 || ""));
+				if (!buf || !buf.length) continue;
+				if (buf.length > maxFileBytes) {
+					throw new Error(`file too large: ${name} (${buf.length} > ${maxFileBytes})`);
+				}
+				used += 1;
+				const stamp = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+				const saveName = `${stamp}_${name}`;
+				const absPath = pathLib.join(uploadDir, saveName);
+				await fs.promises.writeFile(absPath, buf);
+				out.push({
+					name,
+					mime,
+					size: buf.length,
+					path: absPath,
+				});
+			}
+			await logBuilder("info", "session.uploads", {
+				sessionId,
+				count: out.length,
+				received: rows.length,
+				used,
+				elapsedMs: Date.now() - t0,
+			});
+			res.json({ ok: true, data: { items: out, sessionId } });
+		} catch (err) {
+			await logBuilder("warn", "session.uploads.error", {
+				sessionId,
+				reason: asText(err?.message || err),
+				elapsedMs: Date.now() - t0,
+			});
+			fail(res, 400, err?.message || err);
 		}
 	});
 
@@ -1254,6 +1866,91 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 		}
 	});
 
+	router.post("/api/builder/system/check-local", async (req, res) => {
+		const t0 = Date.now();
+		try {
+			const body = toObject(req.body, {});
+			const userId = asText(body.userId || body.userid || "");
+			const token = asText(body.token || "");
+			const email = asText(body.email || "");
+			const checkNT = body.checkNT !== false;
+			if (!userId || !token) {
+				res.json({ ok: true, data: { ok: true, loginDone: false, info: "缺少 userId/token" } });
+				return;
+			}
+			let apiPath = asText(body.apiPath || "");
+			if (!apiPath) {
+				const pathRet = await callTabosWs(req, {
+					msg: "apiPath",
+					vo: {},
+					apiPath: "",
+					timeoutMs: 15000,
+				});
+				apiPath = asText(pathRet?.path || "");
+				if (Number(pathRet?.code || 0) !== 200 || !apiPath) {
+					res.json({
+						ok: true,
+						data: { ok: true, loginDone: false, info: `获取 apiPath 失败: ${asText(pathRet?.info || pathRet?.code || "unknown")}` },
+					});
+					return;
+				}
+			}
+			let checkRet = null;
+			if (checkNT) {
+				checkRet = await callTabosWs(req, {
+					msg: "userCurrency",
+					vo: { userId, token },
+					apiPath,
+					timeoutMs: 15000,
+				});
+				if (Number(checkRet?.code || 0) !== 200) {
+					res.json({
+						ok: true,
+						data: {
+							ok: true,
+							loginDone: false,
+							info: asText(checkRet?.info || "Offline"),
+							checkRet,
+						},
+					});
+					return;
+				}
+			}
+			const loginVO = {
+				userId,
+				token,
+				email,
+				apiPath,
+				coins: Number(checkRet?.coins || 0),
+				points: Number(checkRet?.points || 0),
+			};
+			await logBuilder("debug", "system.check_local", {
+				userId,
+				loginDone: true,
+				elapsedMs: Date.now() - t0,
+			});
+			res.json({
+				ok: true,
+				data: {
+					ok: true,
+					loginDone: true,
+					info: "登录有效",
+					checkRet,
+					systemAuth: {
+						loginDone: true,
+						loginVO,
+					},
+				},
+			});
+		} catch (err) {
+			await logBuilder("warn", "system.check_local.error", {
+				reason: asText(err?.message || err),
+				elapsedMs: Date.now() - t0,
+			});
+			fail(res, 400, err?.message || err);
+		}
+	});
+
 	router.post("/api/builder/session/:id/system/login", async (req, res) => {
 		const t0 = Date.now();
 		const sessionId = asText(req.params.id);
@@ -1284,15 +1981,16 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 					token,
 					time: Date.now(),
 				};
-			} else {
-				const saved = (auth.loginVO && typeof auth.loginVO === "object") ? auth.loginVO : null;
-				if (!saved) throw new Error("请提供 email + password，或 userId + token");
-				const exp = getTokenExpireTs(saved);
-				if (exp > 0 && Date.now() > exp) {
-					auth.loginDone = false;
-					auth.loginVO = null;
-					throw new Error("保存的登录 token 已过期");
-				}
+				} else {
+					const saved = (auth.loginVO && typeof auth.loginVO === "object") ? auth.loginVO : null;
+					if (!saved) throw new Error("请提供 email + password，或 userId + token");
+					const exp = getTokenExpireTs(saved);
+					if (exp > 0 && Date.now() > exp) {
+						auth.loginDone = false;
+						auth.loginVO = null;
+						bumpSystemAuthVersion(auth);
+						throw new Error("保存的登录 token 已过期");
+					}
 				callVO = {
 					userId: asText(saved.userId || saved.userid || ""),
 					token: asText(saved.token || ""),
@@ -1317,16 +2015,18 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 				apiPath,
 				timeoutMs: 30000,
 			});
-			if (Number(loginRet?.code || 0) !== 200) {
-				auth.loginDone = false;
-				auth.loginVO = null;
-				throw new Error(`登录失败: ${asText(loginRet?.info || loginRet?.code || "unknown")}`);
-			}
+				if (Number(loginRet?.code || 0) !== 200) {
+					auth.loginDone = false;
+					auth.loginVO = null;
+					bumpSystemAuthVersion(auth);
+					throw new Error(`登录失败: ${asText(loginRet?.info || loginRet?.code || "unknown")}`);
+				}
 
-			auth.loginVO = { ...loginRet, apiPath };
-			auth.loginDone = true;
-			if (email) auth.lastAccount = email;
-			else if (asText(loginRet?.email || "")) auth.lastAccount = asText(loginRet.email);
+				auth.loginVO = { ...loginRet, apiPath };
+				auth.loginDone = true;
+				bumpSystemAuthVersion(auth);
+				if (email) auth.lastAccount = email;
+				else if (asText(loginRet?.email || "")) auth.lastAccount = asText(loginRet.email);
 
 			await logBuilder("info", "system.login", {
 				sessionId,
@@ -1356,22 +2056,24 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			const auth = ensureSystemAuth(runtime);
 			const saved = (auth.loginVO && typeof auth.loginVO === "object") ? auth.loginVO : null;
 
-			if (!saved) {
-				auth.loginDone = false;
-				res.json({ ok: true, data: { ok: true, loginDone: false, info: "未登录", systemAuth: toSystemAuthView(auth) } });
-				return;
-			}
+				if (!saved) {
+					auth.loginDone = false;
+					bumpSystemAuthVersion(auth);
+					res.json({ ok: true, data: { ok: true, loginDone: false, info: "未登录", systemAuth: toSystemAuthView(auth) } });
+					return;
+				}
 
 			const userId = asText(saved.userId || saved.userid || "");
 			const tk = asText(saved.token || "");
 			const apiPath = asText(saved.apiPath || "");
 			const exp = getTokenExpireTs(saved);
-			if (!userId || !tk || !apiPath || (exp > 0 && Date.now() > exp)) {
-				auth.loginDone = false;
-				auth.loginVO = null;
-				res.json({ ok: true, data: { ok: true, loginDone: false, info: "登录已失效", systemAuth: toSystemAuthView(auth) } });
-				return;
-			}
+				if (!userId || !tk || !apiPath || (exp > 0 && Date.now() > exp)) {
+					auth.loginDone = false;
+					auth.loginVO = null;
+					bumpSystemAuthVersion(auth);
+					res.json({ ok: true, data: { ok: true, loginDone: false, info: "登录已失效", systemAuth: toSystemAuthView(auth) } });
+					return;
+				}
 
 			let checkRet = null;
 			if (checkNT) {
@@ -1381,19 +2083,20 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 					apiPath,
 					timeoutMs: 15000,
 				});
-				if (Number(checkRet?.code || 0) !== 200) {
-					if (Number(checkRet?.code || 0) === 403) auth.loginVO = null;
-					auth.loginDone = false;
-					res.json({
-						ok: true,
-						data: { ok: true, loginDone: false, info: asText(checkRet?.info || "Offline"), checkRet, systemAuth: toSystemAuthView(auth) },
+					if (Number(checkRet?.code || 0) !== 200) {
+						if (Number(checkRet?.code || 0) === 403) auth.loginVO = null;
+						auth.loginDone = false;
+						bumpSystemAuthVersion(auth);
+						res.json({
+							ok: true,
+							data: { ok: true, loginDone: false, info: asText(checkRet?.info || "Offline"), checkRet, systemAuth: toSystemAuthView(auth) },
 					});
 					return;
 				}
 				auth.loginVO = { ...auth.loginVO, coins: Number(checkRet?.coins || 0), points: Number(checkRet?.points || 0) };
-			}
-			auth.loginDone = true;
-			await logBuilder("debug", "system.check", { sessionId, checkNT, elapsedMs: Date.now() - t0 });
+				}
+				auth.loginDone = true;
+				await logBuilder("debug", "system.check", { sessionId, checkNT, elapsedMs: Date.now() - t0 });
 			res.json({
 				ok: true,
 				data: { ok: true, loginDone: true, info: "登录有效", checkRet, systemAuth: toSystemAuthView(auth) },
@@ -1414,11 +2117,12 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			const mgr = getMgr();
 			const runtime = mgr.getSessionRuntime(sessionId);
 			const auth = ensureSystemAuth(runtime);
-			const email = asText(auth?.loginVO?.email || "");
-			if (email) auth.lastAccount = email;
-			auth.loginDone = false;
-			auth.loginVO = null;
-			await logBuilder("info", "system.logout", { sessionId });
+				const email = asText(auth?.loginVO?.email || "");
+				if (email) auth.lastAccount = email;
+				auth.loginDone = false;
+				auth.loginVO = null;
+				bumpSystemAuthVersion(auth);
+				await logBuilder("info", "system.logout", { sessionId });
 			res.json({ ok: true, data: { ok: true, info: "已退出登录", systemAuth: toSystemAuthView(auth) } });
 		} catch (err) {
 			await logBuilder("warn", "system.logout.error", { sessionId, reason: asText(err?.message || err) });
@@ -1444,11 +2148,12 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 				vo.userId = asText(loginVO.userId || loginVO.userid || "");
 				vo.token = asText(loginVO.token || "");
 			}
-			const ret = await callTabosWs(req, { msg, vo, timeoutMs, apiPath });
-			if (Number(ret?.code || 0) === 403) {
-				auth.loginDone = false;
-				auth.loginVO = null;
-			}
+				const ret = await callTabosWs(req, { msg, vo, timeoutMs, apiPath });
+				if (Number(ret?.code || 0) === 403) {
+					auth.loginDone = false;
+					auth.loginVO = null;
+					bumpSystemAuthVersion(auth);
+				}
 			await logBuilder("info", "system.call", {
 				sessionId,
 				msg,
@@ -1482,18 +2187,20 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			if (!step) throw new Error("step is required");
 			if (!asText(step?.id)) throw new Error("step.id is required");
 			if (!asText(step?.action?.type)) throw new Error("step.action.type is required");
-			const runArgs = (body.args && typeof body.args === "object" && !Array.isArray(body.args)) ? cloneJson(body.args, {}) : {};
-			const runOpts = (body.opts && typeof body.opts === "object" && !Array.isArray(body.opts)) ? cloneJson(body.opts, {}) : {};
-			const runVars = (body.vars && typeof body.vars === "object" && !Array.isArray(body.vars)) ? cloneJson(body.vars, {}) : {};
+				const runArgs = (body.args && typeof body.args === "object" && !Array.isArray(body.args)) ? cloneJson(body.args, {}) : {};
+				const runOpts = (body.opts && typeof body.opts === "object" && !Array.isArray(body.opts)) ? cloneJson(body.opts, {}) : {};
+				const runVars = (body.vars && typeof body.vars === "object" && !Array.isArray(body.vars)) ? cloneJson(body.vars, {}) : {};
 			const runLastResult = (body.lastResult && typeof body.lastResult === "object" && !Array.isArray(body.lastResult))
 				? cloneJson(body.lastResult, null)
 				: null;
 
-			const mgr = getMgr();
-			const runtime = await getActivePageRuntime(mgr, req.params.id, { autoOpenPage: true });
-			const runRet = await runBuilderStepOnce({
-				webRpa: runtime.webRpa,
-				page: runtime.page,
+				const mgr = getMgr();
+				const runtime = await getActivePageRuntime(mgr, req.params.id, { autoOpenPage: true });
+				const auth = ensureSystemAuth(runtime.session);
+				runOpts.systemAuth = buildFlowRunSystemAuthSnapshot(req, auth, runOpts?.systemAuth?.apiPath || "");
+				const runRet = await runBuilderStepOnce({
+					webRpa: runtime.webRpa,
+					page: runtime.page,
 				session: runtime.session,
 				step,
 				args: runArgs,
@@ -1501,6 +2208,9 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 				vars: runVars,
 				lastResult: runLastResult,
 			});
+			const invokeMeta = (runRet?.meta && typeof runRet.meta === "object" && runRet.meta.invoke && typeof runRet.meta.invoke === "object")
+				? runRet.meta.invoke
+				: null;
 			const elapsedMs = Date.now() - t0;
 			console.log(
 				`[RPAFLOWS][builder] run-step session=${req.params.id} context=${runtime.activeContextId} ` +
@@ -1514,6 +2224,10 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 				status: asText(runRet?.status || "failed"),
 				reason: asText(runRet?.reason || ""),
 				elapsedMs,
+				invokeFlowId: asText(invokeMeta?.flowId || ""),
+				invokeEntryId: asText(invokeMeta?.entryId || ""),
+				invokeSource: asText(invokeMeta?.source || ""),
+				invokeSourceRef: asText(invokeMeta?.sourceRef || ""),
 			});
 			res.json({ ok: true, data: runRet });
 		} catch (err) {
@@ -1525,7 +2239,23 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 	router.post("/api/builder/session/:id/run-flow/start", async (req, res) => {
 		const t0 = Date.now();
 		const sessionId = asText(req.params.id);
+		let releaseProfileSlot = null;
+		let releaseByBg = false;
+		let profileAlias = "";
+		let queuedWaitMs = 0;
 		try {
+			const mgrForAlias = getMgr();
+			const runtimeForAlias = mgrForAlias.getSessionRuntime(sessionId);
+			profileAlias = asText(runtimeForAlias?.alias || "") || `session:${sessionId}`;
+			const queueEnterAt = Date.now();
+			releaseProfileSlot = await acquireProfileRunSlot(profileAlias);
+			queuedWaitMs = Math.max(0, Date.now() - queueEnterAt);
+			await logBuilder("info", "profile.run.slot.acquired", {
+				sessionId,
+				profileAlias,
+				runType: "flow",
+				queuedWaitMs,
+			});
 			const prev = flowRunStateBySession.get(sessionId);
 			if (prev && prev.status === "running") {
 				throw new Error(`flow is already running (runId=${asText(prev.runId)})`);
@@ -1537,13 +2267,15 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			if (!asText(flow.start || "")) throw new Error("flow.start is required");
 			if (!Array.isArray(flow.steps) || !flow.steps.length) throw new Error("flow.steps is required");
 
-			const runArgs = (body.args && typeof body.args === "object" && !Array.isArray(body.args)) ? cloneJson(body.args, {}) : {};
-			const runOpts = (body.opts && typeof body.opts === "object" && !Array.isArray(body.opts)) ? cloneJson(body.opts, {}) : {};
-			const maxSteps = Number.isFinite(Number(body.maxSteps)) ? Math.max(1, Math.min(2000, Number(body.maxSteps))) : 400;
+				const runArgs = (body.args && typeof body.args === "object" && !Array.isArray(body.args)) ? cloneJson(body.args, {}) : {};
+				const runOpts = (body.opts && typeof body.opts === "object" && !Array.isArray(body.opts)) ? cloneJson(body.opts, {}) : {};
+				const maxSteps = Number.isFinite(Number(body.maxSteps)) ? Math.max(1, Math.min(2000, Number(body.maxSteps))) : 400;
 
-			const mgr = getMgr();
-			const runtime = await getActivePageRuntime(mgr, sessionId, { autoOpenPage: true });
-			runtime.webRpa.setCurrentPage(runtime.page);
+				const mgr = getMgr();
+				const runtime = await getActivePageRuntime(mgr, sessionId, { autoOpenPage: true });
+				const auth = ensureSystemAuth(runtime.session);
+				runOpts.systemAuth = buildFlowRunSystemAuthSnapshot(req, auth, runOpts?.systemAuth?.apiPath || "");
+				runtime.webRpa.setCurrentPage(runtime.page);
 			try { await runtime.webRpa.browser?.activate?.(); } catch (_) {}
 			try { await runtime.page?.bringToFront?.({ focusBrowser: true }); } catch (_) {}
 
@@ -1551,7 +2283,11 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			const state = {
 				runId,
 				sessionId,
+				profileAlias,
 				status: "running",
+				cancelRequested: false,
+				cancelReason: "",
+				cancelRequestedAt: 0,
 				startedAt: Date.now(),
 				startedAtIso: nowIso(),
 				endedAt: 0,
@@ -1565,15 +2301,19 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 				steps: [],
 				queryCache: { hits: 0, misses: 0, events: [] },
 				ai: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0 },
+				invokeMetaByStepId: {},
 				result: null,
 				error: "",
 			};
 			flowRunStateBySession.set(sessionId, state);
+			releaseByBg = true;
 			await logBuilder("info", "flow.run.start", {
 				sessionId,
 				runId,
 				flowId: state.flowId,
 				contextId: runtime.activeContextId,
+				profileAlias,
+				queuedWaitMs,
 				maxSteps,
 				elapsedMs: Date.now() - t0,
 			});
@@ -1612,6 +2352,8 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 						opts: runOpts,
 						maxSteps,
 						logger: runLogger,
+						shouldStop: () => state.cancelRequested === true,
+						getStopReason: () => asText(state.cancelReason || "stopped by user"),
 					});
 					state.result = ret;
 					state.status = normalizeFlowRunStatus(ret?.status || "failed");
@@ -1646,6 +2388,7 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 						aiCostUsd: summary?.ai?.costUsd || 0,
 					});
 					console.log(`[RPAFLOWS][builder] run-flow done session=${sessionId} runId=${state.runId} status=${summary.status} elapsedMs=${summary.elapsedMs}`);
+					try { releaseProfileSlot?.(); } catch (_) {}
 				}
 			})();
 
@@ -1655,10 +2398,15 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 					runId,
 					status: "running",
 					startedAt: state.startedAtIso,
+					profileAlias,
+					queuedWaitMs,
 				},
 			});
 		} catch (err) {
 			await logBuilder("error", "flow.run.start.error", { sessionId, reason: asText(err?.message || err), elapsedMs: Date.now() - t0 });
+			if (!releaseByBg) {
+				try { releaseProfileSlot?.(); } catch (_) {}
+			}
 			fail(res, 400, err?.message || err);
 		}
 	});
@@ -1677,6 +2425,8 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 					runId: asText(state.runId),
 					status: asText(state.status),
 					running: state.status === "running",
+					cancelRequested: state.cancelRequested === true,
+					cancelReason: asText(state.cancelReason || ""),
 					currentStepId: asText(state.currentStepId),
 					currentActionType: asText(state.currentActionType),
 					startedAt: asText(state.startedAtIso),
@@ -1687,6 +2437,343 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 			});
 		} catch (err) {
 			fail(res, 404, err?.message || err);
+		}
+	});
+
+	router.post("/api/builder/session/:id/run-flow/stop", async (req, res) => {
+		try {
+			const sessionId = asText(req.params.id);
+			const runId = asText(req.body?.runId || "");
+			const reason = asText(req.body?.reason || "stopped by user");
+			const state = flowRunStateBySession.get(sessionId);
+			if (!state) throw new Error("no flow run state");
+			if (runId && runId !== asText(state.runId)) throw new Error(`runId not found: ${runId}`);
+			if (state.status !== "running") {
+				res.json({ ok: true, data: { runId: asText(state.runId), status: asText(state.status), accepted: false, reason: "run is not running" } });
+				return;
+			}
+			state.cancelRequested = true;
+			state.cancelReason = reason || "stopped by user";
+			state.cancelRequestedAt = Date.now();
+			state.updatedAt = Date.now();
+			state.updatedAtIso = nowIso();
+			await logBuilder("warn", "flow.run.stop.requested", { sessionId, runId: asText(state.runId), reason: state.cancelReason });
+			res.json({ ok: true, data: { runId: asText(state.runId), status: "running", accepted: true, cancelRequested: true, reason: state.cancelReason } });
+		} catch (err) {
+			fail(res, 400, err?.message || err);
+		}
+	});
+
+	router.post("/api/runner/session/:id/start", async (req, res) => {
+		const t0 = Date.now();
+		const sessionId = asText(req.params.id);
+		let releaseProfileSlot = null;
+		let releaseByBg = false;
+		let profileAlias = "";
+		let queuedWaitMs = 0;
+		try {
+			const mgrForAlias = getMgr();
+			const runtimeForAlias = mgrForAlias.getSessionRuntime(sessionId);
+			profileAlias = asText(runtimeForAlias?.alias || "") || `session:${sessionId}`;
+			const queueEnterAt = Date.now();
+			releaseProfileSlot = await acquireProfileRunSlot(profileAlias);
+			queuedWaitMs = Math.max(0, Date.now() - queueEnterAt);
+			await logBuilder("info", "profile.run.slot.acquired", {
+				sessionId,
+				profileAlias,
+				runType: "goal",
+				queuedWaitMs,
+			});
+			const prev = goalRunStateBySession.get(sessionId);
+			if (prev && prev.status === "running") {
+				throw new Error(`goal-run is already running (runId=${asText(prev.runId)})`);
+			}
+			const body = toObject(req.body, {});
+			const goal = asText(body.goal || "");
+			if (!goal) throw new Error("goal is required");
+			const notes = asText(body.notes || "");
+			const runArgs = (body.args && typeof body.args === "object" && !Array.isArray(body.args)) ? cloneJson(body.args, {}) : {};
+			const runOpts = (body.opts && typeof body.opts === "object" && !Array.isArray(body.opts)) ? cloneJson(body.opts, {}) : {};
+			const autoCloseOpenedPages = parseBool(
+				body.autoCloseOpenedPages ?? runOpts?.autoCloseOpenedPages ?? runOpts?.closeOpenedPagesAfterRun,
+				false
+			);
+			const invokeStrategyRaw = asText(body.invokeStrategy || body.strategy || runOpts?.invokeStrategy || "auto");
+			const invokeStrategy = (() => {
+				const s = invokeStrategyRaw.toLowerCase();
+				if (s === "preferinvoke" || s === "prefer_invoke") return "preferInvoke";
+				if (s === "invokeonly" || s === "invoke_only") return "invokeOnly";
+				if (s === "noinvoke" || s === "no_invoke" || s === "forbidinvoke" || s === "disableinvoke") return "noInvoke";
+				return "auto";
+			})();
+			let actionScope = (body.actionScope === "all")
+				? "all"
+				: (Array.isArray(body.actionScope) ? body.actionScope : toObject(body.actionScope, body.actionScope || "all"));
+			let invokeScope = (body.invokeScope === "all")
+				? "all"
+				: (Array.isArray(body.invokeScope) ? body.invokeScope : toObject(body.invokeScope, body.invokeScope || "all"));
+			if ((!body.actionScope || body.actionScope === "all") && invokeStrategy === "invokeOnly") {
+				actionScope = ["goto", "invoke", "wait", "ask_assist", "done", "abort"];
+			}
+			if ((!body.actionScope || body.actionScope === "all") && invokeStrategy === "noInvoke") {
+				actionScope = ["goto", "click", "hover", "input", "press_key", "wait", "scroll", "readElement", "ask_assist", "done", "abort"];
+			}
+			if (!body.invokeScope || body.invokeScope === "all") {
+				invokeScope = "all";
+			}
+			const maxSteps = Number.isFinite(Number(body.maxSteps)) ? Math.max(1, Math.min(200, Number(body.maxSteps))) : 20;
+			const maxConsecutiveFails = Number.isFinite(Number(body.maxConsecutiveFails)) ? Math.max(1, Math.min(10, Number(body.maxConsecutiveFails))) : 3;
+			const aiModel = asText(body.aiModel || "advanced") || "advanced";
+			const aiTimeoutMs = Number.isFinite(Number(body.aiTimeoutMs)) ? Math.max(3000, Math.min(180000, Number(body.aiTimeoutMs))) : 60000;
+
+			const mgr = getMgr();
+			const runtime = await getActivePageRuntime(mgr, sessionId, { autoOpenPage: true });
+			const auth = ensureSystemAuth(runtime.session);
+			runOpts.systemAuth = buildFlowRunSystemAuthSnapshot(req, auth, runOpts?.systemAuth?.apiPath || "");
+			const baselinePages = await snapshotPageBaselines(runtime.webRpa, runtime.page);
+			runtime.webRpa.setCurrentPage(runtime.page);
+			try { await runtime.webRpa.browser?.activate?.(); } catch (_) {}
+			try { await runtime.page?.bringToFront?.({ focusBrowser: true }); } catch (_) {}
+
+			const runId = newGoalRunId();
+			const state = {
+				runId,
+				sessionId,
+				profileAlias,
+				status: "running",
+				cancelRequested: false,
+				cancelReason: "",
+				cancelRequestedAt: 0,
+				startedAt: Date.now(),
+				startedAtIso: nowIso(),
+				endedAt: 0,
+				endedAtIso: "",
+				updatedAt: Date.now(),
+				updatedAtIso: nowIso(),
+				goal,
+				notes,
+				currentStepId: "",
+				currentActionType: "",
+				currentPhase: "decide",
+				autoCloseOpenedPages,
+				baselinePages: cloneJson(baselinePages, []),
+				steps: [],
+				result: null,
+				error: "",
+			};
+			goalRunStateBySession.set(sessionId, state);
+			releaseByBg = true;
+			await logBuilder("info", "goal.run.start", {
+				sessionId,
+				runId,
+				goal: truncateText(goal, 200),
+				profileAlias,
+				queuedWaitMs,
+				maxSteps,
+				maxConsecutiveFails,
+				aiModel,
+				aiTimeoutMs,
+				invokeStrategy,
+				autoCloseOpenedPages,
+				elapsedMs: Date.now() - t0,
+			});
+
+			void (async () => {
+				let runLogger = null;
+				try {
+					const logger = await getBuilderLogger();
+					runLogger = {
+						info: async (event, data = {}) => {
+							if (logger?.info) await logger.info(`goal.run.${event}`, { sessionId, runId, ...toObject(data, {}) });
+						},
+						debug: async (event, data = {}) => {
+							if (logger?.debug) await logger.debug(`goal.run.${event}`, { sessionId, runId, ...toObject(data, {}) });
+						},
+						warn: async (event, data = {}) => {
+							if (logger?.warn) await logger.warn(`goal.run.${event}`, { sessionId, runId, ...toObject(data, {}) });
+						},
+						error: async (event, data = {}) => {
+							if (logger?.error) await logger.error(`goal.run.${event}`, { sessionId, runId, ...toObject(data, {}) });
+						},
+					};
+					const ret = await runGoalDrivenLoop({
+						goal,
+						webRpa: runtime.webRpa,
+						page: runtime.page,
+						session: runtime.session,
+						args: runArgs,
+						opts: runOpts,
+						notes,
+						actionScope,
+						invokeScope,
+						invokeStrategy,
+						maxSteps,
+						maxConsecutiveFails,
+						aiModel,
+						aiTimeoutMs,
+						logger: runLogger,
+						shouldStop: () => state.cancelRequested === true,
+						getStopReason: () => asText(state.cancelReason || "stopped by user"),
+						onBeforeAI: async ({ index }) => {
+							state.updatedAt = Date.now();
+							state.updatedAtIso = nowIso();
+							state.currentPhase = "decide";
+							state.currentStepId = `s_${index}`;
+							state.currentActionType = "";
+						},
+						onAfterAI: async ({ aiRet }) => {
+							const env = (aiRet?.envelope && typeof aiRet.envelope === "object") ? aiRet.envelope : {};
+							const result = (env?.result && typeof env.result === "object") ? env.result : null;
+							const actionType = asText(result?.action?.type || "");
+							state.currentActionType = actionType;
+							state.currentPhase = "execute";
+							state.updatedAt = Date.now();
+							state.updatedAtIso = nowIso();
+						},
+						onStep: async ({ index, step, stepResult }) => {
+							state.updatedAt = Date.now();
+							state.updatedAtIso = nowIso();
+							state.currentPhase = "decide";
+							state.currentStepId = asText(step?.id || `s_${index}`);
+							state.currentActionType = asText(step?.action?.type || "");
+							state.steps.push({
+								index,
+								stepId: asText(step?.id || ""),
+								actionType: asText(step?.action?.type || ""),
+								status: normalizeGoalRunStatus(stepResult?.status || "failed"),
+								reason: asText(stepResult?.reason || ""),
+								saveAs: ("saveAs" in (step || {})) ? step.saveAs : null,
+								summary: asText(step?.summary || ""),
+								decisionReason: asText(step?.reason || ""),
+								ts: nowIso(),
+							});
+						},
+					});
+					state.result = ret;
+					state.status = normalizeGoalRunStatus(ret?.status || "failed");
+				} catch (err) {
+					state.error = asText(err?.message || err);
+					state.status = "failed";
+					state.result = {
+						status: "failed",
+						reason: state.error || "goal-run error",
+						stepsUsed: Array.isArray(state.steps) ? state.steps.length : 0,
+						history: [],
+					};
+					await logBuilder("error", "goal.run.crash", { sessionId, runId, reason: state.error });
+				} finally {
+					if (state.autoCloseOpenedPages === true) {
+						try {
+							state.autoClose = await closeOpenedPagesAfterGoalRun({
+								webRpa: runtime.webRpa,
+								fallbackPage: runtime.page,
+								baselinePages: Array.isArray(state.baselinePages) ? state.baselinePages : [],
+								logger: runLogger || null,
+							});
+						} catch (closeErr) {
+							state.autoClose = {
+								closedContextIds: [],
+								failed: [{ contextId: "", reason: asText(closeErr?.message || closeErr) }],
+								activatedContextId: "",
+							};
+							await logBuilder("warn", "goal.run.autoclose.error", {
+								sessionId,
+								runId,
+								reason: asText(closeErr?.message || closeErr),
+							});
+						}
+					}
+					state.endedAt = Date.now();
+					state.endedAtIso = nowIso();
+					state.updatedAt = state.endedAt;
+					state.updatedAtIso = state.endedAtIso;
+					state.currentPhase = "done";
+					const summary = buildGoalRunSummary(state);
+					await logBuilder(summary.ok ? "info" : "warn", "goal.run.done", {
+						sessionId,
+						runId,
+						status: summary.status,
+						ok: summary.ok,
+						elapsedMs: summary.elapsedMs,
+						stepsUsed: Number(summary.stepsUsed || 0),
+						reason: asText(summary.reason || ""),
+					});
+					try { releaseProfileSlot?.(); } catch (_) {}
+				}
+			})();
+
+			res.json({
+				ok: true,
+				data: {
+					runId,
+					status: "running",
+					startedAt: state.startedAtIso,
+					profileAlias,
+					queuedWaitMs,
+				},
+			});
+		} catch (err) {
+			await logBuilder("error", "goal.run.start.error", { sessionId, reason: asText(err?.message || err), elapsedMs: Date.now() - t0 });
+			if (!releaseByBg) {
+				try { releaseProfileSlot?.(); } catch (_) {}
+			}
+			fail(res, 400, err?.message || err);
+		}
+	});
+
+	router.get("/api/runner/session/:id/status", async (req, res) => {
+		try {
+			const sessionId = asText(req.params.id);
+			const runId = asText(req.query?.runId || "");
+			const state = goalRunStateBySession.get(sessionId);
+			if (!state) throw new Error("no goal run state");
+			if (runId && runId !== asText(state.runId)) throw new Error(`runId not found: ${runId}`);
+			const summary = buildGoalRunSummary(state);
+			res.json({
+				ok: true,
+				data: {
+					runId: asText(state.runId),
+					status: asText(state.status),
+					running: state.status === "running",
+					cancelRequested: state.cancelRequested === true,
+					cancelReason: asText(state.cancelReason || ""),
+					currentStepId: asText(state.currentStepId),
+					currentActionType: asText(state.currentActionType),
+					currentPhase: asText(state.currentPhase),
+					goal: asText(state.goal),
+					startedAt: asText(state.startedAtIso),
+					updatedAt: asText(state.updatedAtIso),
+					endedAt: asText(state.endedAtIso),
+					summary,
+				},
+			});
+		} catch (err) {
+			fail(res, 404, err?.message || err);
+		}
+	});
+
+	router.post("/api/runner/session/:id/stop", async (req, res) => {
+		try {
+			const sessionId = asText(req.params.id);
+			const runId = asText(req.body?.runId || "");
+			const reason = asText(req.body?.reason || "stopped by user");
+			const state = goalRunStateBySession.get(sessionId);
+			if (!state) throw new Error("no goal run state");
+			if (runId && runId !== asText(state.runId)) throw new Error(`runId not found: ${runId}`);
+			if (state.status !== "running") {
+				res.json({ ok: true, data: { runId: asText(state.runId), status: asText(state.status), accepted: false, reason: "run is not running" } });
+				return;
+			}
+			state.cancelRequested = true;
+			state.cancelReason = reason || "stopped by user";
+			state.cancelRequestedAt = Date.now();
+			state.updatedAt = Date.now();
+			state.updatedAtIso = nowIso();
+			state.currentPhase = "stopping";
+			await logBuilder("warn", "goal.run.stop.requested", { sessionId, runId: asText(state.runId), reason: state.cancelReason });
+			res.json({ ok: true, data: { runId: asText(state.runId), status: "running", accepted: true, cancelRequested: true, reason: state.cancelReason } });
+		} catch (err) {
+			fail(res, 400, err?.message || err);
 		}
 	});
 
@@ -2926,13 +4013,25 @@ export default function setupRpaFlowBuilderRoutes(app, router) {
 
 		router.get("/api/builder/flows", async (req, res) => {
 			try {
-				const flows = await listSavedBuilderFlows();
-				await logBuilder("debug", "flow.list", { count: Array.isArray(flows) ? flows.length : 0 });
+				const dir = asText(req.query?.dir || "");
+				const listing = await listBuilderFlowEntries({ dir });
+				const flows = Array.isArray(listing?.flows) ? listing.flows : [];
+				const dirs = Array.isArray(listing?.dirs) ? listing.dirs : [];
+				await logBuilder("debug", "flow.list", {
+					dir: asText(listing?.currentDir || ""),
+					dirCount: dirs.length,
+					flowCount: flows.length,
+				});
 				res.json({
 					ok: true,
 					data: {
 						baseDir: BUILDER_FLOWS_DIR,
-						flows: (Array.isArray(flows) ? flows : []).map((one) => ({
+						currentDir: asText(listing?.currentDir || ""),
+						parentDir: asText(listing?.parentDir || ""),
+						dirs: dirs.map((one) => ({
+							...one,
+						})),
+						flows: flows.map((one) => ({
 							...one,
 							path: toDisplayFlowPath(one?.path),
 							absPath: asText(one?.path),

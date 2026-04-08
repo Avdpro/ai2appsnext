@@ -41,6 +41,50 @@ function isFlowFile(name) {
 	return /\.(mjs|js|json)$/i.test(name || "");
 }
 
+function sourceTypePriority(source) {
+	const s = String(source || "").toLowerCase();
+	if (s.endsWith(".json")) return 0;
+	if (s.endsWith(".js")) return 1;
+	if (s.endsWith(".mjs")) return 2;
+	return 9;
+}
+
+function isPreferredEntry(candidate, baseline) {
+	if (!candidate) return false;
+	if (!baseline) return true;
+	const p1 = sourceTypePriority(candidate.source);
+	const p2 = sourceTypePriority(baseline.source);
+	if (p1 !== p2) return p1 < p2;
+	return false;
+}
+
+function orderEntriesByPreference(scanned) {
+	if (!Array.isArray(scanned) || !scanned.length) return [];
+	const grouped = new Map();
+	const flowOrder = [];
+	for (let i = 0; i < scanned.length; i += 1) {
+		const e = scanned[i];
+		const fid = String(e?.id || "");
+		if (!grouped.has(fid)) {
+			grouped.set(fid, []);
+			flowOrder.push(fid);
+		}
+		grouped.get(fid).push({ entry: e, index: i });
+	}
+	const out = [];
+	for (const fid of flowOrder) {
+		const rows = grouped.get(fid) || [];
+		rows.sort((a, b) => {
+			const pa = sourceTypePriority(a.entry?.source);
+			const pb = sourceTypePriority(b.entry?.source);
+			if (pa !== pb) return pa - pb;
+			return a.index - b.index;
+		});
+		for (const r of rows) out.push(r.entry);
+	}
+	return out;
+}
+
 function extractFlowObject(obj) {
 	if (obj && typeof obj === "object" && Array.isArray(obj.steps) && obj.start && obj.id) {
 		return { root: obj, flow: obj };
@@ -168,7 +212,7 @@ async function scanDirs(dirs, logger = null) {
 async function ensureFlowRegistry({ force = false, logger = null } = {}) {
 	if (state.loaded && !force) return state;
 	const dirs = getDefaultFlowDirs();
-	const scanned = await scanDirs(dirs, logger);
+	const scanned = orderEntriesByPreference(await scanDirs(dirs, logger));
 	const byId = new Map();
 	const byEntryId = new Map();
 	const byFlowIdAll = new Map();
@@ -184,11 +228,13 @@ async function ensureFlowRegistry({ force = false, logger = null } = {}) {
 		if (!byId.has(e.id)) byId.set(e.id, e);
 		else {
 			const first = byId.get(e.id);
+			const chosen = isPreferredEntry(e, first) ? e : first;
+			if (chosen !== first) byId.set(e.id, chosen);
 			duplicateRows.push({
 				flowId: e.id,
 				first: first?.source || "",
 				ignored: e.source || "",
-				chosenEntryId: first?.entryId || "",
+				chosenEntryId: chosen?.entryId || "",
 			});
 		}
 	}
@@ -227,6 +273,7 @@ function buildMapsFromEntries(scanned) {
 		if (!byFlowIdAll.has(e.id)) byFlowIdAll.set(e.id, []);
 		byFlowIdAll.get(e.id).push(e);
 		if (!byId.has(e.id)) byId.set(e.id, e);
+		else if (isPreferredEntry(e, byId.get(e.id))) byId.set(e.id, e);
 	}
 	return { byId, byEntryId, byFlowIdAll };
 }

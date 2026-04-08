@@ -6,6 +6,7 @@
 > - 新增 `invoke.fork`：支持在子执行时 fork 隔离页面上下文（`false` 旧行为；`true` 复用当前页 fork；`string` 表示先打开该 URL 再 fork 执行，见 8.1）
 > - 新增 `invokeMany`：通用批量子调用动作（支持并发、每项模板参数、每项 fork、结果聚合），用于替代专用 batch action（见 8.1.2）
 > - `goto` 新增 `newPage?: boolean`：当为 true 时，先创建新 tab/page，再在新页执行导航（默认 false）
+> - `goto` 的 `postWaitMs` 约定更新：**未设置时默认 1000ms**（给页面 JS 二次渲染稳定窗口）；显式设置 `postWaitMs: 0` 表示不额外等待
 > - 新增 `closePage`：用于关闭页面；支持 `target:"active"|"flow"|"contextId"|"urlMatch"`，其中 `target:"flow"` 表示关闭当前 Flow 使用/打开过的全部页面（见 Action Union）
 > - 变更：取消 `next: { router:"routerId" }`（Flow 不再暗含 RouterMap 依赖）；保留 `next: { router: Function }` 作为动态路由兜底，并要求显式 `unsafe:true`，且 router 必须只读/无副作用（见 4.3）
 > - 变更：QuerySpec 在 kind="selector" 时，`policy` 默认从 `"single"` 调整为 `"pool"`（更符合“多候选试探”的默认策略）
@@ -26,7 +27,7 @@
 > - `input` 新增 `clear?: boolean`：当为 true 时，先清空当前焦点输入框内容，再按 `mode`（type/paste）输入；保留 `mode:"fill"` 作为旧语义别名，等价于 `{mode:"type", clear:true}`（见 6.1.1）
 > - `input` 新增 `caret?: "end" | "start" | "keep"`：用于在输入前定位光标；**默认 "end"**（追加输入更稳）。如需保留旧行为（不改动 click 后的光标/选区），显式写 `caret:"keep"`（见 6.1.1）。
 > - `click` 新增 `expectInputFocus?: boolean`（默认 false）：用于“点击后必须聚焦输入元素”的场景。为 true 时，若点击后未确认输入焦点，执行器应判定失败（可按实现触发 selector 再生成/重试）。
-> - 新增 Action 通用等待参数 `postWaitMs?: number`：用于动作成功后进入下一步前的短暂稳定期（默认 0；常用于 Enter 提交后等待 200–500ms）
+> - 新增 Action 通用等待参数 `postWaitMs?: number`：用于动作成功后进入下一步前的短暂稳定期（默认 0；常用于 Enter 提交后等待 200–500ms；**仅 `goto` 在未设置时默认 1000ms，显式 0 表示关闭该默认等待**）
 > - `uploadFile` 重做：支持 `files: FileSpec[]` 一次上传多个文件；每个文件可用 `path` 或 DataURL `data` 提供；其中 `path` 支持本机磁盘路径与内部索引路径 `hub://...`（见 Action Union 的 `uploadFile` 定义与 13.14 约束）
 > - 保留并包含 v0.23 的全部内容（含 run_js 的 query/cache 机制、StepResult、vars/saveAs、Cond.source 扩展等）
 > - **新增约束：`run_js` 必须“只读/不改变页面状态”**（仅用于提取/计算/生成/定位/状态校验；禁止导航/DOM 变更/触发交互/网络/存储写入/计时器循环等；见 7.1.4）
@@ -1173,6 +1174,7 @@ type PageInfo = {
 ```ts
 type ActionBase = {
   // 动作成功（status=done）后，进入 next 前额外等待 N ms（默认 0）
+  // 特例：goto 若未设置 postWaitMs，则默认按 1000ms 处理；显式 postWaitMs:0 表示不额外等待
   // 用途：给页面/组件状态一个短暂稳定期（例如 Enter 提交后 200~500ms）
   // 约束：仅作为“稳定期缓冲”，不能替代 wait 的条件等待
   // 建议：0~5000；负数按 0 处理
@@ -1822,7 +1824,7 @@ type FindSpec = {
 14) `uploadFile.files`：支持多文件；每个 FileSpec 必须且只能提供 `path` 或 `data` 之一；其中 `path` 支持本机磁盘路径与内部索引路径 `hub://...`；若提供 `data` 必须为 DataURL（`data:<mime>;base64,...`）；建议提供合理 `filename`（缺省且给本机 path 取 basename；hub://... 优先用 Hub 元数据 filename）
 15) 插值仅允许 `${path}`（path 语法安全子集）；字面量 `${` 用 `\${` 转义
 16) 若 `query` 含插值，则不得固化 query→by 记忆规则
-17) `postWaitMs` 仅用于动作后短稳态；不能替代 `wait` 的条件等待
+17) `postWaitMs` 仅用于动作后短稳态；不能替代 `wait` 的条件等待（特例：`goto` 未设置时默认 1000ms，显式 `0` 才是不等）
 18) 需要“提交后缓冲”时，优先在触发动作上写 `postWaitMs:200~500`（例如 `input.pressEnter=true`）
 
 ---
@@ -1833,7 +1835,7 @@ type FindSpec = {
   - 明确 `waitUserAction:true|false` 两种模式在 prompt/tip 下的行为语义与适用参数
 
 - v0.51：
-  - 新增 Action 通用参数 `postWaitMs?: number`（动作成功后进入下一步前的短暂稳定期；默认 0）
+  - 新增 Action 通用参数 `postWaitMs?: number`（动作成功后进入下一步前的短暂稳定期；默认 0；`goto` 在未设置时默认 1000ms，显式 `0` 表示关闭）
 
 - v0.50：
   - `run_js` 新增“只读/不改变页面状态”约束（仅用于提取/计算/生成/定位/状态校验；禁止导航/DOM 变更/触发交互/网络/存储写入/计时器循环；见 7.1.4）

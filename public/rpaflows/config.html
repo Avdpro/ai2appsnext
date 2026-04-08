@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPA Config</title>
+  <style>
+    :root {
+      --bg:#eef3fb; --card:#fff; --line:#cbd5e1; --text:#0f172a; --sub:#475569;
+      --btn:#2563eb; --ok:#059669; --muted:#64748b; --warn:#b45309;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",sans-serif; }
+    .page { max-width: 1220px; margin: 0 auto; padding: 14px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
+    .head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+    .title { font-size: 20px; font-weight: 800; }
+    .sub { color: var(--sub); font-size: 13px; }
+    label { display:block; margin:8px 0 4px; color:var(--sub); font-size:13px; }
+    input, select, textarea, button { width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:14px; }
+    button { border:none; cursor:pointer; color:#fff; background:var(--btn); font-weight:700; }
+    button.ok { background:var(--ok); }
+    button.muted { background:var(--muted); }
+    button.warn { background:var(--warn); }
+    button:disabled { opacity:0.56; cursor:not-allowed; }
+    .row { display:grid; gap:8px; grid-template-columns: 1fr 1fr 1fr auto; align-items:end; }
+    .tag { display:inline-block; border:1px solid var(--line); border-radius:999px; padding: 2px 10px; color:var(--sub); font-size:12px; }
+    .env-grid { display:grid; grid-template-columns: minmax(240px,1fr) minmax(360px,1.4fr) minmax(260px,1fr); gap:8px; align-items:start; }
+    .env-head { color:#334155; font-size:12px; font-weight:700; margin-bottom:4px; }
+    .env-row { border:1px solid var(--line); border-radius:10px; padding:8px; margin-bottom:8px; background:#f8fbff; }
+    .key-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .val-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .desc { color:var(--sub); font-size:12px; line-height:1.35; white-space:pre-wrap; }
+    .busy-mask { position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center; background:rgba(15,23,42,.28); }
+    .busy-mask.show { display:flex; }
+    .busy-card { min-width:260px; max-width:min(90vw,560px); border:1px solid var(--line); border-radius:12px; background:#fff; padding:14px 16px; box-shadow:0 10px 30px rgba(15,23,42,.18); }
+    .busy-title { font-weight:800; margin-bottom:6px; }
+    .busy-text { font-size:13px; color:#334155; }
+    @media (max-width: 980px) {
+      .row { grid-template-columns: 1fr; }
+      .env-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <div class="head">
+        <div>
+          <div class="title">系统配置（.env）</div>
+          <div class="sub">同时兼容用户模式和开发者模式，改动后会直接写入对应 .env 文件</div>
+        </div>
+        <span id="statusTag" class="tag">Ready</span>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>配置范围</label>
+          <select id="scopeInput">
+            <option value="app" selected>主应用 .env</option>
+            <option value="rpaflows">rpaflows/.env</option>
+          </select>
+        </div>
+        <div>
+          <label>展示模式</label>
+          <select id="modeInput">
+            <option value="user" selected>用户模式（推荐）</option>
+            <option value="developer">开发者模式（全部键）</option>
+          </select>
+        </div>
+        <div>
+          <label>当前文件</label>
+          <input id="filePathInput" readonly>
+        </div>
+        <button id="reloadBtn" class="muted" type="button" style="height:38px;">刷新</button>
+      </div>
+
+      <div style="display:flex;gap:8px; margin-top:8px;">
+        <button id="addKeyBtn" class="warn" type="button" style="max-width:160px;">+ 新增配置项</button>
+        <button id="saveBtn" class="ok" type="button" style="max-width:180px;">保存到 .env</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="env-grid env-head">
+        <div>KEY</div><div>VALUE</div><div>说明</div>
+      </div>
+      <div id="envList">加载中...</div>
+    </div>
+  </div>
+
+  <div id="busyMask" class="busy-mask" aria-live="polite" aria-busy="false">
+    <div class="busy-card">
+      <div class="busy-title">请稍候</div>
+      <div id="busyText" class="busy-text">正在处理...</div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id)=>document.getElementById(id);
+    const state = { rows: [], busyCount: 0 };
+    const ENV_VALUE_OPTIONS = {
+      AI_PROVIDER: ["openai", "openrouter", "anthropic", "google", "ollama"],
+      AI_PROVIDER_RUN_AI: ["openai", "openrouter", "anthropic", "google", "ollama"],
+      AI_PROVIDER_RUN_AI_FALLBACK: ["", "openai", "openrouter", "anthropic", "google", "ollama"],
+      FLOW_SOURCE_POLICY: ["prefer_local", "prefer_cloud", "local", "cloud"],
+      RPAFLOWS: ["true", "false"],
+      FLOW_CLOUD_CACHE_ENABLE: ["true", "false"],
+      FLOW_AGENT_CODEX_CMD: ["codex"],
+      FLOW_AGENT_CC_CMD: ["claude"],
+    };
+
+    function asText(v){ return String(v == null ? "" : v).trim(); }
+    function setStatus(v){ $("statusTag").textContent = String(v || "-"); }
+    function getValueOptionsByKey(key){ return ENV_VALUE_OPTIONS[asText(key)] || null; }
+
+    async function api(method, path, body){
+      const init = { method, headers: { "content-type":"application/json" } };
+      if(body !== undefined) init.body = JSON.stringify(body);
+      const res = await fetch(path, init);
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.reason || `HTTP ${res.status}`);
+      return data.data;
+    }
+
+    function showBusy(text){
+      state.busyCount += 1;
+      $("busyText").textContent = String(text || "正在处理...");
+      const m = $("busyMask");
+      m.classList.add("show");
+      m.setAttribute("aria-busy","true");
+    }
+    function hideBusy(){
+      state.busyCount = Math.max(0, Number(state.busyCount || 0) - 1);
+      if(state.busyCount > 0) return;
+      const m = $("busyMask");
+      m.classList.remove("show");
+      m.setAttribute("aria-busy","false");
+    }
+    async function withBusy(text, fn){ showBusy(text); try { return await fn(); } finally { hideBusy(); } }
+
+    function renderRows(){
+      const box = $("envList");
+      if(!state.rows.length){ box.textContent = "暂无配置项"; return; }
+      box.innerHTML = "";
+      state.rows.forEach((row, idx)=>{
+        const wrap = document.createElement("div");
+        wrap.className = "env-row";
+
+        const grid = document.createElement("div");
+        grid.className = "env-grid";
+
+        const keyIn = document.createElement("input");
+        keyIn.className = "key-input";
+        keyIn.value = asText(row.key);
+        keyIn.placeholder = "例如 FLOW_SOURCE_POLICY";
+        keyIn.dataset.idx = String(idx);
+        keyIn.dataset.field = "key";
+        keyIn.addEventListener("input", onRowInput);
+        keyIn.addEventListener("change", ()=>renderRows());
+        grid.appendChild(keyIn);
+
+        const options = getValueOptionsByKey(row.key);
+        if (Array.isArray(options) && options.length) {
+          const valSel = document.createElement("select");
+          valSel.className = "val-input";
+          valSel.dataset.idx = String(idx);
+          valSel.dataset.field = "value";
+          const curVal = String(row.value == null ? "" : row.value);
+          options.forEach((v)=>{
+            const op = document.createElement("option");
+            op.value = String(v);
+            op.textContent = String(v) || "（空）";
+            valSel.appendChild(op);
+          });
+          if (!options.includes(curVal) && curVal) {
+            const op = document.createElement("option");
+            op.value = curVal;
+            op.textContent = `${curVal}（当前值）`;
+            valSel.appendChild(op);
+          }
+          valSel.value = curVal || String(options[0]);
+          valSel.addEventListener("change", onRowInput);
+          grid.appendChild(valSel);
+        } else {
+          const valIn = document.createElement("textarea");
+          valIn.className = "val-input";
+          valIn.style.minHeight = "70px";
+          valIn.value = String(row.value == null ? "" : row.value);
+          valIn.placeholder = "值（按字符串写入 .env）";
+          valIn.dataset.idx = String(idx);
+          valIn.dataset.field = "value";
+          valIn.addEventListener("input", onRowInput);
+          grid.appendChild(valIn);
+        }
+
+        const descBox = document.createElement("div");
+        const d = document.createElement("div");
+        d.className = "desc";
+        d.textContent = asText(row.desc || "");
+        descBox.appendChild(d);
+        const rmBtn = document.createElement("button");
+        rmBtn.type = "button";
+        rmBtn.className = "muted";
+        rmBtn.textContent = "移除";
+        rmBtn.style.marginTop = "8px";
+        rmBtn.style.maxWidth = "96px";
+        rmBtn.addEventListener("click", ()=>{
+          state.rows.splice(idx, 1);
+          renderRows();
+        });
+        descBox.appendChild(rmBtn);
+        grid.appendChild(descBox);
+
+        wrap.appendChild(grid);
+        box.appendChild(wrap);
+      });
+    }
+
+    function onRowInput(ev){
+      const el = ev.target;
+      const idx = Number(el?.dataset?.idx || -1);
+      const field = asText(el?.dataset?.field || "");
+      if(idx < 0 || idx >= state.rows.length || !field) return;
+      state.rows[idx][field] = (field === "key") ? asText(el.value) : String(el.value || "");
+    }
+
+    async function loadEnv(){
+      const scope = asText($("scopeInput").value || "app");
+      const mode = asText($("modeInput").value || "user");
+      const data = await api("GET", `/rpaflows/api/config/env?scope=${encodeURIComponent(scope)}&mode=${encodeURIComponent(mode)}`);
+      $("filePathInput").value = asText(data?.filePath || "");
+      const items = Array.isArray(data?.items) ? data.items : [];
+      state.rows = items.map((it)=>({ key: asText(it?.key), value: String(it?.value == null ? "" : it.value), desc: asText(it?.desc || "") }));
+      renderRows();
+      const devMode = mode === "developer";
+      $("addKeyBtn").disabled = !devMode;
+      setStatus(`已加载 ${items.length} 项`);
+    }
+
+    async function saveEnv(){
+      const values = {};
+      for(const one of state.rows){
+        const key = asText(one?.key || "");
+        if(!key) continue;
+        values[key] = String(one?.value == null ? "" : one.value);
+      }
+      const data = await api("POST", "/rpaflows/api/config/env/save", {
+        scope: asText($("scopeInput").value || "app"),
+        values,
+      });
+      const n = Array.isArray(data?.savedKeys) ? data.savedKeys.length : 0;
+      setStatus(`保存成功: ${n} 项`);
+      await loadEnv();
+    }
+
+    $("reloadBtn").addEventListener("click", ()=>withBusy("正在刷新配置...", ()=>loadEnv()).catch((e)=>setStatus(String(e?.message || e))));
+    $("scopeInput").addEventListener("change", ()=>withBusy("正在切换配置范围...", ()=>loadEnv()).catch((e)=>setStatus(String(e?.message || e))));
+    $("modeInput").addEventListener("change", ()=>withBusy("正在切换显示模式...", ()=>loadEnv()).catch((e)=>setStatus(String(e?.message || e))));
+    $("addKeyBtn").addEventListener("click", ()=>{
+      state.rows.push({ key: "", value: "", desc: "自定义配置项" });
+      renderRows();
+      setStatus("已新增空白配置项");
+    });
+    $("saveBtn").addEventListener("click", ()=>withBusy("正在写入 .env ...", ()=>saveEnv()).catch((e)=>setStatus(String(e?.message || e))));
+
+    loadEnv().catch((e)=>setStatus(String(e?.message || e)));
+  </script>
+</body>
+</html>

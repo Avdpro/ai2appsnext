@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPA Flow 系统审核</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #fff;
+      --line: #d9e0ea;
+      --text: #1a2433;
+      --sub: #5a687d;
+      --btn: #0b5cff;
+      --btnText: #fff;
+      --ok: #1f9d55;
+      --danger: #b42318;
+      --mono: "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #e9f0ff 0%, var(--bg) 45%);
+    }
+    .wrap { max-width: 1500px; margin: 0 auto; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .cols {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    .stack { display: grid; gap: 12px; align-items: start; }
+    @media (max-width: 1200px) {
+      .cols { grid-template-columns: 1fr; }
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    p { margin: 0; color: var(--sub); }
+    label { display: block; font-size: 13px; color: var(--sub); margin: 0 0 6px; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+      color: var(--text);
+      background: #fff;
+    }
+    textarea { min-height: 120px; resize: vertical; font-family: var(--mono); }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      background: var(--btn);
+      color: var(--btnText);
+      font-size: 14px;
+    }
+    button.secondary { background: #7a8597; }
+    button.ok { background: var(--ok); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .tag {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: var(--sub);
+      background: #fff;
+    }
+    .tag.bad { color: #fff; border-color: var(--danger); background: var(--danger); }
+    .tag.good { color: #fff; border-color: var(--ok); background: var(--ok); }
+    .list {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      max-height: 620px;
+      overflow: auto;
+      background: #f9fbff;
+    }
+    .item {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .item:last-child { border-bottom: 0; }
+    .item.active { background: #e8f0ff; }
+    .mono { font-family: var(--mono); }
+    pre {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #f9fbff;
+      max-height: 360px;
+      overflow: auto;
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+    #status { color: var(--sub); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>RPA Flow 系统审核</h1>
+      <p>基于云端提交记录执行预审计，并查看待审核 Flow 详情。</p>
+    </div>
+
+    <div class="cols">
+      <div class="stack">
+        <div class="card">
+          <div class="row" style="align-items:flex-end;">
+            <div style="flex:1.3; min-width:220px;">
+              <label>email</label>
+              <input id="emailInput" placeholder="name@example.com">
+            </div>
+            <div style="flex:1; min-width:180px;">
+              <label>password</label>
+              <input id="passwordInput" type="password" placeholder="******">
+            </div>
+            <div style="flex:1; min-width:200px;">
+              <label>userId</label>
+              <input id="userIdInput" placeholder="10000">
+            </div>
+            <div style="flex:2; min-width:280px;">
+              <label>token</label>
+              <input id="tokenInput" class="mono" placeholder="token...">
+            </div>
+            <div style="width:140px;">
+              <label>apiPath</label>
+              <input id="apiPathInput" value="/ws/">
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button id="loadLocalBtn" class="secondary" type="button">读取本地登录</button>
+            <button id="loginBtn" type="button">邮箱密码登录</button>
+            <button id="checkLoginBtn" type="button">检查登录态</button>
+            <span id="authTag" class="tag">未校验</span>
+            <span id="status"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <strong>待审核列表</strong>
+            <button id="reloadPendingBtn" class="secondary" type="button">刷新</button>
+          </div>
+          <div class="row" style="margin:8px 0;">
+            <label class="row" style="margin:0;"><input id="stSubmitted" type="checkbox" checked> <span>SUBMITTED</span></label>
+            <label class="row" style="margin:0;"><input id="stPending" type="checkbox" checked> <span>PENDING</span></label>
+            <label class="row" style="margin:0;"><input id="stApproved" type="checkbox"> <span>APPROVED</span></label>
+            <label class="row" style="margin:0;"><input id="stRejected" type="checkbox"> <span>REJECTED</span></label>
+            <label class="row" style="margin:0;"><input id="stPublished" type="checkbox"> <span>PUBLISHED</span></label>
+          </div>
+          <div class="row" style="margin:4px 0 8px;">
+            <div style="flex:1; min-width:140px;">
+              <label>用户ID（可选）</label>
+              <input id="ownerUserIdFilterInput" class="mono" placeholder="如: 10000 / system">
+            </div>
+          </div>
+          <div class="row" style="margin:0 0 8px;">
+            <div style="flex:1; min-width:170px;">
+              <label>发布时间起（可选）</label>
+              <input id="publishedFromInput" type="datetime-local">
+            </div>
+            <div style="flex:1; min-width:170px;">
+              <label>发布时间止（可选）</label>
+              <input id="publishedToInput" type="datetime-local">
+            </div>
+          </div>
+          <div id="pendingList" class="list"></div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="card">
+          <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+            <strong>Flow 详情</strong>
+            <span id="selectedTag" class="tag">未选择</span>
+          </div>
+          <div class="row" style="margin-bottom:8px;">
+            <span id="sigAuthorTag" class="tag">开发者签名: -</span>
+            <span id="sigSystemTag" class="tag">系统签名: -</span>
+            <span id="flowStatusTag" class="tag">状态: -</span>
+            <span id="riskTag" class="tag">风险: -</span>
+          </div>
+          <label>Flow JSON（云端 content）</label>
+          <textarea id="flowText" class="mono" readonly></textarea>
+          <label style="margin-top:8px;">详情输出</label>
+          <pre id="detailPre">等待选择...</pre>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+            <strong>预审计</strong>
+            <span id="summaryTag" class="tag">未执行</span>
+          </div>
+          <div class="row" style="margin-bottom:8px;">
+            <div style="min-width:120px; flex:1;">
+              <label>mode</label>
+              <select id="auditMode">
+                <option value="warn" selected>warn</option>
+                <option value="strict">strict</option>
+              </select>
+            </div>
+            <div style="min-width:120px; flex:1;">
+              <label>AI</label>
+              <label class="row" style="margin:0;"><input id="aiEnabled" type="checkbox" checked> <span>启用</span></label>
+            </div>
+            <div style="min-width:120px; flex:1;">
+              <label>tier</label>
+              <select id="aiTier">
+                <option value="">默认</option>
+                <option value="fast">fast</option>
+                <option value="balanced">balanced</option>
+                <option value="quality" selected>quality</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-bottom:8px;">
+            <button id="runAuditBtn" class="ok" type="button">执行预审计</button>
+            <span id="aiTag" class="tag">AI: -</span>
+            <span id="riskSuggestTag" class="tag">建议风险: -</span>
+          </div>
+          <pre id="auditPre">等待执行...</pre>
+          <hr style="border:none;border-top:1px solid #d9e0ea;margin:12px 0;">
+          <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+            <strong>审核动作</strong>
+            <span id="reviewActionTag" class="tag">未选择 Flow</span>
+          </div>
+          <label>审核备注</label>
+          <textarea id="reviewNoteInput" class="mono" placeholder="审核意见/发布说明（可选）" style="min-height:92px;"></textarea>
+          <div class="row" style="margin:8px 0;">
+            <div style="min-width:140px; max-width:220px;">
+              <label>风险等级（1~5）</label>
+              <select id="riskLevelSelect">
+                <option value="1">1 (最低)</option>
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+                <option value="5">5 (最高)</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:280px;">
+              <label>风险说明</label>
+              <textarea id="riskDescInput" class="mono" placeholder="审计生成或人工补充的风险说明" style="min-height:72px;"></textarea>
+            </div>
+          </div>
+          <div class="row" style="margin:8px 0;">
+            <button id="approveBtn" class="ok" type="button" disabled>批准</button>
+            <button id="rejectBtn" type="button" disabled>驳回</button>
+          </div>
+          <label>系统私钥文件（发布时需要）</label>
+          <div class="row" style="margin-bottom:8px;">
+            <label class="secondary" for="systemKeyFileInput" style="display:inline-block;padding:8px 12px;border-radius:8px;background:#7a8597;color:#fff;cursor:pointer;">选择系统私钥</label>
+            <input id="systemKeyFileInput" type="file" accept=".pem,.key,.txt" style="display:none;">
+            <span id="systemKeyFileName" class="tag">未选择</span>
+          </div>
+          <label>系统级 flowId（可选）</label>
+          <input id="systemFlowIdInput" class="mono" placeholder="例如: generic_search（留空则只发布原 owner 记录）">
+          <div class="row" style="margin-bottom:8px;">
+            <button id="publishApprovedBtn" type="button" disabled>系统发布</button>
+          </div>
+          <pre id="reviewResultPre">等待操作...</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      authOk: false,
+      pending: [],
+      selected: null,
+      selectedFlow: null,
+      selectedSummary: null,
+      selectedOwnerUserId: "",
+      selectedFlowId: "",
+      lastAuditReport: null,
+      systemPrivateKeyPem: "",
+      systemPrivateKeyName: "",
+      suggestedRiskLevel: 3,
+      suggestedRiskDesc: "",
+    };
+
+    function asText(v) { return String(v == null ? "" : v).trim(); }
+
+    function sortObjectDeep(v) {
+      if (Array.isArray(v)) return v.map(sortObjectDeep);
+      if (!v || typeof v !== "object") return v;
+      const out = {};
+      const keys = Object.keys(v).sort((a, b) => a.localeCompare(b));
+      for (const k of keys) out[k] = sortObjectDeep(v[k]);
+      return out;
+    }
+
+    async function sha256Hex(text) {
+      const raw = String(text == null ? "" : text);
+      const bytes = new TextEncoder().encode(raw);
+      const hash = await crypto.subtle.digest("SHA-256", bytes);
+      return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function base64FromBytes(bytes) {
+      let bin = "";
+      const arr = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes || []);
+      for (let i = 0; i < arr.length; i += 1) bin += String.fromCharCode(arr[i]);
+      return btoa(bin);
+    }
+
+    function pemToDerBytes(pemText) {
+      const pem = asText(pemText);
+      const body = pem
+        .replace(/-----BEGIN [^-]+-----/g, "")
+        .replace(/-----END [^-]+-----/g, "")
+        .replace(/\s+/g, "");
+      if (!body) throw new Error("PEM 内容为空");
+      const bin = atob(body);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+      return out.buffer;
+    }
+
+    async function signTextWithEd25519Pem(text, privateKeyPem) {
+      const data = new TextEncoder().encode(String(text || ""));
+      const der = pemToDerBytes(privateKeyPem);
+      const key = await crypto.subtle.importKey("pkcs8", der, { name: "Ed25519" }, false, ["sign"]);
+      const sig = await crypto.subtle.sign({ name: "Ed25519" }, key, data);
+      return base64FromBytes(new Uint8Array(sig));
+    }
+
+    function setStatus(text) {
+      $("status").textContent = asText(text);
+    }
+
+    function setAuthTag(ok, text = "") {
+      const el = $("authTag");
+      el.textContent = text || (ok ? "登录有效" : "未校验");
+      el.className = `tag ${ok ? "good" : ""}`;
+    }
+
+    async function callSystemWs(msg, vo = {}, opts = {}) {
+      const apiPath = asText(opts.apiPath || $("apiPathInput").value || "/ws/") || "/ws/";
+      const timeoutMs = Math.max(1000, Number(opts.timeoutMs || 20000));
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, timeoutMs);
+      try {
+        const resp = await fetch(apiPath, {
+          method: "POST",
+          cache: "no-cache",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ msg: asText(msg), vo: (vo && typeof vo === "object") ? vo : {} }),
+          signal: ctrl.signal,
+        });
+        const text = await resp.text();
+        let data = {};
+        try { data = JSON.parse(text || "{}"); } catch (_) { data = { code: resp.status, info: text || "invalid json" }; }
+        if (!Object.prototype.hasOwnProperty.call(data, "code")) data.code = resp.status;
+        return data;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function readLocalLogin() {
+      for (const k of ["LoginVO", "login-Info", "loginInfo", "login_vo"]) {
+        let raw = "";
+        try { raw = asText(localStorage.getItem(k)); } catch (_) { raw = ""; }
+        if (!raw) continue;
+        try {
+          const obj = JSON.parse(raw);
+          const userId = asText(obj.userId || obj.userid);
+          const token = asText(obj.token);
+          if (!userId || !token) continue;
+          return {
+            userId,
+            token,
+            apiPath: asText(obj.apiPath || "/ws/") || "/ws/",
+            email: asText(obj.email),
+          };
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    function saveLocalLoginCompat(vo) {
+      if (!vo || typeof vo !== "object") return;
+      const userId = asText(vo.userId || vo.userid);
+      const token = asText(vo.token);
+      if (!userId || !token) return;
+      const packed = {
+        ...vo,
+        userId,
+        userid: userId,
+        token,
+        apiPath: asText(vo.apiPath || "/ws/") || "/ws/",
+      };
+      const text = JSON.stringify(packed);
+      try { localStorage.setItem("LoginVO", text); } catch (_) {}
+      try { localStorage.setItem("login-Info", text); } catch (_) {}
+    }
+
+    function requireAuth() {
+      const userId = asText($("userIdInput").value);
+      const token = asText($("tokenInput").value);
+      const apiPath = asText($("apiPathInput").value) || "/ws/";
+      if (!userId || !token) throw new Error("请先填写 userId/token");
+      return { userId, token, apiPath };
+    }
+
+    async function loadLocalLoginToForm() {
+      const info = readLocalLogin();
+      if (!info) throw new Error("未找到本地登录信息（LoginVO/login-Info）");
+      $("userIdInput").value = info.userId;
+      $("tokenInput").value = info.token;
+      $("apiPathInput").value = info.apiPath;
+      setStatus(`已加载本地登录信息 ${info.email ? `(${info.email})` : ""}`);
+      setAuthTag(false, "已填充，待校验");
+    }
+
+    async function checkLogin() {
+      const auth = requireAuth();
+      setStatus("检查登录态...");
+      const pathRet = await callSystemWs("apiPath", {}, { apiPath: auth.apiPath, timeoutMs: 15000 });
+      const realApiPath = asText(pathRet.path || auth.apiPath) || "/ws/";
+      $("apiPathInput").value = realApiPath;
+      const checkRet = await callSystemWs("userCurrency", {
+        userId: auth.userId,
+        token: auth.token,
+      }, { apiPath: realApiPath, timeoutMs: 15000 });
+      const ok = Number(checkRet.code || 0) === 200;
+      state.authOk = ok;
+      setAuthTag(ok, ok ? "登录有效" : `无效(${asText(checkRet.info || checkRet.code)})`);
+      setStatus(ok ? "登录校验通过" : "登录校验失败");
+      if (ok) {
+        saveLocalLoginCompat({
+          userId: auth.userId,
+          userid: auth.userId,
+          token: auth.token,
+          apiPath: realApiPath,
+          email: asText($("emailInput").value),
+        });
+      }
+      return ok;
+    }
+
+    async function loginByEmailPassword() {
+      const email = asText($("emailInput").value);
+      const password = String($("passwordInput").value || "");
+      const apiPath = asText($("apiPathInput").value) || "/ws/";
+      if (!email || !password) throw new Error("请先输入 email 和 password");
+      setStatus("登录中...");
+      const pathRet = await callSystemWs("apiPath", {}, { apiPath, timeoutMs: 15000 });
+      const realApiPath = asText(pathRet.path || apiPath) || "/ws/";
+      $("apiPathInput").value = realApiPath;
+      const t = Date.now();
+      const baseSha = await sha256Hex(password);
+      const finalSha = await sha256Hex(`${t}${baseSha}`);
+      const loginRet = await callSystemWs("userLogin", {
+        email,
+        time: t,
+        passwordSHA: finalSha,
+      }, { apiPath: realApiPath, timeoutMs: 30000 });
+      if (Number(loginRet.code || 0) !== 200) {
+        throw new Error(`登录失败: ${asText(loginRet.info || loginRet.code)}`);
+      }
+      const uid = asText(loginRet.userId || loginRet.userid);
+      const tk = asText(loginRet.token);
+      if (!uid || !tk) throw new Error("登录返回缺少 userId/token");
+      $("userIdInput").value = uid;
+      $("tokenInput").value = tk;
+      $("passwordInput").value = "";
+      saveLocalLoginCompat({ ...loginRet, userId: uid, userid: uid, token: tk, apiPath: realApiPath, email });
+      const ok = await checkLogin();
+      if (!ok) throw new Error("登录后校验失败");
+      setStatus("邮箱密码登录成功");
+    }
+
+    async function autoLoginOnStartup() {
+      const info = readLocalLogin();
+      if (!info) {
+        setAuthTag(false, "未登录");
+        setStatus("未检测到本地登录信息，请使用邮箱密码登录");
+        return false;
+      }
+      $("userIdInput").value = info.userId;
+      $("tokenInput").value = info.token;
+      $("apiPathInput").value = info.apiPath;
+      if (info.email) $("emailInput").value = info.email;
+      setAuthTag(false, "检测到本地登录，校验中...");
+      const ok = await checkLogin();
+      if (ok) {
+        setStatus("已自动登录并校验通过");
+        return true;
+      }
+      setStatus("本地登录信息无效，请使用邮箱密码登录");
+      return false;
+    }
+
+    function collectStatusList() {
+      const list = [];
+      if ($("stSubmitted").checked) list.push("SUBMITTED");
+      if ($("stPending").checked) list.push("PENDING_PUBLISH_APPROVAL");
+      if ($("stApproved").checked) list.push("APPROVED");
+      if ($("stRejected").checked) list.push("REJECTED");
+      if ($("stPublished").checked) list.push("PUBLISHED");
+      return list;
+    }
+
+    function toIsoFromLocalDateTimeInput(v) {
+      const s = asText(v);
+      if (!s) return "";
+      const d = new Date(s);
+      if (!Number.isFinite(d.getTime())) return "";
+      return d.toISOString();
+    }
+
+    function renderPendingList() {
+      const box = $("pendingList");
+      box.innerHTML = "";
+      if (!state.pending.length) {
+        const empty = document.createElement("div");
+        empty.className = "item";
+        empty.textContent = "暂无数据";
+        box.appendChild(empty);
+        return;
+      }
+      for (const row of state.pending) {
+        const owner = asText(row.userId);
+        const flowId = asText(row.flowId);
+        const ver = Number(row.version || 0);
+        const status = asText(row.status || "-");
+        const key = `${owner}::${flowId}`;
+        const active = state.selected && state.selected.key === key;
+        const el = document.createElement("div");
+        el.className = `item ${active ? "active" : ""}`;
+        el.innerHTML = `
+          <div><strong>${flowId || "-"}</strong></div>
+          <div class="mono" style="font-size:12px;color:#5a687d;">owner=${owner || "-"}</div>
+          <div style="font-size:12px;color:#5a687d;">v${ver} | ${status}</div>
+        `;
+        el.addEventListener("click", () => {
+          loadReviewDetail(owner, flowId).catch((err) => failUi(err));
+        });
+        box.appendChild(el);
+      }
+    }
+
+    async function loadPendingList() {
+      const auth = requireAuth();
+      const statusList = collectStatusList();
+      if (!statusList.length) throw new Error("请至少选择一种状态");
+      const ownerUserId = asText($("ownerUserIdFilterInput").value);
+      const publishedAtFrom = toIsoFromLocalDateTimeInput($("publishedFromInput").value);
+      const publishedAtTo = toIsoFromLocalDateTimeInput($("publishedToInput").value);
+      setStatus("加载待审核列表...");
+      const ret = await callSystemWs("listPendingPublishFlows", {
+        userId: auth.userId,
+        token: auth.token,
+        statusList,
+        ...(ownerUserId ? { ownerUserId } : {}),
+        ...(publishedAtFrom ? { publishedAtFrom } : {}),
+        ...(publishedAtTo ? { publishedAtTo } : {}),
+        limit: 100,
+        skip: 0,
+        includeContent: false,
+      }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      if (Number(ret.code || 0) !== 200) {
+        throw new Error(asText(ret.info || ret.reason || "加载列表失败"));
+      }
+      state.pending = Array.isArray(ret.flows) ? ret.flows : [];
+      renderPendingList();
+      setStatus(`待审核列表已加载: ${state.pending.length} 条`);
+    }
+
+    function renderDetailMeta(flow) {
+      const status = asText(flow?.status || "-");
+      const hasAuthor = !!asText(flow?.authorSignature?.sig || "");
+      const hasSystem = !!asText(flow?.systemSignature?.sig || "");
+      $("flowStatusTag").textContent = `状态: ${status}`;
+      $("flowStatusTag").className = `tag ${status === "APPROVED" || status === "PUBLISHED" ? "good" : ""}`;
+      $("sigAuthorTag").textContent = `开发者签名: ${hasAuthor ? "有" : "无"}`;
+      $("sigAuthorTag").className = `tag ${hasAuthor ? "good" : "bad"}`;
+      $("sigSystemTag").textContent = `系统签名: ${hasSystem ? "有" : "无"}`;
+      $("sigSystemTag").className = `tag ${hasSystem ? "good" : ""}`;
+      const riskLevel = Number(flow?.risk?.level || 0);
+      $("riskTag").textContent = `风险: ${riskLevel >= 1 && riskLevel <= 5 ? riskLevel : "-"}`;
+      $("riskTag").className = `tag ${riskLevel >= 4 ? "bad" : (riskLevel >= 1 ? "good" : "")}`;
+      updateActionButtons();
+    }
+
+    function updateActionButtons() {
+      const status = asText(state.selectedSummary?.status || "");
+      const hasSel = !!(state.selectedOwnerUserId && state.selectedFlowId && state.selectedFlow);
+      const hasSystemKey = !!asText(state.systemPrivateKeyPem);
+      const approvable = hasSel && (status === "SUBMITTED" || status === "PENDING_PUBLISH_APPROVAL" || status === "REJECTED");
+      const rejectable = hasSel && (status === "SUBMITTED" || status === "PENDING_PUBLISH_APPROVAL" || status === "APPROVED");
+      const publishable = hasSel && status === "APPROVED" && hasSystemKey;
+      $("approveBtn").disabled = !approvable;
+      $("rejectBtn").disabled = !rejectable;
+      $("publishApprovedBtn").disabled = !publishable;
+      $("runAuditBtn").disabled = !hasSel;
+      const actionTag = $("reviewActionTag");
+      if (!hasSel) {
+        actionTag.textContent = "未选择 Flow";
+        actionTag.className = "tag";
+        return;
+      }
+      if (publishable) {
+        actionTag.textContent = "可系统发布";
+        actionTag.className = "tag good";
+        return;
+      }
+      if (status === "APPROVED" && !hasSystemKey) {
+        actionTag.textContent = "已通过，需选择系统私钥";
+        actionTag.className = "tag";
+        return;
+      }
+      actionTag.textContent = `当前状态: ${status || "-"}`;
+      actionTag.className = "tag";
+    }
+
+    async function loadReviewDetail(ownerUserId, flowId) {
+      const auth = requireAuth();
+      if (!ownerUserId || !flowId) throw new Error("ownerUserId/flowId 不能为空");
+      setStatus(`加载详情: ${ownerUserId}/${flowId} ...`);
+      const ret = await callSystemWs("getFlowReviewDetail", {
+        userId: auth.userId,
+        token: auth.token,
+        ownerUserId,
+        flowId,
+      }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      if (Number(ret.code || 0) !== 200) {
+        throw new Error(asText(ret.info || ret.reason || "加载详情失败"));
+      }
+      const flow = ret.flow || {};
+      const content = (flow.content && typeof flow.content === "object") ? flow.content : null;
+      state.selected = { key: `${ownerUserId}::${flowId}`, ownerUserId, flowId };
+      state.selectedOwnerUserId = ownerUserId;
+      state.selectedFlowId = flowId;
+      state.selectedFlow = content;
+      state.selectedSummary = flow;
+      $("selectedTag").textContent = `${ownerUserId}/${flowId}`;
+      $("systemFlowIdInput").value = flowId;
+      $("flowText").value = content ? JSON.stringify(content, null, 2) : "";
+      const savedRiskLevel = Number(flow?.risk?.level || 0);
+      const useLevel = (savedRiskLevel >= 1 && savedRiskLevel <= 5) ? savedRiskLevel : (Number(state.suggestedRiskLevel || 3) || 3);
+      $("riskLevelSelect").value = String(useLevel);
+      $("riskDescInput").value = asText(flow?.risk?.desc || state.suggestedRiskDesc || "");
+      $("detailPre").textContent = JSON.stringify(ret, null, 2);
+      renderDetailMeta(flow);
+      renderPendingList();
+      setStatus("详情加载完成");
+    }
+
+    function updateAuditSummary(report) {
+      const result = (report && typeof report.result === "object") ? report.result : {};
+      const maxRisk = asText(result?.overview?.maxRiskLevel || "info");
+      const findings = Number(result?.findings?.length || 0);
+      const wouldBlock = result?.wouldBlock === true;
+      $("summaryTag").textContent = `${maxRisk} | findings=${findings} | wouldBlock=${wouldBlock}`;
+      $("summaryTag").className = `tag ${["critical", "high"].includes(maxRisk) ? "bad" : ""}`;
+      const ai = (result.ai && typeof result.ai === "object") ? result.ai : {};
+      const calls = Number(ai.calls || 0);
+      const fails = Number(ai.failures || 0);
+      $("aiTag").textContent = `AI: enabled=${!!ai.enabled} calls=${calls} failures=${fails}`;
+      $("aiTag").className = `tag ${(ai.enabled && calls > 0 && fails === 0) ? "good" : ""}`;
+      const suggestedRiskLevel = Number(report?.suggestedRiskLevel || 0);
+      const riskLevel = (suggestedRiskLevel >= 1 && suggestedRiskLevel <= 5) ? suggestedRiskLevel : 3;
+      const riskDesc = asText(report?.riskDescription || "");
+      state.suggestedRiskLevel = riskLevel;
+      state.suggestedRiskDesc = riskDesc;
+      $("riskSuggestTag").textContent = `建议风险: ${riskLevel}`;
+      $("riskSuggestTag").className = `tag ${riskLevel >= 4 ? "bad" : "good"}`;
+      $("riskLevelSelect").value = String(riskLevel);
+      if (!asText($("riskDescInput").value)) $("riskDescInput").value = riskDesc;
+    }
+
+    async function runPreAudit() {
+      if (!state.selectedFlow) throw new Error("请先从左侧列表选择一个 Flow");
+      setStatus("预审计执行中...");
+      $("summaryTag").textContent = "执行中";
+      $("summaryTag").className = "tag";
+      $("aiTag").textContent = "AI: 执行中";
+      $("aiTag").className = "tag";
+      $("auditPre").textContent = "执行中...";
+      const body = {
+        flowText: JSON.stringify(state.selectedFlow, null, 2),
+        args: {},
+        audit: {
+          mode: asText($("auditMode").value || "warn"),
+          aiEnabled: $("aiEnabled").checked === true,
+          aiIncludeRunJsWithCode: true,
+          aiTier: asText($("aiTier").value || ""),
+        },
+      };
+      const res = await fetch("/rpaflows/api/audit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(asText(data?.reason || "预审计失败"));
+      }
+      updateAuditSummary(data.report || {});
+      state.lastAuditReport = data.report || null;
+      $("auditPre").textContent = JSON.stringify(data.report || {}, null, 2);
+      setStatus("预审计完成");
+    }
+
+    async function loadSystemKeyFromFile(ev) {
+      const file = ev?.target?.files && ev.target.files[0] ? ev.target.files[0] : null;
+      if (!file) return;
+      const text = asText(await file.text());
+      if (!text.includes("BEGIN PRIVATE KEY")) {
+        throw new Error("请选择 PKCS8 PEM 私钥（含 BEGIN PRIVATE KEY）");
+      }
+      state.systemPrivateKeyPem = text;
+      state.systemPrivateKeyName = asText(file.name);
+      $("systemKeyFileName").textContent = state.systemPrivateKeyName || "已选择";
+      updateActionButtons();
+      setStatus(`已加载系统私钥: ${state.systemPrivateKeyName}`);
+      try { ev.target.value = ""; } catch (_) {}
+    }
+
+    async function runReviewDecision(decision) {
+      const auth = requireAuth();
+      if (!state.selectedOwnerUserId || !state.selectedFlowId) throw new Error("请先选择 Flow");
+      const d = asText(decision).toLowerCase();
+      if (!["approve", "reject"].includes(d)) throw new Error("decision 只能是 approve/reject");
+      const note = asText($("reviewNoteInput").value);
+      setStatus(d === "approve" ? "审核通过中..." : "审核驳回中...");
+      const ret = await callSystemWs("reviewFlow", {
+        userId: auth.userId,
+        token: auth.token,
+        ownerUserId: state.selectedOwnerUserId,
+        flowId: state.selectedFlowId,
+        decision: d,
+        note,
+        auditSummary: state.lastAuditReport ? {
+          ts: state.lastAuditReport.ts || new Date().toISOString(),
+          flowId: state.lastAuditReport.flowId || state.selectedFlowId,
+          result: state.lastAuditReport.result || {},
+        } : undefined,
+      }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      if (Number(ret.code || 0) !== 200) throw new Error(asText(ret.info || ret.reason || "审核操作失败"));
+      $("reviewResultPre").textContent = JSON.stringify(ret, null, 2);
+      await loadReviewDetail(state.selectedOwnerUserId, state.selectedFlowId);
+      await loadPendingList().catch(() => {});
+      setStatus(d === "approve" ? "审核已通过" : "审核已驳回");
+    }
+
+    async function runPublishApprovedFlow() {
+      const auth = requireAuth();
+      if (!state.selectedOwnerUserId || !state.selectedFlowId || !state.selectedSummary || !state.selectedFlow) {
+        throw new Error("请先选择 Flow");
+      }
+      const status = asText(state.selectedSummary.status);
+      if (status !== "APPROVED") throw new Error("仅 APPROVED 状态可系统发布");
+      if (!asText(state.systemPrivateKeyPem)) throw new Error("请先选择系统私钥");
+      const note = asText($("reviewNoteInput").value);
+      const systemFlowId = asText($("systemFlowIdInput").value);
+      const riskLevel = Number($("riskLevelSelect").value || 3);
+      const riskDesc = asText($("riskDescInput").value);
+      const now = new Date().toISOString();
+      const flowDigest = asText(state.selectedSummary.digest) || `sha256:${await sha256Hex(JSON.stringify(sortObjectDeep(state.selectedFlow)))}`;
+      const payload = {
+        ownerUserId: state.selectedOwnerUserId,
+        flowId: state.selectedFlowId,
+        version: Number(state.selectedSummary.version || 0),
+        flowDigest,
+        at: now,
+        ...(systemFlowId ? { systemFlowId } : {}),
+      };
+      const payloadText = JSON.stringify(payload);
+      const sig = await signTextWithEd25519Pem(payloadText, state.systemPrivateKeyPem);
+      const systemSignature = {
+        alg: "ed25519",
+        kid: "system",
+        sig,
+        signedAt: now,
+        payload,
+      };
+      const publishVO = {
+        userId: auth.userId,
+        token: auth.token,
+        ownerUserId: state.selectedOwnerUserId,
+        flowId: state.selectedFlowId,
+        ...(systemFlowId ? { systemFlowId } : {}),
+        systemSignature,
+        reviewComment: note,
+        channel: "stable",
+        risk: {
+          level: (riskLevel >= 1 && riskLevel <= 5) ? riskLevel : 3,
+          desc: riskDesc || state.suggestedRiskDesc || "",
+          source: state.lastAuditReport ? "audit" : "manual",
+          updatedBy: auth.userId,
+          updatedAt: now,
+          audit: state.lastAuditReport ? {
+            ts: state.lastAuditReport.ts || now,
+            suggestedRiskLevel: Number(state.lastAuditReport.suggestedRiskLevel || state.suggestedRiskLevel || 3),
+            riskDescription: asText(state.lastAuditReport.riskDescription || state.suggestedRiskDesc || ""),
+            riskDetails: state.lastAuditReport.riskDetails || null,
+          } : null,
+        },
+      };
+      setStatus("系统发布中...");
+      let ret = await callSystemWs("publishApprovedFlow", publishVO, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      if (Number(ret.code || 0) === 409 && asText(ret.reasonCode) === "system_flow_source_conflict") {
+        const oldOwner = asText(ret?.conflict?.currentSource?.ownerUserId || "-");
+        const oldFlow = asText(ret?.conflict?.currentSource?.flowId || "-");
+        const nextOwner = asText(ret?.conflict?.incomingSource?.ownerUserId || state.selectedOwnerUserId || "-");
+        const nextFlow = asText(ret?.conflict?.incomingSource?.flowId || state.selectedFlowId || "-");
+        const ok = window.confirm(
+          `系统Flow ${systemFlowId} 当前来源是 ${oldOwner}/${oldFlow}，\n` +
+          `本次将改为 ${nextOwner}/${nextFlow}。\n\n` +
+          `是否确认覆盖？`
+        );
+        if (!ok) throw new Error("你已取消覆盖系统 Flow");
+        setStatus("已确认覆盖，重新发布中...");
+        ret = await callSystemWs("publishApprovedFlow", { ...publishVO, forceSystemOverwrite: true }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      }
+      if (Number(ret.code || 0) !== 200) throw new Error(asText(ret.info || ret.reason || "系统发布失败"));
+      $("reviewResultPre").textContent = JSON.stringify(ret, null, 2);
+      await loadReviewDetail(state.selectedOwnerUserId, state.selectedFlowId);
+      await loadPendingList().catch(() => {});
+      setStatus("系统发布完成");
+    }
+
+    function failUi(err, target = "status") {
+      const msg = asText(err?.message || err || "unknown error");
+      setStatus(`失败: ${msg}`);
+      if (target === "audit") $("auditPre").textContent = `Error: ${msg}`;
+      if (target === "review") $("reviewResultPre").textContent = `Error: ${msg}`;
+    }
+
+    $("loadLocalBtn").addEventListener("click", () => loadLocalLoginToForm().catch((e) => failUi(e, "status")));
+    $("loginBtn").addEventListener("click", () => loginByEmailPassword().catch((e) => failUi(e, "status")));
+    $("checkLoginBtn").addEventListener("click", () => checkLogin().catch((e) => failUi(e, "status")));
+    $("reloadPendingBtn").addEventListener("click", () => loadPendingList().catch((e) => failUi(e, "status")));
+    $("runAuditBtn").addEventListener("click", () => runPreAudit().catch((e) => failUi(e, "audit")));
+    $("systemKeyFileInput").addEventListener("change", (ev) => loadSystemKeyFromFile(ev).catch((e) => failUi(e, "review")));
+    $("approveBtn").addEventListener("click", () => runReviewDecision("approve").catch((e) => failUi(e, "review")));
+    $("rejectBtn").addEventListener("click", () => runReviewDecision("reject").catch((e) => failUi(e, "review")));
+    $("publishApprovedBtn").addEventListener("click", () => runPublishApprovedFlow().catch((e) => failUi(e, "review")));
+
+    (function init() {
+      autoLoginOnStartup().catch(() => {
+        setAuthTag(false, "未登录");
+      });
+      renderPendingList();
+      updateActionButtons();
+    })();
+  </script>
+</body>
+</html>

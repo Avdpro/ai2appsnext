@@ -1,0 +1,36 @@
+{
+  "id": "tmp_jimeng_raw_html_check",
+  "meta": {
+    "name": "tmp-jimeng-raw-html-check"
+  },
+  "start": "step_1",
+  "steps": [
+    {
+      "id": "step_1",
+      "action": {
+        "type": "goto",
+        "url": "https://jimeng.jianying.com/ai-tool/home",
+        "waitUntil": "domcontentloaded",
+        "timeoutMs": 45000
+      },
+      "next": "step_2"
+    },
+    {
+      "id": "step_2",
+      "action": {
+        "type": "run_js",
+        "scope": "page",
+        "code": "async function(){ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); const timeline=[]; const start=Date.now(); const maxMs=10000; const interval=500; function isVisible(el){ if(!el) return false; const st=getComputedStyle(el); if(!st) return false; if(st.display==='none'||st.visibility==='hidden'||Number(st.opacity||'1')<0.05) return false; const r=el.getBoundingClientRect(); return r.width>1&&r.height>1; } function snap(){ const loginEl=document.querySelector('#SiderMenuLogin'); const personalEl=document.querySelector('#Personal'); const loginBtn=document.querySelector('.login-button-zpRsZb'); return { t:Date.now()-start, hasLogin:!!loginEl, loginVisible:isVisible(loginEl), hasPersonal:!!personalEl, personalVisible:isVisible(personalEl), loginText:loginBtn?String(loginBtn.textContent||'').replace(/\\s+/g,' ').trim():'' }; } while(Date.now()-start<=maxMs){ timeline.push(snap()); await sleep(interval); } const finalState=snap(); const states=timeline.map(s=>`${s.hasLogin&&s.loginVisible?'L':'-'}${s.hasPersonal&&s.personalVisible?'P':'-'}`); const transitions=[]; for(let i=1;i<states.length;i++){ if(states[i]!==states[i-1]) transitions.push({from:states[i-1],to:states[i],at:timeline[i].t}); } const html=String(document.documentElement?.outerHTML||document.body?.outerHTML||''); return { url:String(location.href||''), title:String(document.title||''), htmlLength:html.length, samples:timeline.length, firstState:timeline[0]||null, finalState, transitions, hasSiderMenuLogin:html.includes('id=\"SiderMenuLogin\"'), hasPersonal:html.includes('id=\"Personal\"') }; }"
+      },
+      "saveAs": "diag",
+      "next": "done_1"
+    },
+    {
+      "id": "done_1",
+      "action": {
+        "type": "done",
+        "value": "${vars.diag}"
+      }
+    }
+  ]
+}

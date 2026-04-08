@@ -1,6 +1,6 @@
 const capabilities = {
 	must: ['search', 'search.query'],
-	prefer: ['search.target', 'search.minResults', 'search.entityType', 'search.login'],
+	prefer: ['search.target', 'search.minResults', 'search.entityType', 'search.login', 'search.summary'],
 };
 
 const filters = [{ key: 'domain', value: '*' }];
@@ -11,15 +11,17 @@ const flow = {
 	args: {
 		query: { type: 'string', required: true, desc: '搜索关键词或查询语句' },
 		minResults: { type: 'number', required: false, desc: '期望最少返回结果数，默认 10' },
-		search: { type: 'object', required: false, desc: '支持 search.query/search.minResults/search.login' },
+		search: { type: 'object', required: false, desc: '支持 search.query/search.minResults/search.login/search.summary' },
+		'search.login': { type: 'string', required: false, desc: '搜索前登录策略：auto|true|false（默认 auto）。auto 时按站点域名判断是否需要登录；true 强制执行 invoke + login.ensure=true；false 跳过登录检查。' },
+		'search.summary': { type: 'boolean', required: false, desc: '是否在搜索后读取结果页面并生成汇总。true 时执行 read.batch + run_ai 总结。' },
 	},
 	steps: [
 		{
 			id: 'init_search_policy',
-			desc: '标准化查询参数并按站点判定是否需要登录（search.login=auto|true|false）',
+			desc: '标准化查询参数并按站点判定是否需要登录（支持 search.summary）',
 			action: {
 				type: 'run_js',
-				scope: 'agent',
+				scope: 'page',
 				code: `function(input){
 					function asStr(v){ return String(v == null ? '' : v).trim(); }
 					function asNum(v, d){ const n = Number(v); return Number.isFinite(n) ? n : d; }
@@ -29,26 +31,44 @@ const flow = {
 						if (s === 'false' || s === 'skip' || s === 'none' || s === '0') return 'false';
 						return 'auto';
 					}
+					function parseSummary(v){
+						if (typeof v === 'boolean') return v;
+						const s = asStr(v).toLowerCase();
+						return s === '1' || s === 'true' || s === 'yes' || s === 'on' || s === 'summary' || s === 'full';
+					}
 					const noLoginHosts = new Set([
 						'google.com', 'www.google.com',
 						'bing.com', 'www.bing.com',
 						'baidu.com', 'www.baidu.com',
 					]);
 					const search = (input && input.search) || {};
-					const query = asStr((input && input.query) || search.query || '');
+					const rawQuery = (input && input.query);
+					const query = (typeof rawQuery === 'string' || typeof rawQuery === 'number' || typeof rawQuery === 'boolean')
+						? asStr(rawQuery)
+						: asStr(search.query || '');
 					const minResults = Math.max(1, Math.min(100, asNum((input && input.minResults) ?? search.minResults, 10)));
 					const loginMode = parseLoginMode((search && search.login) ?? (input && input.login));
-					let host = '';
+					const summaryRaw = (search && Object.prototype.hasOwnProperty.call(search, 'summary')) ? search.summary : (input && input.summary);
+					const summary = parseSummary(summaryRaw);
+										let host = '';
 					try {
-						const u = new URL(asStr((input && input.url) || ''));
-						host = asStr(u.hostname).toLowerCase();
+						const byInputUrl = asStr((input && input.url) || '');
+						if (byInputUrl) {
+							const u = new URL(byInputUrl);
+							host = asStr(u.hostname).toLowerCase();
+						}
 					} catch (_) {}
+					if (!host) {
+						try {
+							host = asStr((location && location.hostname) || '').toLowerCase();
+						} catch (_) {}
+					}
 					const noLoginByHost = noLoginHosts.has(host);
 					const needLogin = (loginMode === 'true') ? true : ((loginMode === 'false') ? false : !noLoginByHost);
-					return { query, minResults, loginMode, needLogin, host, noLoginByHost };
+					return { query, minResults, loginMode, needLogin, host, noLoginByHost, summary };
 				}`,
 				args: [
-					'${{ ({ query: args.query, minResults: args.minResults, search: args.search || {}, url: opts.url || "" }) }}',
+					'${{ ({ query: args.query, minResults: args.minResults, search: args.search || {}, url: opts.url || "", summary: args[\'search.summary\'], summaryMaxUrls: args[\'search.summaryMaxUrls\'] }) }}',
 				],
 			},
 			saveAs: 'searchCtx',
@@ -153,7 +173,121 @@ const flow = {
 				returnTo: 'caller',
 			},
 			saveAs: 'searchResult',
-			next: { done: 'done', failed: 'abort' },
+			next: { done: 'route_need_summary', failed: 'abort' },
+		},
+		{
+			id: 'route_need_summary',
+			desc: '是否启用结果页面汇总（search.summary）',
+			action: {
+				type: 'branch',
+				cases: [
+					{ when: { op: 'truthy', source: 'vars', path: 'searchCtx.summary' }, to: 'collect_summary_urls' },
+				],
+				default: 'build_final_output',
+			},
+			next: {},
+		},
+		{
+			id: 'collect_summary_urls',
+			desc: '提取并截断待读取 URL 列表',
+			action: {
+				type: 'run_js',
+				scope: 'agent',
+				code: "function(searchResult){ function asText(v){ return String(v==null?'':v).trim(); } function asNum(v,d){ const n=Number(v); return Number.isFinite(n)?n:d; } const out=[]; const seen=new Set(); const limit=3; function push(u){ const s=asText(u); if(!s) return; if(seen.has(s)) return; seen.add(s); out.push(s); } const r=(searchResult&&typeof searchResult==='object')?searchResult:{}; const urls=Array.isArray(r.urls)?r.urls:[]; for(const u of urls){ if(out.length>=limit) break; push(u); } const items=Array.isArray(r.items)?r.items:[]; for(const it of items){ if(out.length>=limit) break; const o=(it&&typeof it==='object')?it:{}; push(o.url||o.href||''); } return out.slice(0,limit); }",
+				args: [
+					'${{ vars.searchResult || {} }}',
+					'${vars.searchCtx.summaryMaxUrls}',
+				],
+			},
+			saveAs: 'summaryUrls',
+			next: { done: 'route_has_summary_urls', failed: 'build_final_output' },
+		},
+		{
+			id: 'route_has_summary_urls',
+			desc: '有 URL 才继续读取详情',
+			action: {
+				type: 'branch',
+				cases: [
+					{ when: { op: 'truthy', source: 'vars', path: 'summaryUrls[0]' }, to: 'read_summary_pages' },
+				],
+				default: 'build_final_output',
+			},
+			next: {},
+		},
+		{
+			id: 'read_summary_pages',
+			desc: '读取搜索结果链接页面详情（best-effort）',
+			action: {
+				type: 'invoke',
+				find: {
+					kind: 'rpa',
+					must: ['read.batch', 'read.action'],
+					prefer: ['read.fields', 'read.output'],
+					filter: filters,
+				},
+				args: {
+					'read.action': 'batch',
+					'read.fields': ['url', 'title', 'summary', 'content'],
+					'read.output': 'text',
+					urls: '${vars.summaryUrls}',
+					query: '${vars.searchCtx.query}',
+				},
+				onError: 'return',
+				returnTo: 'caller',
+			},
+			saveAs: 'summaryBatchRaw',
+			next: { done: 'summarize_results', failed: 'build_final_output' },
+		},
+		{
+			id: 'summarize_results',
+			desc: '对读取到的页面做统一总结',
+			action: {
+				type: 'run_ai',
+				model: 'balanced',
+				prompt: '你是搜索结果归纳助手。请基于输入中的 query 和 pages 生成简洁总结。必须返回 JSON：{summary:string,highlights:string[],sources:array<{url:string,title:string,summary:string}>}。要求：summary 2~6 句；highlights 3~8 条；sources 仅保留确实有内容的页面，最多 5 条。',
+				input: '${{ ({ query: (vars.searchCtx||{}).query || "", pages: (((vars.summaryBatchRaw||{}).items||[]).filter((x)=>x && x.ok && x.data).map((x)=>({ url: (x.data&&x.data.url) || x.url || "", title: (x.data&&x.data.title) || "", summary: (x.data&&x.data.summary) || "", content: (x.data&&x.data.content) || "" }))) }) }}',
+				schema: {
+					type: 'object',
+					required: ['summary', 'highlights', 'sources'],
+					properties: {
+						summary: { type: 'string' },
+						highlights: { type: 'array', items: { type: 'string' } },
+						sources: {
+							type: 'array',
+							items: {
+								type: 'object',
+								required: ['url', 'title', 'summary'],
+								properties: {
+									url: { type: 'string' },
+									title: { type: 'string' },
+									summary: { type: 'string' },
+								},
+							},
+						},
+					},
+					additionalProperties: false,
+				},
+				cache: { enabled: false },
+			},
+			saveAs: 'summaryAI',
+			next: { done: 'build_final_output', failed: 'build_final_output' },
+		},
+		{
+			id: 'build_final_output',
+			desc: '归并 SERP 结果与可选 summary 输出',
+			action: {
+				type: 'run_js',
+				scope: 'agent',
+				code: "function(searchResult, searchCtx, summaryBatchRaw, summaryAI){ function asText(v){ return String(v==null?'':v).trim(); } function asArr(v){ return Array.isArray(v)?v:[]; } const result=(searchResult&&typeof searchResult==='object')?searchResult:{}; const ctx=(searchCtx&&typeof searchCtx==='object')?searchCtx:{}; const out={ ...result, search: ctx }; if(ctx.summary){ const ai=(summaryAI&&typeof summaryAI==='object')?summaryAI:{}; const batchItems=asArr(summaryBatchRaw&&summaryBatchRaw.items); const fallbackSources=batchItems.filter((x)=>x&&x.ok&&x.data).map((x)=>{ const d=(x.data&&typeof x.data==='object')?x.data:{}; return { url: asText(d.url||x.url||''), title: asText(d.title||''), summary: asText(d.summary||'') }; }).filter((x)=>x.url||x.title||x.summary).slice(0,5); const sources=asArr(ai.sources).map((x)=>({ url: asText(x&&x.url), title: asText(x&&x.title), summary: asText(x&&x.summary) })).filter((x)=>x.url||x.title||x.summary); out.summary={ enabled:true, text: asText(ai.summary||''), highlights: asArr(ai.highlights).map((x)=>asText(x)).filter(Boolean), sources: (sources.length?sources:fallbackSources), sourceCount: (sources.length?sources:fallbackSources).length }; } return out; }",
+				args: [
+					'${{ vars.searchResult || {} }}',
+					'${{ vars.searchCtx || {} }}',
+					'${{ vars.summaryBatchRaw || {} }}',
+					'${{ vars.summaryAI || {} }}',
+				],
+			},
+			saveAs: 'finalOut',
+			next: { done: 'done', failed: 'done' },
 		},
 		{
 			id: 'done',
@@ -161,7 +295,7 @@ const flow = {
 			action: {
 				type: 'done',
 				reason: 'search completed',
-				conclusion: '${{ ({ ...(vars.searchResult || {}), search: (vars.searchCtx || {}) }) }}',
+				conclusion: '${{ vars.finalOut || ({ ...(vars.searchResult || {}), search: (vars.searchCtx || {}) }) }}',
 			},
 			next: {},
 		},
@@ -179,6 +313,10 @@ const flow = {
 		searchCtx: { type: 'object', desc: '标准化后的搜索参数与登录策略', from: 'init_search_policy.saveAs' },
 		blockersOut: { type: 'object', desc: '搜索前 blocker 清理结果（best-effort）', from: 'clear_blockers.saveAs' },
 		searchResult: { type: 'object', desc: 'read.list 返回结果（含 items/nextCursor 等）', from: 'read_results.saveAs' },
+		summaryUrls: { type: 'array<string>', desc: '用于详情读取的候选 URL（去重+截断）', from: 'collect_summary_urls.saveAs' },
+		summaryBatchRaw: { type: 'object', desc: 'read.batch 原始结果', from: 'read_summary_pages.saveAs' },
+		summaryAI: { type: 'object', desc: 'AI 汇总结果', from: 'summarize_results.saveAs' },
+		finalOut: { type: 'object', desc: '最终 search 输出（含可选 summary）', from: 'build_final_output.saveAs' },
 	},
 };
 

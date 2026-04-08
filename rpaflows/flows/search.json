@@ -1,16 +1,13 @@
 {
-  "capabilities": {
-    "must": [
-      "search",
-      "search.query"
-    ],
-    "prefer": [
-      "search.target",
-      "search.minResults",
-      "search.entityType",
-      "search.login"
-    ]
-  },
+  "capabilities": [
+    "search",
+    "search.query",
+    "search.target",
+    "search.minResults",
+    "search.entityType",
+    "search.login",
+    "search.summary"
+  ],
   "filters": [
     {
       "key": "domain",
@@ -34,30 +31,101 @@
       "search": {
         "type": "object",
         "required": false,
-        "desc": "支持 search.query/search.minResults/search.login"
+        "desc": "支持 search.query/search.minResults/search.login/search.summary"
+      },
+      "read": {
+        "type": "object",
+        "required": false,
+        "desc": "汇总阶段透传 read.* 参数（例如 read.summaryQuery/read.allowExplore/read.exploreMaxSteps）"
+      },
+      "read.summaryQuery": {
+        "type": "string",
+        "required": false,
+        "desc": "可选。汇总阶段的目标问题；未传时默认使用搜索 query。"
+      },
+      "read.allowExplore": {
+        "type": "boolean",
+        "required": false,
+        "desc": "可选。是否允许 read.detail 在回答 summaryQuery 时触发 find.until 探索（默认 false）。"
+      },
+      "read.exploreMaxSteps": {
+        "type": "number",
+        "required": false,
+        "desc": "可选。探索最大步数（默认 3，最大 5）。"
+      },
+      "search.login": {
+        "type": "string",
+        "required": false,
+        "desc": "搜索前登录策略：auto|true|false（默认 auto）。auto 时按站点域名判断是否需要登录；true 强制执行 invoke + login.ensure=true；false 跳过登录检查。"
+      },
+      "search.summary": {
+        "type": "boolean",
+        "required": false,
+        "desc": "是否在搜索后读取结果页面并生成汇总。true 时执行 read.batch + run_ai 总结。"
+      }
+    },
+    "vars": {
+      "searchCtx": {
+        "type": "object",
+        "desc": "标准化后的搜索参数与登录策略",
+        "from": "init_search_policy.saveAs"
+      },
+      "blockersOut": {
+        "type": "object",
+        "desc": "搜索前 blocker 清理结果（best-effort）",
+        "from": "clear_blockers.saveAs"
+      },
+      "searchResult": {
+        "type": "object",
+        "desc": "read.list 返回结果（含 items/nextCursor 等）",
+        "from": "read_results.saveAs"
+      },
+      "searchPageCtx": {
+        "type": "object",
+        "desc": "搜索页就绪检查结果",
+        "from": "detect_search_page.saveAs"
+      },
+      "summaryUrls": {
+        "type": "array<string>",
+        "desc": "用于详情读取的候选 URL（去重+截断）",
+        "from": "collect_summary_urls.saveAs"
+      },
+      "summaryBatchRaw": {
+        "type": "object",
+        "desc": "read.batch 原始结果",
+        "from": "read_summary_pages.saveAs"
+      },
+      "summaryAI": {
+        "type": "object",
+        "desc": "AI 汇总结果",
+        "from": "summarize_results.saveAs"
+      },
+      "finalOut": {
+        "type": "object",
+        "desc": "最终 search 输出（含可选 summary）",
+        "from": "build_final_output.saveAs"
       }
     },
     "steps": [
       {
         "id": "init_search_policy",
-        "desc": "标准化查询参数并按站点判定是否需要登录（search.login=auto|true|false）",
         "action": {
           "type": "run_js",
-          "scope": "agent",
-          "code": "function(input){\n\t\t\t\t\tfunction asStr(v){ return String(v == null ? '' : v).trim(); }\n\t\t\t\t\tfunction asNum(v, d){ const n = Number(v); return Number.isFinite(n) ? n : d; }\n\t\t\t\t\tfunction parseLoginMode(v){\n\t\t\t\t\t\tconst s = asStr(v).toLowerCase();\n\t\t\t\t\t\tif (s === 'true' || s === 'required' || s === 'force' || s === '1') return 'true';\n\t\t\t\t\t\tif (s === 'false' || s === 'skip' || s === 'none' || s === '0') return 'false';\n\t\t\t\t\t\treturn 'auto';\n\t\t\t\t\t}\n\t\t\t\t\tconst noLoginHosts = new Set([\n\t\t\t\t\t\t'google.com', 'www.google.com',\n\t\t\t\t\t\t'bing.com', 'www.bing.com',\n\t\t\t\t\t\t'baidu.com', 'www.baidu.com',\n\t\t\t\t\t]);\n\t\t\t\t\tconst search = (input && input.search) || {};\n\t\t\t\t\tconst query = asStr((input && input.query) || search.query || '');\n\t\t\t\t\tconst minResults = Math.max(1, Math.min(100, asNum((input && input.minResults) ?? search.minResults, 10)));\n\t\t\t\t\tconst loginMode = parseLoginMode((search && search.login) ?? (input && input.login));\n\t\t\t\t\tlet host = '';\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst u = new URL(asStr((input && input.url) || ''));\n\t\t\t\t\t\thost = asStr(u.hostname).toLowerCase();\n\t\t\t\t\t} catch (_) {}\n\t\t\t\t\tconst noLoginByHost = noLoginHosts.has(host);\n\t\t\t\t\tconst needLogin = (loginMode === 'true') ? true : ((loginMode === 'false') ? false : !noLoginByHost);\n\t\t\t\t\treturn { query, minResults, loginMode, needLogin, host, noLoginByHost };\n\t\t\t\t}",
+          "scope": "page",
+          "code": "function(input){\n\t\t\t\t\tfunction asStr(v){ return String(v == null ? '' : v).trim(); }\n\t\t\t\t\tfunction asNum(v, d){ const n = Number(v); return Number.isFinite(n) ? n : d; }\n\t\t\t\t\tfunction parseLoginMode(v){\n\t\t\t\t\t\tconst s = asStr(v).toLowerCase();\n\t\t\t\t\t\tif (s === 'true' || s === 'required' || s === 'force' || s === '1') return 'true';\n\t\t\t\t\t\tif (s === 'false' || s === 'skip' || s === 'none' || s === '0') return 'false';\n\t\t\t\t\t\treturn 'auto';\n\t\t\t\t\t}\n\t\t\t\t\tfunction parseSummary(v){\n\t\t\t\t\t\tif (typeof v === 'boolean') return v;\n\t\t\t\t\t\tconst s = asStr(v).toLowerCase();\n\t\t\t\t\t\treturn s === '1' || s === 'true' || s === 'yes' || s === 'on' || s === 'summary' || s === 'full';\n\t\t\t\t\t}\n\t\t\t\t\tconst noLoginHosts = new Set([\n\t\t\t\t\t\t'google.com', 'www.google.com',\n\t\t\t\t\t\t'bing.com', 'www.bing.com',\n\t\t\t\t\t\t'baidu.com', 'www.baidu.com',\n\t\t\t\t\t]);\n\t\t\t\t\tconst search = (input && input.search) || {};\n\t\t\t\t\tconst rawQuery = (input && input.query);\n\t\t\t\t\tconst query = (typeof rawQuery === 'string' || typeof rawQuery === 'number' || typeof rawQuery === 'boolean')\n\t\t\t\t\t\t? asStr(rawQuery)\n\t\t\t\t\t\t: asStr(search.query || '');\n\t\t\t\t\tconst minResults = Math.max(1, Math.min(100, asNum((input && input.minResults) ?? search.minResults, 10)));\n\t\t\t\t\tconst loginMode = parseLoginMode((search && search.login) ?? (input && input.login));\n\t\t\t\t\tconst summaryRaw = (search && Object.prototype.hasOwnProperty.call(search, 'summary')) ? search.summary : (input && input.summary);\n\t\t\t\t\tconst summary = parseSummary(summaryRaw);\n\t\t\t\t\tlet host = '';\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst byInputUrl = asStr((input && input.url) || '');\n\t\t\t\t\t\tif (byInputUrl) {\n\t\t\t\t\t\t\tconst u = new URL(byInputUrl);\n\t\t\t\t\t\t\thost = asStr(u.hostname).toLowerCase();\n\t\t\t\t\t\t}\n\t\t\t\t\t} catch (_) {}\n\t\t\t\t\tif (!host) {\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\thost = asStr((location && location.hostname) || '').toLowerCase();\n\t\t\t\t\t\t} catch (_) {}\n\t\t\t\t\t}\n\t\t\t\t\tconst noLoginByHost = noLoginHosts.has(host);\n\t\t\t\t\tconst needLogin = (loginMode === 'true') ? true : ((loginMode === 'false') ? false : !noLoginByHost);\n\t\t\t\t\treturn { query, minResults, loginMode, needLogin, host, noLoginByHost, summary };\n\t\t\t\t}",
           "args": [
-            "${{ ({ query: args.query, minResults: args.minResults, search: args.search || {}, url: opts.url || \"\" }) }}"
+            "${{ ({ query: args.query, minResults: args.minResults, search: args.search || {}, url: opts.url || \"\", summary: args['search.summary'] }) }}"
           ]
         },
-        "saveAs": "searchCtx",
         "next": {
           "done": "clear_blockers",
           "failed": "abort"
-        }
+        },
+        "desc": "标准化查询参数并按站点判定是否需要登录（支持 search.summary + read.* 透传）",
+        "saveAs": "searchCtx"
       },
       {
         "id": "clear_blockers",
-        "desc": "搜索前尝试清理页面阻挡交互的遮罩/弹窗（失败不阻断主流程）",
         "action": {
           "type": "invoke",
           "target": "blockers_check_clear",
@@ -67,15 +135,15 @@
           "onError": "return",
           "returnTo": "caller"
         },
-        "saveAs": "blockersOut",
         "next": {
           "done": "route_need_login",
           "failed": "route_need_login"
-        }
+        },
+        "desc": "搜索前尝试清理页面阻挡交互的遮罩/弹窗（失败不阻断主流程）",
+        "saveAs": "blockersOut"
       },
       {
         "id": "route_need_login",
-        "desc": "根据登录策略决定是否先执行 login.ensure",
         "action": {
           "type": "branch",
           "cases": [
@@ -88,13 +156,13 @@
               "to": "ensure_login"
             }
           ],
-          "default": "focus_search_input"
+          "default": "detect_search_page"
         },
-        "next": {}
+        "next": {},
+        "desc": "根据登录策略决定是否先执行 login.ensure"
       },
       {
         "id": "ensure_login",
-        "desc": "必要时确保已登录",
         "action": {
           "type": "invoke",
           "target": "login_check_ensure",
@@ -105,13 +173,61 @@
           "returnTo": "caller"
         },
         "next": {
+          "done": "detect_search_page",
+          "failed": "abort"
+        },
+        "desc": "必要时确保已登录"
+      },
+      {
+        "id": "detect_search_page",
+        "desc": "检查当前页面是否具备可用搜索输入框；不满足时先跳转默认搜索页",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(){ function asText(v){ return String(v==null?'':v).trim(); } function hasSearchBox(){ const sels = ['input[type=\"search\"]','input[name=\"q\"]','textarea[name=\"q\"]','input[aria-label*=\"search\" i]','input[placeholder*=\"search\" i]']; for(const s of sels){ try{ const n=document.querySelector(s); if(n) return true; }catch(_){ } } return false; } const href=asText((location&&location.href)||''); let host=''; try{ host=asText((location&&location.hostname)||'').toLowerCase(); }catch(_){ } const title=asText((document&&document.title)||''); const known = host==='google.com' || host==='www.google.com' || host==='bing.com' || host==='www.bing.com' || host==='baidu.com' || host==='www.baidu.com'; const ready = hasSearchBox(); return { ready, knownHost: known, host, href, title }; }",
+          "args": []
+        },
+        "saveAs": "searchPageCtx",
+        "next": {
+          "done": "route_search_page_ready",
+          "failed": "goto_default_search_page"
+        }
+      },
+      {
+        "id": "route_search_page_ready",
+        "desc": "页面具备搜索输入框则直接继续，否则先打开默认搜索页",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "searchPageCtx.ready"
+              },
+              "to": "focus_search_input"
+            }
+          ],
+          "default": "goto_default_search_page"
+        },
+        "next": {}
+      },
+      {
+        "id": "goto_default_search_page",
+        "desc": "当前页面不可搜索时，回到默认搜索页（Google）",
+        "action": {
+          "type": "goto",
+          "url": "https://www.google.com",
+          "newPage": false,
+          "postWaitMs": 1000
+        },
+        "next": {
           "done": "focus_search_input",
           "failed": "abort"
         }
       },
       {
         "id": "focus_search_input",
-        "desc": "定位并点击页面上的搜索输入框",
         "action": {
           "type": "click",
           "query": "search input box"
@@ -119,11 +235,11 @@
         "next": {
           "done": "input_query",
           "failed": "abort"
-        }
+        },
+        "desc": "定位并点击页面上的搜索输入框"
       },
       {
         "id": "input_query",
-        "desc": "在搜索框中输入关键词并提交",
         "action": {
           "type": "input",
           "text": "${vars.searchCtx.query}",
@@ -131,16 +247,16 @@
           "clear": true,
           "pressEnter": true,
           "preEnterWaitMs": 350,
-          "postWaitMs": 500
+          "postWaitMs": 1000
         },
         "next": {
           "done": "wait_results",
           "failed": "abort"
-        }
+        },
+        "desc": "在搜索框中输入关键词并提交"
       },
       {
         "id": "wait_results",
-        "desc": "等待搜索结果列表出现",
         "action": {
           "type": "wait",
           "by": "css: #search",
@@ -153,11 +269,11 @@
           "done": "read_results",
           "timeout": "read_results",
           "failed": "abort"
-        }
+        },
+        "desc": "等待搜索结果列表出现"
       },
       {
         "id": "read_results",
-        "desc": "通过 read.list 读取搜索结果列表",
         "action": {
           "type": "invoke",
           "find": {
@@ -192,48 +308,213 @@
           "onError": "fail",
           "returnTo": "caller"
         },
-        "saveAs": "searchResult",
+        "next": {
+          "done": "route_need_summary",
+          "failed": "abort"
+        },
+        "desc": "通过 read.list 读取搜索结果列表",
+        "saveAs": "searchResult"
+      },
+      {
+        "id": "route_need_summary",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "searchCtx.summary"
+              },
+              "to": "collect_summary_urls"
+            }
+          ],
+          "default": "build_final_output"
+        },
+        "next": {},
+        "desc": "是否启用结果页面汇总（search.summary）"
+      },
+      {
+        "id": "collect_summary_urls",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(searchResult){ function asText(v){ return String(v==null?'':v).trim(); } const out=[]; const seen=new Set(); const limit=3; function push(u){ const s=asText(u); if(!s) return; if(seen.has(s)) return; seen.add(s); out.push(s); } const r=(searchResult&&typeof searchResult==='object')?searchResult:{}; const urls=Array.isArray(r.urls)?r.urls:[]; for(const u of urls){ if(out.length>=limit) break; push(u); } const items=Array.isArray(r.items)?r.items:[]; for(const it of items){ if(out.length>=limit) break; const o=(it&&typeof it==='object')?it:{}; push(o.url||o.href||''); } return out.slice(0,limit); }",
+          "args": [
+            "${{ vars.searchResult || {} }}"
+          ]
+        },
+        "next": {
+          "done": "route_has_summary_urls",
+          "failed": "build_final_output"
+        },
+        "desc": "提取并截断待读取 URL 列表",
+        "saveAs": "summaryUrls"
+      },
+      {
+        "id": "route_has_summary_urls",
+        "action": {
+          "type": "branch",
+          "cases": [
+            {
+              "when": {
+                "op": "truthy",
+                "source": "vars",
+                "path": "summaryUrls[0]"
+              },
+              "to": "read_summary_pages"
+            }
+          ],
+          "default": "build_final_output"
+        },
+        "next": {},
+        "desc": "有 URL 才继续读取详情"
+      },
+      {
+        "id": "read_summary_pages",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "read.batch",
+              "read.action"
+            ],
+            "prefer": [
+              "read.fields",
+              "read.output"
+            ],
+            "filter": [
+              {
+                "key": "domain",
+                "value": "*"
+              }
+            ]
+          },
+          "args": {
+            "read.action": "batch",
+            "read.fields": [
+              "url",
+              "title",
+              "summary",
+              "content"
+            ],
+            "read.output": "text",
+            "read.summaryQuery": "${{ (args.read && args.read.summaryQuery) || args['read.summaryQuery'] || vars.searchCtx.query }}",
+            "read.allowExplore": "${{ (args.read && Object.prototype.hasOwnProperty.call(args.read,'allowExplore')) ? args.read.allowExplore : args['read.allowExplore'] }}",
+            "read.exploreMaxSteps": "${{ (args.read && args.read.exploreMaxSteps) || args['read.exploreMaxSteps'] }}",
+            "urls": "${vars.summaryUrls}",
+            "query": "${vars.searchCtx.query}"
+          },
+          "onError": "return",
+          "returnTo": "caller"
+        },
+        "next": {
+          "done": "summarize_results",
+          "failed": "build_final_output"
+        },
+        "desc": "读取搜索结果链接页面详情（best-effort）",
+        "saveAs": "summaryBatchRaw"
+      },
+      {
+        "id": "summarize_results",
+        "action": {
+          "type": "run_ai",
+          "model": "balanced",
+          "prompt": "你是搜索结果归纳助手。请基于输入中的 query 和 pages 生成简洁总结。必须返回 JSON：{summary:string,highlights:string[],sources:array<{url:string,title:string,summary:string}>}。要求：summary 2~6 句；highlights 3~8 条；sources 仅保留确实有内容的页面，最多 5 条。",
+          "input": "${{ ({ query: (vars.searchCtx||{}).query || '', pages: (((vars.summaryBatchRaw||{}).items||[]).filter((x)=>x && x.ok && x.data).map((x)=>({ url: (x.data&&x.data.url) || x.url || '', title: (x.data&&x.data.title) || '', summary: (x.data&&x.data.summary) || '', content: (x.data&&x.data.content) || '' }))) }) }}",
+          "schema": {
+            "type": "object",
+            "required": [
+              "summary",
+              "highlights",
+              "sources"
+            ],
+            "properties": {
+              "summary": {
+                "type": "string"
+              },
+              "highlights": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "title",
+                    "summary"
+                  ],
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "cache": {
+            "enabled": false
+          }
+        },
+        "next": {
+          "done": "build_final_output",
+          "failed": "build_final_output"
+        },
+        "desc": "对读取到的页面做统一总结",
+        "saveAs": "summaryAI"
+      },
+      {
+        "id": "build_final_output",
+        "action": {
+          "type": "run_js",
+          "scope": "agent",
+          "code": "function(searchResult, searchCtx, summaryBatchRaw, summaryAI){ function asText(v){ return String(v==null?'':v).trim(); } function asArr(v){ return Array.isArray(v)?v:[]; } const result=(searchResult&&typeof searchResult==='object')?searchResult:{}; const ctx=(searchCtx&&typeof searchCtx==='object')?searchCtx:{}; const out={ ...result, search: ctx }; if(ctx.summary){ const ai=(summaryAI&&typeof summaryAI==='object')?summaryAI:{}; const batchItems=asArr(summaryBatchRaw&&summaryBatchRaw.items); const fallbackSources=batchItems.filter((x)=>x&&x.ok&&x.data).map((x)=>{ const d=(x.data&&typeof x.data==='object')?x.data:{}; return { url: asText(d.url||x.url||''), title: asText(d.title||''), summary: asText(d.summary||'') }; }).filter((x)=>x.url||x.title||x.summary).slice(0,5); const sources=asArr(ai.sources).map((x)=>({ url: asText(x&&x.url), title: asText(x&&x.title), summary: asText(x&&x.summary) })).filter((x)=>x.url||x.title||x.summary); out.summary={ enabled:true, text: asText(ai.summary||''), highlights: asArr(ai.highlights).map((x)=>asText(x)).filter(Boolean), sources: (sources.length?sources:fallbackSources), sourceCount: (sources.length?sources:fallbackSources).length }; } return out; }",
+          "args": [
+            "${{ vars.searchResult || {} }}",
+            "${{ vars.searchCtx || {} }}",
+            "${{ vars.summaryBatchRaw || {} }}",
+            "${{ vars.summaryAI || {} }}"
+          ]
+        },
         "next": {
           "done": "done",
-          "failed": "abort"
-        }
+          "failed": "done"
+        },
+        "desc": "归并 SERP 结果与可选 summary 输出",
+        "saveAs": "finalOut"
       },
       {
         "id": "done",
-        "desc": "返回搜索完成状态",
         "action": {
           "type": "done",
           "reason": "search completed",
-          "conclusion": "${{ ({ ...(vars.searchResult || {}), search: (vars.searchCtx || {}) }) }}"
+          "conclusion": "${{ vars.finalOut || ({ ...(vars.searchResult || {}), search: (vars.searchCtx || {}) }) }}"
         },
-        "next": {}
+        "next": {},
+        "desc": "返回搜索完成状态"
       },
       {
         "id": "abort",
-        "desc": "搜索失败，终止流程",
         "action": {
           "type": "abort",
           "reason": "search failed"
         },
-        "next": {}
+        "next": {},
+        "desc": "搜索失败，终止流程"
       }
-    ],
-    "vars": {
-      "searchCtx": {
-        "type": "object",
-        "desc": "标准化后的搜索参数与登录策略",
-        "from": "init_search_policy.saveAs"
-      },
-      "blockersOut": {
-        "type": "object",
-        "desc": "搜索前 blocker 清理结果（best-effort）",
-        "from": "clear_blockers.saveAs"
-      },
-      "searchResult": {
-        "type": "object",
-        "desc": "read.list 返回结果（含 items/nextCursor 等）",
-        "from": "read_results.saveAs"
-      }
-    }
+    ]
   }
 }

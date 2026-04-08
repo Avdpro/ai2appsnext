@@ -221,6 +221,26 @@
       border-radius: 999px;
       opacity: 0.95;
     }
+    .ctx-opt-row {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .ctx-opt-row > * { min-width: 0; }
+    .ctx-opt-row:last-child { margin-bottom: 0; }
+    .ctx-opt-row textarea { min-height: 40px; max-height: 120px; }
+    .ctx-opt-row .btn { width: 42px; min-width: 42px; padding: 0; }
+    .empty-note {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #64748b;
+      background: #f8fbff;
+      line-height: 1.4;
+    }
 
     .step-list {
       border: 1px solid var(--line);
@@ -547,6 +567,7 @@
     }
     .picker-mask.show { display: flex; }
     #skillToFlowMask { z-index: 14020; }
+    #cloudFlowMask { z-index: 14025; }
     #flowReviseMask { z-index: 14030; }
     #decisionMask { z-index: 14040; }
     #flowReviseDetailMask { z-index: 14060; }
@@ -618,6 +639,23 @@
       color: var(--sub);
       font-size: 12px;
       padding: 10px 8px;
+    }
+    .cloud-flow-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+    .cloud-flow-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #132033;
+      word-break: break-all;
+    }
+    .cloud-flow-meta {
+      font-size: 12px;
+      color: var(--sub);
+      word-break: break-all;
     }
     .picker-hint {
       color: var(--sub);
@@ -972,6 +1010,7 @@
           <div class="row" style="margin-top:8px;">
             <button class="btn secondary" id="openSkillToFlowBtn" type="button">Skill 生成 Flow</button>
             <button class="btn secondary" id="openFlowReviseBtn" type="button">AI 修正 Flow</button>
+            <button class="btn secondary" id="openCloudFlowBtn" type="button">打开云端 Flow</button>
           </div>
         </div>
 
@@ -1317,7 +1356,7 @@
           <div class="section" style="margin-top:10px; margin-bottom:0; background:#fff;">
             <label>Step Meta</label>
             <div class="field-grid" style="margin-top:6px;">
-              <div><label>postWaitMs（动作成功后稳定等待）</label><input id="fPostWaitMs" placeholder="例如：200"></div>
+              <div><label>postWaitMs（动作成功后稳定等待；goto 留空=1000，填 0=不额外等待）</label><input id="fPostWaitMs" placeholder="例如：200"></div>
               <div><label>step.desc（可选）</label><input id="stepDescInput" placeholder="步骤说明，用于可读性"></div>
               <div><label>step.saveAs（可选，字符串或 JSON）</label><input id="stepSaveAsInput" class="mono" placeholder="例如：searchCtx 或 {\"query\":\"result.query\"}"></div>
             </div>
@@ -1363,12 +1402,23 @@
           <div class="context-divider"></div>
           <label style="margin-top:8px;">vars（按 Flow 外壳定义逐项编辑，saveAs 会写回）</label>
           <div id="ctxVarsBox" class="arg-list"></div>
+          <div class="context-divider"></div>
+          <label style="margin-top:8px;">opts（逐项编辑，支持点号嵌套键）</label>
+          <div class="row" style="margin-bottom:8px;">
+            <button class="btn secondary" id="ctxAddOptRowBtn" type="button">+ 添加项</button>
+            <button class="btn secondary" id="ctxParseOptsJsonBtn" type="button">从JSON解析</button>
+            <button class="btn secondary" id="ctxClearOptRowsBtn" type="button">清空项</button>
+          </div>
+          <div id="ctxOptsBox" class="arg-list" style="overflow-x:hidden;">暂无 opts 项，可点击“+ 添加项”</div>
+          <label style="margin-top:8px;">opts JSON（预览/高级编辑）</label>
+          <textarea id="mockOptsInput" class="mono" style="min-height:96px;">{}</textarea>
           <label style="margin-top:8px;">lastResult（分支/模板可引用，可为空）</label>
           <textarea id="mockLastResultInput" style="min-height:110px;">null</textarea>
           <label style="margin-top:8px;">当前 Context JSON（只读）</label>
           <pre id="ctxJsonPreviewPre">{
   "args": {},
   "vars": {},
+  "opts": {},
   "lastResult": null
 }</pre>
         </div>
@@ -1412,6 +1462,22 @@
 
         <div class="section">
           <div class="row" style="justify-content:space-between;align-items:center;">
+            <p class="section-title" style="margin:0;">Developer Public Key</p>
+            <span id="flowPublicKeyTag" class="tag">未登录</span>
+          </div>
+          <label>flowPublicKey（PEM）</label>
+          <textarea id="flowPublicKeyInput" class="mono" style="min-height:110px;" placeholder="-----BEGIN PUBLIC KEY----- ... -----END PUBLIC KEY-----"></textarea>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn secondary" id="refreshFlowPublicKeyBtn" type="button">读取当前</button>
+            <label class="btn secondary" for="flowPublicKeyFileInput" style="cursor:pointer;">上传公钥文件</label>
+            <input id="flowPublicKeyFileInput" type="file" accept=".pem,.pub,.txt" style="display:none;">
+            <button class="btn ok" id="saveFlowPublicKeyBtn" type="button">保存公钥</button>
+            <button class="btn danger" id="clearFlowPublicKeyBtn" type="button">清空公钥</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="row" style="justify-content:space-between;align-items:center;">
             <p class="section-title" style="margin:0;">Server Version</p>
             <button class="btn secondary" id="refreshPublishInfoBtn" type="button">刷新</button>
           </div>
@@ -1443,14 +1509,21 @@
         <div class="section">
           <p class="section-title">Publish</p>
           <div class="grid-3">
-            <div><label>developer signer</label><input id="publishDevSignerInput" placeholder="例如：dev:alice"></div>
-            <div><label>system signer</label><input id="publishSystemSignerInput" placeholder="例如：sys:tabos-nt"></div>
+            <div>
+              <label>developer 私钥文件（PEM, 可选）</label>
+              <div class="row">
+                <label class="btn secondary" for="publishDevKeyFileInput" style="cursor:pointer;">选择文件</label>
+                <input id="publishDevKeyFileInput" type="file" accept=".pem,.key,.txt" style="display:none;">
+                <span id="publishDevKeyFileName" class="tag">未选择</span>
+              </div>
+            </div>
           </div>
           <label style="margin-top:8px;">release note</label>
           <textarea id="publishNoteInput" style="min-height:70px;" placeholder="本次发布说明（可选）"></textarea>
           <div class="row" style="margin-top:8px;">
             <button class="btn secondary" id="signFlowBtn" type="button">写入签名到Flow</button>
-            <button class="btn ok" id="publishFlowBtn" type="button">提交发布</button>
+            <button class="btn ok" id="publishFlowBtn" type="button">提交到云端</button>
+            <button class="btn" id="requestPublishFlowBtn" type="button">发布Flow</button>
           </div>
           <pre id="publishResultPre">暂无发布结果</pre>
         </div>
@@ -1543,6 +1616,42 @@
         <button class="btn secondary" id="clearSkillToFlowBtn" type="button">清空</button>
         <button class="btn secondary" id="cancelSkillToFlowBtn" type="button">取消</button>
         <button class="btn ok" id="skillToFlowBtn" type="button">生成并载入</button>
+      </div>
+    </div>
+  </div>
+  <div id="cloudFlowMask" class="picker-mask" aria-hidden="true">
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="cloudFlowTitle" style="max-width:920px;width:min(97vw,920px);height:min(86vh,820px);">
+      <div class="row" style="justify-content:space-between;">
+        <h3 id="cloudFlowTitle" class="picker-title">打开云端 Flow</h3>
+        <button class="btn secondary" id="cloudFlowCloseBtn" type="button">关闭</button>
+      </div>
+      <div class="picker-hint">在云端检索并加载 Flow 到当前编辑器（不会自动保存到本地文件）。</div>
+      <div class="grid-3" style="align-items:end;">
+        <div>
+          <label>来源</label>
+          <select id="cloudFlowSourceInput">
+            <option value="all" selected>全部（我的 + 系统发布）</option>
+            <option value="mine">仅我的</option>
+            <option value="published">仅系统发布</option>
+          </select>
+        </div>
+        <div>
+          <label>flowId 关键词（可选）</label>
+          <input id="cloudFlowFlowIdInput" class="mono" placeholder="例如 generic_search">
+        </div>
+        <div>
+          <label>数量上限</label>
+          <input id="cloudFlowLimitInput" type="number" min="1" max="100" value="30">
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="cloudFlowSearchBtn" type="button">查询</button>
+      </div>
+      <div id="cloudFlowList" class="picker-list">暂无结果</div>
+      <div id="cloudFlowHint" class="picker-hint">请点击“查询”</div>
+      <div class="row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="cloudFlowCancelBtn" type="button">取消</button>
+        <button class="btn ok" id="cloudFlowOpenBtn" type="button" disabled>打开所选</button>
       </div>
     </div>
   </div>
@@ -1668,6 +1777,7 @@
   </div>
   <datalist id="stepIdOptions"></datalist>
   <datalist id="invokeArgKeyOptions"></datalist>
+  <datalist id="ctxOptsKeyOptions"></datalist>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -1681,6 +1791,7 @@
       draggingStepId: "",
       suppressRowClickUntil: 0,
       flowsBaseDir: "",
+      flowsBrowseDir: "",
       invokeFindKeys: [],
       invokeFindKeysKind: "rpa",
       invokeArgDefs: {},
@@ -1708,6 +1819,10 @@
       preferredStepReviseEngine: "codex",
       preferredSkillEngine: "codex",
       systemAuth: null,
+      flowPublicKeyLoaded: false,
+      flowPublicKeyHasKey: false,
+      publishDevPrivateKeyPem: "",
+      publishDevPrivateKeyName: "",
       lastFlowRunStatus: null,
       lastFlowRunSummaryText: "",
       lastFlowRunContext: null,
@@ -1716,10 +1831,49 @@
       publishServerInfo: null,
       mockArgs: {},
       mockVars: {},
+      mockOpts: {},
+      contextOptRows: [],
       mockLastResult: null,
+      cloudFlowItems: [],
+      cloudFlowSelectedKey: "",
     };
 
     const actionTypes = ["goto","closepage","uploadfile","selector","click","hover","input","press_key","wait","scroll","invoke","run_js","run_ai","branch","ask_assist","done","abort"];
+    const CTX_OPT_KEY_SUGGESTIONS = [
+      "flowSourcePolicy",
+      "riskControl.mode",
+      "riskControl.maxLevel",
+      "riskControl.askEnabled",
+      "riskControl.allowOnceUntil",
+      "riskControl.allow24hUntil",
+      "riskControl.allowForever",
+      "queryCache.enabled",
+      "queryCache.maxEntries",
+      "queryCache.maxBytes",
+      "preferInvoke",
+      "preferInvokeCaps",
+      "invokeFallbackOnNoArgs",
+      "invokeAlignArgs",
+      "invokeAlignArgsRetry",
+      "invokeCloud.enabled",
+      "invokeCloud.cacheTtlMs",
+      "silent",
+    ];
+    const CTX_OPT_VALUE_SUGGESTIONS = {
+      flowsourcepolicy: ["prefer_local", "prefer_cloud", "local", "cloud", "merge"],
+      "riskcontrol.mode": ["warn", "ask", "block", "off"],
+      "riskcontrol.onaskunavailable": ["block", "warn", "allow"],
+      "riskcontrol.enabled": ["true", "false"],
+      "querycache.enabled": ["true", "false"],
+      "invokecloud.enabled": ["true", "false"],
+      invokealignargs: ["true", "false"],
+      invokefallbackonnoargs: ["true", "false"],
+      preferinvoke: ["true", "false"],
+      silent: ["true", "false"],
+    };
+    const CTX_OPT_VALUE_DEFAULTS = {
+      flowsourcepolicy: "prefer_local",
+    };
     let graphPanning = false;
     let invokeKeyPickerTipDelayTimer = null;
     let flowRunPollToken = 0;
@@ -1740,6 +1894,38 @@
       const hash = await crypto.subtle.digest("SHA-256", bytes);
       const arr = Array.from(new Uint8Array(hash));
       return arr.map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function base64FromBytes(bytes) {
+      let bin = "";
+      const arr = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes || []);
+      for (let i = 0; i < arr.length; i += 1) bin += String.fromCharCode(arr[i]);
+      return btoa(bin);
+    }
+
+    function pemToDerBytes(pemText) {
+      const pem = String(pemText || "").trim();
+      const body = pem
+        .replace(/-----BEGIN [^-]+-----/g, "")
+        .replace(/-----END [^-]+-----/g, "")
+        .replace(/\s+/g, "");
+      if (!body) throw new Error("PEM 内容为空");
+      const bin = atob(body);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+      return out.buffer;
+    }
+
+    async function signTextWithEd25519Pem(text, privateKeyPem) {
+      try {
+        const data = new TextEncoder().encode(String(text || ""));
+        const der = pemToDerBytes(privateKeyPem);
+        const key = await crypto.subtle.importKey("pkcs8", der, { name: "Ed25519" }, false, ["sign"]);
+        const sig = await crypto.subtle.sign({ name: "Ed25519" }, key, data);
+        return base64FromBytes(new Uint8Array(sig));
+      } catch (err) {
+        throw new Error(`私钥签名失败（需要 Ed25519 PKCS8 PEM）: ${String(err?.message || err)}`);
+      }
     }
 
     function showBusyMask(text, tone = "working") {
@@ -3187,6 +3373,15 @@
     function setSystemAuth(auth) {
       state.systemAuth = (auth && typeof auth === "object") ? auth : null;
       renderSystemAuthTag();
+      if (!state.systemAuth?.loginDone) {
+        state.flowPublicKeyLoaded = false;
+        state.flowPublicKeyHasKey = false;
+        if ($("flowPublicKeyInput")) $("flowPublicKeyInput").value = "";
+        renderFlowPublicKeyTag();
+      } else {
+        renderFlowPublicKeyTag();
+        refreshFlowPublicKey({ silent: true }).catch(() => {});
+      }
       if (!state.systemAuth || !state.systemAuth.loginVO) return;
       const last = String(state.systemAuth.lastAccount || state.systemAuth.loginVO.email || "").trim();
       if (last) $("sysEmailInput").value = last;
@@ -3211,10 +3406,32 @@
       const loginBtn = $("sysLoginBtn");
       const checkBtn = $("sysCheckBtn");
       const logoutBtn = $("sysLogoutBtn");
+      const keyReadBtn = $("refreshFlowPublicKeyBtn");
+      const keySaveBtn = $("saveFlowPublicKeyBtn");
+      const keyClearBtn = $("clearFlowPublicKeyBtn");
+      const keyFileInput = $("flowPublicKeyFileInput");
       if (title) title.style.color = on ? "var(--green)" : "#23364d";
       if (loginBtn) loginBtn.disabled = on;
       if (checkBtn) checkBtn.disabled = !on;
       if (logoutBtn) logoutBtn.disabled = !on;
+      if (keyReadBtn) keyReadBtn.disabled = !on;
+      if (keySaveBtn) keySaveBtn.disabled = !on;
+      if (keyClearBtn) keyClearBtn.disabled = !on;
+      if (keyFileInput) keyFileInput.disabled = !on;
+    }
+
+    function renderFlowPublicKeyTag() {
+      const tag = $("flowPublicKeyTag");
+      if (!tag) return;
+      if (!state.systemAuth?.loginDone) {
+        tag.textContent = "未登录";
+        return;
+      }
+      if (!state.flowPublicKeyLoaded) {
+        tag.textContent = "未加载";
+        return;
+      }
+      tag.textContent = state.flowPublicKeyHasKey ? "已配置" : "未配置";
     }
 
     function normalizeLocalLoginVO(obj, keyName = "") {
@@ -6127,8 +6344,15 @@
         const reason = String($("fText").value || "").trim();
         if (reason) action.reason = reason;
       }
-      const postWaitMs = Number($("fPostWaitMs").value || 0);
-      if (postWaitMs > 0) action.postWaitMs = Math.floor(postWaitMs);
+      const postWaitRaw = String($("fPostWaitMs").value || "").trim();
+      if (postWaitRaw) {
+        const postWaitMs = Number(postWaitRaw);
+        if (Number.isFinite(postWaitMs) && postWaitMs >= 0) {
+          action.postWaitMs = Math.floor(postWaitMs);
+        } else if (strict) {
+          throw new Error("postWaitMs 必须是 >= 0 的数字");
+        }
+      }
       return action;
     }
 
@@ -6325,17 +6549,40 @@
       setStatus(`已加载 ${state.contexts.length} 个页面`);
     }
 
-    async function refreshFlows() {
-      setStatus("加载 Flow 列表...");
-      const data = await api("GET", "/rpaflows/api/builder/flows");
+    async function refreshFlows(dirIn = null) {
+      const nextDir = (dirIn === null || dirIn === undefined)
+        ? String(state.flowsBrowseDir || "")
+        : String(dirIn || "");
+      setStatus(`加载 Flow 列表${nextDir ? `（${nextDir}）` : ""}...`);
+      const qs = nextDir ? `?dir=${encodeURIComponent(nextDir)}` : "";
+      const data = await api("GET", `/rpaflows/api/builder/flows${qs}`);
       state.flowsBaseDir = String(data.baseDir || state.flowsBaseDir || "");
+      state.flowsBrowseDir = String(data.currentDir || nextDir || "");
       const sel = $("savedFlowSelect");
+      const browseDir = String(state.flowsBrowseDir || "").trim();
       const currentPath = toDisplayFlowPathUi(String($("savePathInput").value || "").trim());
       sel.innerHTML = "";
       const emptyOp = document.createElement("option");
       emptyOp.value = "";
-      emptyOp.textContent = "请选择 Flow...";
+      emptyOp.textContent = browseDir
+        ? `📁 ${browseDir}`
+        : "请选择 Flow 或目录（当前：根目录）...";
       sel.appendChild(emptyOp);
+      const parentDir = String(data.parentDir || "").trim();
+      if (state.flowsBrowseDir) {
+        const upOp = document.createElement("option");
+        upOp.value = `__dir__:${parentDir}`;
+        upOp.textContent = "📁 ../ (返回上级)";
+        sel.appendChild(upOp);
+      }
+      for (const one of (data.dirs || [])) {
+        const dirPath = String(one.dir || "").trim();
+        if (!dirPath) continue;
+        const op = document.createElement("option");
+        op.value = `__dir__:${dirPath}`;
+        op.textContent = `📁 ${one.name || dirPath}`;
+        sel.appendChild(op);
+      }
       for (const one of (data.flows || [])) {
         const rawPath = String(one.path || one.absPath || "");
         const displayPath = toDisplayFlowPathUi(rawPath);
@@ -6346,7 +6593,9 @@
         sel.appendChild(op);
       }
       setOutput(data);
-      setStatus(`已加载 ${Array.isArray(data.flows) ? data.flows.length : 0} 个 Flow`);
+      const flowCount = Array.isArray(data.flows) ? data.flows.length : 0;
+      const dirCount = Array.isArray(data.dirs) ? data.dirs.length : 0;
+      setStatus(`目录 ${state.flowsBrowseDir || "/"}：${dirCount} 个子目录，${flowCount} 个 Flow`);
     }
 
     async function loadLogMeta() {
@@ -6568,6 +6817,84 @@
       setOutput({ ok: true, info: "system.logout", loginDone: false });
       setStatus("已登出");
       showButtonTip($("sysLogoutBtn"), "已登出", "ok");
+    }
+
+    async function refreshFlowPublicKey(opts = {}) {
+      const silent = !!opts?.silent;
+      const auth = getPublishLoginAuth();
+      if (!silent) setStatus("读取开发者公钥中...");
+      const ret = await callSystemWs("getFlowPublicKey", {
+        userId: auth.userId,
+        token: auth.token,
+      }, { apiPath: auth.apiPath, timeoutMs: 20000 });
+      if (Number(ret?.code || 0) !== 200) {
+        throw new Error(`读取公钥失败: ${String(ret?.info || ret?.code || "unknown")}`);
+      }
+      const key = String(ret?.flowPublicKey || "").trim();
+      state.flowPublicKeyLoaded = true;
+      state.flowPublicKeyHasKey = !!key;
+      $("flowPublicKeyInput").value = key;
+      renderFlowPublicKeyTag();
+      setOutput({ ok: true, info: "flow.public_key.get", response: ret });
+      if (!silent) {
+        const hasKey = state.flowPublicKeyHasKey;
+        setStatus(hasKey ? "已加载开发者公钥" : "当前未配置开发者公钥");
+        showButtonTip($("refreshFlowPublicKeyBtn"), hasKey ? "已加载" : "未配置", hasKey ? "ok" : "err");
+      }
+      return ret;
+    }
+
+    async function saveFlowPublicKey() {
+      const auth = getPublishLoginAuth();
+      const keyText = String($("flowPublicKeyInput").value || "").trim();
+      setStatus("保存开发者公钥中...");
+      const ret = await callSystemWs("setFlowPublicKey", {
+        userId: auth.userId,
+        token: auth.token,
+        flowPublicKey: keyText,
+      }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      if (Number(ret?.code || 0) !== 200) {
+        throw new Error(`保存公钥失败: ${String(ret?.info || ret?.code || "unknown")}`);
+      }
+      state.flowPublicKeyLoaded = true;
+      state.flowPublicKeyHasKey = !!String(ret?.flowPublicKey || "").trim();
+      $("flowPublicKeyInput").value = String(ret?.flowPublicKey || "").trim();
+      renderFlowPublicKeyTag();
+      setOutput({ ok: true, info: "flow.public_key.set", response: ret });
+      setStatus(state.flowPublicKeyHasKey ? "开发者公钥已保存" : "开发者公钥已清空");
+      showButtonTip($("saveFlowPublicKeyBtn"), state.flowPublicKeyHasKey ? "已保存" : "已清空", "ok");
+      return ret;
+    }
+
+    async function clearFlowPublicKey() {
+      $("flowPublicKeyInput").value = "";
+      await saveFlowPublicKey();
+      showButtonTip($("clearFlowPublicKeyBtn"), "已清空", "ok");
+    }
+
+    async function loadFlowPublicKeyFromFile(ev) {
+      const file = ev?.target?.files && ev.target.files[0] ? ev.target.files[0] : null;
+      if (!file) return;
+      const text = await file.text();
+      $("flowPublicKeyInput").value = String(text || "").trim();
+      setStatus(`已读取公钥文件: ${file.name}`);
+      showButtonTip($("saveFlowPublicKeyBtn"), "已读取文件", "ok");
+      try { ev.target.value = ""; } catch (_) {}
+    }
+
+    async function loadPublishPrivateKeyFromFile(ev) {
+      const file = ev?.target?.files && ev.target.files[0] ? ev.target.files[0] : null;
+      if (!file) return;
+      const text = String(await file.text() || "").trim();
+      if (!text.includes("BEGIN PRIVATE KEY")) {
+        throw new Error("请选择 PKCS8 PEM 私钥文件（含 BEGIN PRIVATE KEY）");
+      }
+      state.publishDevPrivateKeyPem = text;
+      state.publishDevPrivateKeyName = String(file.name || "");
+      if ($("publishDevKeyFileName")) $("publishDevKeyFileName").textContent = state.publishDevPrivateKeyName || "已选择";
+      showButtonTip($("signFlowBtn"), "开发者私钥已加载", "ok");
+      setStatus(`已读取 developer 私钥文件: ${file.name}`);
+      try { ev.target.value = ""; } catch (_) {}
     }
 
     async function systemCall() {
@@ -6825,13 +7152,14 @@
         const mock = readMockContextFromEditor(true);
         state.mockArgs = mock.args;
         state.mockVars = mock.vars;
+        state.mockOpts = mock.opts;
         state.mockLastResult = mock.lastResult;
         const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-step`, {
           step: stepForRun,
           args: mock.args,
           vars: mock.vars,
           lastResult: mock.lastResult,
-          opts: {},
+          opts: mock.opts,
         });
         if (data && typeof data === "object") {
           if (data.vars && typeof data.vars === "object" && !Array.isArray(data.vars)) {
@@ -6990,6 +7318,235 @@
       return out;
     }
 
+    function flattenObjectToRowsForContext(input, prefix = "", out = []) {
+      const src = normalizePlainObject(input, {});
+      for (const [k, v] of Object.entries(src)) {
+        const key = String(k || "").trim();
+        if (!key) continue;
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          flattenObjectToRowsForContext(v, path, out);
+          continue;
+        }
+        let text = "";
+        if (v === null) text = "null";
+        else if (typeof v === "boolean") text = v ? "true" : "false";
+        else if (typeof v === "number") text = String(v);
+        else if (typeof v === "string") text = String(v);
+        else text = JSON.stringify(v);
+        out.push({ key: path, value: text });
+      }
+      return out;
+    }
+
+    function normalizeContextOptKey(key) {
+      return String(key || "").trim().replace(/\s+/g, "");
+    }
+
+    function parseContextOptValue(text) {
+      const raw = String(text == null ? "" : text);
+      const s = raw.trim();
+      if (!s) return "";
+      try { return JSON.parse(s); } catch (_) {}
+      return raw;
+    }
+
+    function normalizeSuggestedOptValue(text) {
+      const raw = String(text == null ? "" : text).trim();
+      if (!raw) return "";
+      if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+        try {
+          const parsed = JSON.parse(raw.replace(/^'/, '"').replace(/'$/, '"'));
+          if (typeof parsed === "string") return parsed;
+        } catch (_) {}
+      }
+      return raw;
+    }
+
+    function getContextOptValueSuggestionsByKey(key) {
+      const k = normalizeContextOptKey(key || "").toLowerCase();
+      return Array.isArray(CTX_OPT_VALUE_SUGGESTIONS[k]) ? CTX_OPT_VALUE_SUGGESTIONS[k] : null;
+    }
+    function getContextOptDefaultValueByKey(key, suggestions = null) {
+      const k = normalizeContextOptKey(key || "").toLowerCase();
+      const explicit = String(CTX_OPT_VALUE_DEFAULTS[k] || "").trim();
+      if (explicit) return explicit;
+      if (Array.isArray(suggestions) && suggestions.length) return String(suggestions[0] || "").trim();
+      return "";
+    }
+
+    function renderContextOptsKeyDatalist() {
+      const dl = $("ctxOptsKeyOptions");
+      if (!dl) return;
+      dl.innerHTML = "";
+      const set = new Set(CTX_OPT_KEY_SUGGESTIONS);
+      for (const row of state.contextOptRows || []) {
+        const k = normalizeContextOptKey(row?.key || "");
+        if (k) set.add(k);
+      }
+      document.querySelectorAll("[data-ctx-opt-key-idx]").forEach((el) => {
+        const k = normalizeContextOptKey(el?.value || "");
+        if (k) set.add(k);
+      });
+      for (const key of Array.from(set).sort((a, b) => a.localeCompare(b))) {
+        const op = document.createElement("option");
+        op.value = key;
+        dl.appendChild(op);
+      }
+    }
+
+    function syncContextOptRowsStateFromDom() {
+      const nextRows = [];
+      const keyEls = Array.from(document.querySelectorAll("[data-ctx-opt-key-idx]"));
+      for (let i = 0; i < keyEls.length; i += 1) {
+        const keyEl = document.querySelector(`[data-ctx-opt-key-idx="${i}"]`);
+        const valEl = document.querySelector(`[data-ctx-opt-value-idx="${i}"]`);
+        const key = normalizeContextOptKey(keyEl?.value || "");
+        const value = String(valEl?.value || "");
+        if (!key && !value.trim()) continue;
+        nextRows.push({ key, value });
+      }
+      state.contextOptRows = nextRows;
+    }
+
+    function collectContextOptsFromEditor() {
+      const out = {};
+      const keyEls = Array.from(document.querySelectorAll("[data-ctx-opt-key-idx]"));
+      for (let i = 0; i < keyEls.length; i += 1) {
+        const keyEl = document.querySelector(`[data-ctx-opt-key-idx="${i}"]`);
+        const valEl = document.querySelector(`[data-ctx-opt-value-idx="${i}"]`);
+        const key = normalizeContextOptKey(keyEl?.value || "");
+        if (!key) continue;
+        const value = parseContextOptValue(String(valEl?.value || ""));
+        setByDottedPath(out, key, value);
+      }
+      return out;
+    }
+
+    function refreshContextOptsJsonFromEditor() {
+      const jsonInput = $("mockOptsInput");
+      if (!jsonInput) return;
+      try {
+        const opts = collectContextOptsFromEditor();
+        jsonInput.value = JSON.stringify(opts, null, 2);
+      } catch (_) {}
+      renderContextOptsKeyDatalist();
+    }
+
+    function renderContextOptsEditorFromRows() {
+      const box = $("ctxOptsBox");
+      if (!box) return;
+      box.innerHTML = "";
+      const rows = Array.isArray(state.contextOptRows) ? state.contextOptRows : [];
+      if (!rows.length) {
+        box.innerHTML = '<div class="empty-note">暂无 opts 项，可点击“+ 添加项”</div>';
+        renderContextOptsKeyDatalist();
+        return;
+      }
+      rows.forEach((row, idx) => {
+        const wrap = document.createElement("div");
+        wrap.className = "ctx-opt-row";
+
+        const keyInput = document.createElement("input");
+        keyInput.className = "mono";
+        keyInput.placeholder = "key，例如 flowSourcePolicy";
+        keyInput.value = String(row?.key || "");
+        keyInput.setAttribute("list", "ctxOptsKeyOptions");
+        keyInput.dataset.ctxOptKeyIdx = String(idx);
+        const valueSuggestions = getContextOptValueSuggestionsByKey(keyInput.value);
+        const rowValueText = String(row?.value || "");
+        const normalizedValueText = normalizeSuggestedOptValue(rowValueText);
+        keyInput.addEventListener("input", () => {
+          const oldHasSuggest = !!getContextOptValueSuggestionsByKey(row?.key || "");
+          row.key = String(keyInput.value || "");
+          const newHasSuggest = !!getContextOptValueSuggestionsByKey(keyInput.value);
+          if (oldHasSuggest !== newHasSuggest) {
+            syncContextOptRowsStateFromDom();
+            renderContextOptsEditorFromRows();
+          }
+          refreshContextOptsJsonFromEditor();
+          refreshContextJsonPreviewFromEditor();
+        });
+        wrap.appendChild(keyInput);
+
+        let valInput = null;
+        if (valueSuggestions && valueSuggestions.length) {
+          const sel = document.createElement("select");
+          sel.className = "mono";
+          const defaultValue = getContextOptDefaultValueByKey(keyInput.value, valueSuggestions);
+          const placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent = "请选择（可留空）";
+          sel.appendChild(placeholder);
+          for (const one of valueSuggestions) {
+            const op = document.createElement("option");
+            op.value = String(one);
+            op.textContent = String(one) === defaultValue ? `${String(one)}（默认）` : String(one);
+            sel.appendChild(op);
+          }
+          if (normalizedValueText && !valueSuggestions.includes(normalizedValueText)) {
+            const custom = document.createElement("option");
+            custom.value = normalizedValueText;
+            custom.textContent = `${normalizedValueText}（custom）`;
+            sel.appendChild(custom);
+          }
+          sel.value = normalizedValueText;
+          sel.dataset.ctxOptValueIdx = String(idx);
+          sel.addEventListener("input", () => {
+            refreshContextOptsJsonFromEditor();
+            refreshContextJsonPreviewFromEditor();
+          });
+          sel.addEventListener("change", () => {
+            refreshContextOptsJsonFromEditor();
+            refreshContextJsonPreviewFromEditor();
+          });
+          valInput = sel;
+        } else {
+          const ta = document.createElement("textarea");
+          ta.className = "mono";
+          ta.placeholder = "value（JSON 或文本）";
+          ta.value = rowValueText;
+          ta.dataset.ctxOptValueIdx = String(idx);
+          ta.addEventListener("input", () => {
+            refreshContextOptsJsonFromEditor();
+            refreshContextJsonPreviewFromEditor();
+          });
+          valInput = ta;
+        }
+        wrap.appendChild(valInput);
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn danger";
+        delBtn.textContent = "删";
+        delBtn.addEventListener("click", () => {
+          syncContextOptRowsStateFromDom();
+          state.contextOptRows.splice(idx, 1);
+          renderContextOptsEditorFromRows();
+          refreshContextOptsJsonFromEditor();
+          refreshContextJsonPreviewFromEditor();
+        });
+        wrap.appendChild(delBtn);
+
+        box.appendChild(wrap);
+      });
+      renderContextOptsKeyDatalist();
+    }
+
+    function rebuildContextOptRowsFromJsonText() {
+      const obj = parseJsonText($("mockOptsInput").value, {});
+      state.contextOptRows = flattenObjectToRowsForContext(obj, "", []);
+      renderContextOptsEditorFromRows();
+      refreshContextOptsJsonFromEditor();
+    }
+
+    function addEmptyContextOptRow() {
+      syncContextOptRowsStateFromDom();
+      state.contextOptRows.push({ key: "", value: "" });
+      renderContextOptsEditorFromRows();
+      refreshContextOptsJsonFromEditor();
+    }
+
     function contextValueKind(typeRaw = "") {
       const t = String(typeRaw || "").trim().toLowerCase();
       if (!t) return "string";
@@ -7146,6 +7703,9 @@
       const varDefs = normalizePlainObject(flow.vars, {});
       renderContextRows("args", argDefs, normalizePlainObject(state.mockArgs, {}));
       renderContextRows("vars", varDefs, normalizePlainObject(state.mockVars, {}));
+      state.contextOptRows = flattenObjectToRowsForContext(normalizePlainObject(state.mockOpts, {}), "", []);
+      renderContextOptsEditorFromRows();
+      $("mockOptsInput").value = JSON.stringify(normalizePlainObject(state.mockOpts, {}), null, 2);
       if (state.mockLastResult && typeof state.mockLastResult === "object" && !Array.isArray(state.mockLastResult)) {
         $("mockLastResultInput").value = JSON.stringify(state.mockLastResult, null, 2);
       } else {
@@ -7157,6 +7717,15 @@
     function readMockContextFromEditor(strict = true) {
       const args = readContextRows("args", strict);
       const vars = readContextRows("vars", strict);
+      let opts = {};
+      try {
+        const hasRow = Array.from(document.querySelectorAll("[data-ctx-opt-key-idx]"))
+          .some((el) => normalizeContextOptKey(el?.value || ""));
+        opts = hasRow ? collectContextOptsFromEditor() : parseJsonText($("mockOptsInput").value, {});
+      } catch (err) {
+        if (strict) throw new Error(`Context.opts 不是合法 JSON: ${String(err?.message || err)}`);
+        opts = {};
+      }
       const lastResultRaw = parseJsonText($("mockLastResultInput").value, null);
       if (strict && lastResultRaw !== null && (!lastResultRaw || typeof lastResultRaw !== "object" || Array.isArray(lastResultRaw))) {
         throw new Error("Context.lastResult 必须是 JSON Object 或 null");
@@ -7165,6 +7734,7 @@
       return {
         args,
         vars,
+        opts: normalizePlainObject(opts, {}),
         lastResult,
       };
     }
@@ -7175,6 +7745,7 @@
       const pack = {
         args: normalizePlainObject(state.mockArgs, {}),
         vars: normalizePlainObject(state.mockVars, {}),
+        opts: normalizePlainObject(state.mockOpts, {}),
         lastResult: (state.mockLastResult && typeof state.mockLastResult === "object" && !Array.isArray(state.mockLastResult))
           ? state.mockLastResult
           : null,
@@ -7219,6 +7790,7 @@
       const next = readMockContextFromEditor(true);
       state.mockArgs = next.args;
       state.mockVars = next.vars;
+      state.mockOpts = next.opts;
       state.mockLastResult = next.lastResult;
       renderMockContextEditor();
       renderContextJsonPreviewFromState();
@@ -7605,23 +8177,73 @@
       return flow;
     }
 
+    function getPublishLoginAuth() {
+      const auth = (state.systemAuth && typeof state.systemAuth === "object") ? state.systemAuth : null;
+      const vo = (auth && auth.loginVO && typeof auth.loginVO === "object") ? auth.loginVO : null;
+      const userId = String(vo?.userId || vo?.userid || "").trim();
+      const token = String(vo?.token || "").trim();
+      const apiPath = String(vo?.apiPath || "").trim() || "/ws/";
+      if (!auth?.loginDone || !userId || !token) {
+        throw new Error("发布到云端需要先完成系统登录");
+      }
+      return { userId, token, apiPath };
+    }
+
+    async function buildPublishSignatures(flow, opts = {}) {
+      const now = new Date().toISOString();
+      const flowDigest = await sha256Hex(JSON.stringify(flow || {}));
+      const payload = {
+        flowId: String(flow?.id || ""),
+        flowDigest,
+        at: now,
+      };
+      const payloadText = JSON.stringify(payload);
+      const devPem = String(opts?.developerPrivateKeyPem || "").trim();
+      const devSigner = String(opts?.developerSigner || "").trim();
+      const authorSignature = devPem
+        ? {
+          alg: "ed25519",
+          kid: "developer",
+          signer: devSigner || "developer",
+          sig: await signTextWithEd25519Pem(payloadText, devPem),
+          signedAt: now,
+        }
+        : null;
+      return { payload, authorSignature };
+    }
+
     async function refreshPublishServerInfo() {
       const pre = $("publishServerInfoPre");
       if (pre) pre.textContent = "加载中...";
       try {
         const flow = getCurrentFlowForPublish();
-        const sourcePath = String($("savePathInput").value || "").trim();
-        const data = await api("GET", `/rpaflows/api/builder/publish/version?flowId=${encodeURIComponent(String(flow.id || "").trim())}&sourcePath=${encodeURIComponent(sourcePath)}`);
-        state.publishServerInfo = data || null;
+        const auth = getPublishLoginAuth();
+        const [mineRet, pubRet] = await Promise.all([
+          callSystemWs("getMyFlow", {
+            userId: auth.userId,
+            token: auth.token,
+            flowId: String(flow.id || "").trim(),
+          }, { apiPath: auth.apiPath, timeoutMs: 20000 }),
+          callSystemWs("getPublishedFlow", {
+            userId: auth.userId,
+            token: auth.token,
+            flowId: String(flow.id || "").trim(),
+          }, { apiPath: auth.apiPath, timeoutMs: 20000 }),
+        ]);
+        const mine = Number(mineRet?.code || 0) === 200 ? (mineRet?.flow || null) : null;
+        const pub = Number(pubRet?.code || 0) === 200 ? (pubRet?.flow || null) : null;
+        const data = { mine, published: pub, mineRet, pubRet };
+        state.publishServerInfo = data;
         const lines = [];
-        lines.push(`flowId: ${String(data?.flowId || flow.id || "-")}`);
-        lines.push(`currentVersion: ${Number(data?.currentVersion || 0)}`);
-        lines.push(`nextVersion: ${Number(data?.nextVersion || 1)}`);
-        lines.push(`candidatePath: ${String(data?.candidatePath || sourcePath || "-")}`);
-        lines.push(`serverLatestPath: ${String(data?.latestPath || "-")}`);
-        lines.push(`serverLatestTime: ${String(data?.latestTime || "-")}`);
-        lines.push(`serverDigest: ${String(data?.latestDigest || "-")}`);
-        lines.push(`matchedCount: ${Number(data?.matchedCount || 0)}`);
+        lines.push(`flowId: ${String(flow.id || "-")}`);
+        lines.push(`myVersion: ${mine ? Number(mine.version || 0) : "-"}`);
+        lines.push(`myUpdatedAt: ${mine ? String(mine.updatedAt || "-") : "-"}`);
+        lines.push(`myStatus: ${mine ? String(mine.status || "-") : "-"}`);
+        lines.push(`publishedVersion: ${pub ? Number(pub.version || 0) : "-"}`);
+        lines.push(`publishedAt: ${pub ? String(pub.published?.publishedAt || "-") : "-"}`);
+        lines.push(`publishedChannel: ${pub ? String(pub.published?.channel || "-") : "-"}`);
+        lines.push(`publishedVisible: ${pub ? String(pub.published?.isPublished === true) : "false"}`);
+        lines.push(`mineCode: ${Number(mineRet?.code || 0)} | pubCode: ${Number(pubRet?.code || 0)}`);
         if (pre) pre.textContent = lines.join("\n");
       } catch (err) {
         if (pre) pre.textContent = `加载失败: ${String(err?.message || err)}`;
@@ -7667,52 +8289,97 @@
 
     async function signFlowForPublish() {
       const flow = getCurrentFlowForPublish();
-      const dev = String($("publishDevSignerInput").value || "").trim();
-      const sys = String($("publishSystemSignerInput").value || "").trim();
-      if (!dev && !sys) throw new Error("请至少填写 developer 或 system signer");
-      const payload = {
-        flowId: String(flow.id || ""),
-        flowDigest: await sha256Hex(JSON.stringify(flow)),
-        at: new Date().toISOString(),
-      };
+      const auth = getPublishLoginAuth();
+      const devPem = String(state.publishDevPrivateKeyPem || "").trim();
+      const devSigner = `dev:${String(auth.userId || "").trim() || "user"}`;
+      if (!devPem) throw new Error("请先选择 developer 私钥文件");
+      const { payload, authorSignature } = await buildPublishSignatures(flow, {
+        developerPrivateKeyPem: devPem,
+        developerSigner: devSigner,
+      });
       const signatures = {
         ...(flow.signatures && typeof flow.signatures === "object" ? flow.signatures : {}),
       };
-      if (dev) signatures.developer = { signer: dev, payload, sig: await sha256Hex(`dev:${dev}:${JSON.stringify(payload)}`) };
-      if (sys) signatures.system = { signer: sys, payload, sig: await sha256Hex(`sys:${sys}:${JSON.stringify(payload)}`) };
-      const nextFlow = { ...flow, signatures };
+      if (authorSignature) signatures.developer = { signer: authorSignature.signer, payload, sig: authorSignature.sig, alg: authorSignature.alg, kid: authorSignature.kid, signedAt: authorSignature.signedAt };
+      const nextFlow = {
+        ...flow,
+        signatures,
+        ...(authorSignature ? { authorSignature } : {}),
+        systemSignature: null,
+      };
       setFlow(nextFlow);
-      $("publishResultPre").textContent = JSON.stringify({ ok: true, info: "签名已写入Flow", signatures }, null, 2);
+      $("publishResultPre").textContent = JSON.stringify({
+        ok: true,
+        info: "开发者签名已写入Flow（使用私钥签名）",
+        signers: { developer: devSigner },
+        signatures,
+        authorSignature,
+      }, null, 2);
       setStatus("签名已写入当前 Flow（未发布）");
       showButtonTip($("signFlowBtn"), "已签名", "ok");
     }
 
     async function publishFlowToServer() {
       const flow = getCurrentFlowForPublish();
-      const sourcePath = String($("savePathInput").value || "").trim();
-      const developerSigner = String($("publishDevSignerInput").value || "").trim();
-      const systemSigner = String($("publishSystemSignerInput").value || "").trim();
+      const auth = getPublishLoginAuth();
+      const devPem = String(state.publishDevPrivateKeyPem || "").trim();
+      const devSigner = `dev:${String(auth.userId || "").trim() || "user"}`;
       const note = String($("publishNoteInput").value || "").trim();
-      const body = {
-        flow,
-        sourcePath: sourcePath || undefined,
-        releaseNote: note,
-        developerSigner,
-        systemSigner,
-        auditSummary: state.publishLastAudit || null,
+      const { authorSignature } = await buildPublishSignatures(flow, {
+        developerPrivateKeyPem: devPem,
+        developerSigner: devSigner,
+      });
+      const flowForDraft = {
+        ...flow,
+        ...(authorSignature ? { authorSignature } : {}),
       };
-      const data = await api("POST", "/rpaflows/api/builder/publish", body);
-      $("publishResultPre").textContent = JSON.stringify(data, null, 2);
-      if (data?.flow && typeof data.flow === "object") {
-        setFlow(data.flow);
+      const saveRet = await callSystemWs("saveFlowDraft", {
+        userId: auth.userId,
+        token: auth.token,
+        flowId: String(flow.id || "").trim(),
+        content: flowForDraft,
+        status: "SUBMITTED",
+        visibility: "private",
+        authorSignature: authorSignature || null,
+      }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      if (Number(saveRet?.code || 0) !== 200) {
+        throw new Error(`保存云端草稿失败: ${String(saveRet?.info || saveRet?.code || "unknown")}`);
       }
-      if (data?.path) {
-        $("savePathInput").value = String(data.path || "");
-      }
-      await refreshFlows();
+      $("publishResultPre").textContent = JSON.stringify({
+        ok: true,
+        info: "已提交到云端（等待审核/系统发布）",
+        signers: { developer: authorSignature?.signer || "" },
+        submit: saveRet,
+        note,
+        auditSummary: state.publishLastAudit || null,
+      }, null, 2);
       await refreshPublishServerInfo().catch(() => {});
-      setStatus(`发布完成：version=${Number(data?.version || 0)} path=${String(data?.path || "-")}`);
-      showButtonTip($("publishFlowBtn"), "已发布", "ok");
+      setStatus(`云端提交完成：flowId=${String(flow.id || "-")} version=${Number(saveRet?.version || 0)}`);
+      showButtonTip($("publishFlowBtn"), "已提交", "ok");
+    }
+
+    async function requestPublishFlow() {
+      const flow = getCurrentFlowForPublish();
+      const auth = getPublishLoginAuth();
+      const note = String($("publishNoteInput").value || "").trim();
+      setStatus("检查签名并申请发布中...");
+      const ret = await callSystemWs("requestPublishFlow", {
+        userId: auth.userId,
+        token: auth.token,
+        flowId: String(flow.id || "").trim(),
+        note,
+      }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      if (Number(ret?.code || 0) !== 200) {
+        throw new Error(String(ret?.info || ret?.reason || "申请发布失败"));
+      }
+      $("publishResultPre").textContent = JSON.stringify({
+        ok: true,
+        info: "已申请发布（待批准）",
+        request: ret,
+      }, null, 2);
+      await refreshPublishServerInfo().catch(() => {});
+      setStatus(`发布申请已提交：flowId=${String(flow.id || "-")}`);
+      showButtonTip($("requestPublishFlowBtn"), "已申请", "ok");
     }
 
     function openSkillToFlowDialog() {
@@ -7731,6 +8398,271 @@
 
     function closeSkillToFlowDialog() {
       const mask = $("skillToFlowMask");
+      if (!mask) return;
+      mask.classList.remove("show");
+      mask.setAttribute("aria-hidden", "true");
+    }
+
+    function getCloudFlowAuthOptional() {
+      const cur = (state.systemAuth && state.systemAuth.loginDone && state.systemAuth.loginVO)
+        ? state.systemAuth.loginVO
+        : (loadLocalLoginInfoCompat()?.raw || null);
+      const userId = String(cur?.userId || cur?.userid || "").trim();
+      const token = String(cur?.token || "").trim();
+      const apiPath = String(cur?.apiPath || $("sysApiPathInput")?.value || "").trim() || "/ws/";
+      if (!userId || !token) return null;
+      return { userId, token, apiPath };
+    }
+
+    function clearCloudFlowSelection() {
+      state.cloudFlowSelectedKey = "";
+      const openBtn = $("cloudFlowOpenBtn");
+      if (openBtn) openBtn.disabled = true;
+    }
+
+    function renderCloudFlowList() {
+      const box = $("cloudFlowList");
+      if (!box) return;
+      const items = Array.isArray(state.cloudFlowItems) ? state.cloudFlowItems : [];
+      box.innerHTML = "";
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "picker-empty";
+        empty.textContent = "暂无结果";
+        box.appendChild(empty);
+        clearCloudFlowSelection();
+        return;
+      }
+      const selected = String(state.cloudFlowSelectedKey || "").trim();
+      for (const one of items) {
+        const key = String(one?.key || "").trim();
+        const row = document.createElement("label");
+        row.className = "picker-item";
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "cloudFlowPick";
+        radio.value = key;
+        radio.checked = key && key === selected;
+        const info = document.createElement("div");
+        info.className = "cloud-flow-item";
+        const line1 = document.createElement("div");
+        line1.className = "cloud-flow-name mono";
+        line1.textContent = String(one?.flowId || "-");
+        const line2 = document.createElement("div");
+        line2.className = "cloud-flow-meta mono";
+        line2.textContent = `source=${String(one?.source || "-")} | owner=${String(one?.ownerUserId || "-")} | v${Number(one?.version || 0)} | status=${String(one?.status || "-")}`;
+        const line3 = document.createElement("div");
+        line3.className = "cloud-flow-meta mono";
+        line3.textContent = `updatedAt=${String(one?.updatedAt || "-")} | caps=${String(one?.capPreview || "-")}`;
+        info.appendChild(line1);
+        info.appendChild(line2);
+        info.appendChild(line3);
+        const tag = document.createElement("span");
+        tag.className = "picker-kind";
+        tag.textContent = String(one?.sourceLabel || one?.source || "-");
+        row.appendChild(radio);
+        row.appendChild(info);
+        row.appendChild(tag);
+        row.addEventListener("click", () => {
+          state.cloudFlowSelectedKey = key;
+          const openBtn = $("cloudFlowOpenBtn");
+          if (openBtn) openBtn.disabled = !state.cloudFlowSelectedKey;
+        });
+        box.appendChild(row);
+      }
+      const openBtn = $("cloudFlowOpenBtn");
+      if (openBtn) openBtn.disabled = !state.cloudFlowSelectedKey;
+    }
+
+    async function queryCloudFlowCandidates() {
+      const source = String($("cloudFlowSourceInput").value || "all").trim() || "all";
+      const keyword = String($("cloudFlowFlowIdInput").value || "").trim();
+      const limit = Math.max(1, Math.min(100, Number($("cloudFlowLimitInput").value || 30)));
+      const hint = $("cloudFlowHint");
+      const auth = getCloudFlowAuthOptional();
+      const out = [];
+
+      if ((source === "mine" || source === "all")) {
+        if (!auth) throw new Error("查询“我的 Flow”需要先在 Publish 页完成系统登录");
+        const mineRet = await callSystemWs("listMyFlows", {
+          userId: auth.userId,
+          token: auth.token,
+          limit,
+          skip: 0,
+          includeContent: false,
+        }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+        if (Number(mineRet?.code || 0) !== 200) {
+          throw new Error(`读取我的 Flow 失败: ${String(mineRet?.info || mineRet?.code || "unknown")}`);
+        }
+        const mineFlows = Array.isArray(mineRet?.flows) ? mineRet.flows : [];
+        for (const one of mineFlows) {
+          const fid = String(one?.flowId || "").trim();
+          if (!fid) continue;
+          if (keyword && !fid.toLowerCase().includes(keyword.toLowerCase())) continue;
+          out.push({
+            key: `mine:${fid}`,
+            source: "mine",
+            sourceLabel: "我的",
+            flowId: fid,
+            ownerUserId: String(one?.userId || auth.userId || ""),
+            version: Number(one?.version || 0),
+            status: String(one?.status || "-"),
+            updatedAt: String(one?.updatedAt || ""),
+            capPreview: (Array.isArray(one?.capabilities) ? one.capabilities.slice(0, 5) : []).join(","),
+          });
+        }
+      }
+
+      if (source === "published" || source === "all") {
+        if (keyword) {
+          const pubRet = await callSystemWs("getPublishedFlow", {
+            ...(auth ? { userId: auth.userId, token: auth.token } : {}),
+            flowId: keyword,
+          }, { apiPath: auth?.apiPath || "/ws/", timeoutMs: 30000 });
+          if (Number(pubRet?.code || 0) === 200 && pubRet?.flow) {
+            const one = pubRet.flow;
+            const fid = String(one?.flowId || keyword).trim();
+            out.push({
+              key: `published:${fid}`,
+              source: "published",
+              sourceLabel: "系统",
+              flowId: fid,
+              ownerUserId: String(one?.userId || "system"),
+              version: Number(one?.version || 0),
+              status: String(one?.status || "-"),
+              updatedAt: String(one?.updatedAt || ""),
+              capPreview: (Array.isArray(one?.capabilities) ? one.capabilities.slice(0, 5) : []).join(","),
+            });
+          }
+        } else {
+          const pubFindRet = await callSystemWs("findPublishedFlow", {
+            ...(auth ? { userId: auth.userId, token: auth.token } : {}),
+            topK: limit,
+            download: false,
+            find: { kind: "rpa", must: [], prefer: [], filter: [], rank: "" },
+          }, { apiPath: auth?.apiPath || "/ws/", timeoutMs: 30000 });
+          if (Number(pubFindRet?.code || 0) === 200) {
+            const cands = Array.isArray(pubFindRet?.candidates) ? pubFindRet.candidates : [];
+            for (const row of cands) {
+              const one = (row && typeof row.flow === "object") ? row.flow : null;
+              const fid = String(one?.flowId || "").trim();
+              if (!fid) continue;
+              out.push({
+                key: `published:${fid}`,
+                source: "published",
+                sourceLabel: "系统",
+                flowId: fid,
+                ownerUserId: String(one?.userId || "system"),
+                version: Number(one?.version || 0),
+                status: String(one?.status || "-"),
+                updatedAt: String(one?.updatedAt || ""),
+                capPreview: (Array.isArray(one?.capabilities) ? one.capabilities.slice(0, 5) : []).join(","),
+              });
+            }
+          }
+        }
+      }
+
+      const uniq = new Map();
+      for (const one of out) {
+        const k = String(one?.key || "");
+        if (!k || uniq.has(k)) continue;
+        uniq.set(k, one);
+      }
+      const items = Array.from(uniq.values()).sort((a, b) => {
+        const ta = new Date(String(a.updatedAt || 0)).getTime();
+        const tb = new Date(String(b.updatedAt || 0)).getTime();
+        if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return tb - ta;
+        return String(a.flowId || "").localeCompare(String(b.flowId || ""));
+      });
+      state.cloudFlowItems = items;
+      clearCloudFlowSelection();
+      renderCloudFlowList();
+      if (hint) {
+        hint.textContent = items.length
+          ? `已找到 ${items.length} 条，选择后点击“打开所选”`
+          : `未找到匹配 Flow（source=${source}${keyword ? `, keyword=${keyword}` : ""}）`;
+      }
+      setOutput({
+        ok: true,
+        info: "cloud.flow.query",
+        source,
+        keyword,
+        count: items.length,
+        items,
+      });
+      setStatus(`云端 Flow 查询完成：${items.length} 条`);
+    }
+
+    async function openSelectedCloudFlow() {
+      const key = String(state.cloudFlowSelectedKey || "").trim();
+      if (!key) throw new Error("请先选择一个云端 Flow");
+      const item = (Array.isArray(state.cloudFlowItems) ? state.cloudFlowItems : []).find((x) => String(x?.key || "") === key);
+      if (!item) throw new Error("所选云端 Flow 不存在，请重新查询");
+      const auth = getCloudFlowAuthOptional();
+      const source = String(item.source || "").trim();
+      const flowId = String(item.flowId || "").trim();
+      let ret = null;
+      if (source === "mine") {
+        if (!auth) throw new Error("打开“我的 Flow”需要先登录系统");
+        ret = await callSystemWs("getMyFlow", {
+          userId: auth.userId,
+          token: auth.token,
+          flowId,
+        }, { apiPath: auth.apiPath, timeoutMs: 30000 });
+      } else {
+        ret = await callSystemWs("getPublishedFlow", {
+          ...(auth ? { userId: auth.userId, token: auth.token } : {}),
+          flowId,
+        }, { apiPath: auth?.apiPath || "/ws/", timeoutMs: 30000 });
+      }
+      if (Number(ret?.code || 0) !== 200) {
+        throw new Error(`打开云端 Flow 失败: ${String(ret?.info || ret?.code || "unknown")}`);
+      }
+      const cloudFlow = (ret?.flow?.content && typeof ret.flow.content === "object") ? ret.flow.content : null;
+      if (!cloudFlow) throw new Error("云端返回缺少 flow.content");
+      state.stepDrafts = {};
+      state.editorDirty = false;
+      state.editorTouched = false;
+      $("savePathInput").value = "";
+      $("savedFlowSelect").value = "";
+      setFlow(cloudFlow);
+      closeCloudFlowDialog();
+      setOutput({
+        ok: true,
+        info: "cloud.flow.opened",
+        source,
+        flowId,
+        ownerUserId: String(ret?.flow?.userId || item.ownerUserId || ""),
+        version: Number(ret?.flow?.version || 0),
+      });
+      setStatus(`已加载云端 Flow：${flowId}（${source === "mine" ? "我的" : "系统"}）`);
+    }
+
+    function openCloudFlowDialog() {
+      const mask = $("cloudFlowMask");
+      if (!mask) return;
+      mask.classList.add("show");
+      mask.setAttribute("aria-hidden", "false");
+      if (!Array.isArray(state.cloudFlowItems) || !state.cloudFlowItems.length) {
+        queryCloudFlowCandidates().catch((err) => {
+          const hint = $("cloudFlowHint");
+          if (hint) hint.textContent = `查询失败: ${String(err?.message || err)}`;
+          failUi(err);
+        });
+      } else {
+        renderCloudFlowList();
+      }
+      const ipt = $("cloudFlowFlowIdInput");
+      if (ipt) {
+        setTimeout(() => {
+          try { ipt.focus(); } catch (_) {}
+        }, 0);
+      }
+    }
+
+    function closeCloudFlowDialog() {
+      const mask = $("cloudFlowMask");
       if (!mask) return;
       mask.classList.remove("show");
       mask.setAttribute("aria-hidden", "true");
@@ -8171,6 +9103,18 @@
       $("decisionMask").addEventListener("click", (ev) => {
         if (ev.target === $("decisionMask")) closeDecisionDialog("cancel");
       });
+      $("cloudFlowCloseBtn").addEventListener("click", () => closeCloudFlowDialog());
+      $("cloudFlowCancelBtn").addEventListener("click", () => closeCloudFlowDialog());
+      $("cloudFlowSearchBtn").addEventListener("click", () => queryCloudFlowCandidates().catch(failUi));
+      $("cloudFlowOpenBtn").addEventListener("click", () => openSelectedCloudFlow().catch(failUi));
+      $("cloudFlowFlowIdInput").addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter") return;
+        ev.preventDefault();
+        queryCloudFlowCandidates().catch(failUi);
+      });
+      $("cloudFlowMask").addEventListener("click", (ev) => {
+        if (ev.target === $("cloudFlowMask")) closeCloudFlowDialog();
+      });
       $("flowReviseDetailCloseBtn").addEventListener("click", () => closeFlowReviseDetailDialog());
       $("reviseFlowFromRunBtn").addEventListener("click", () => openFlowReviseFromLastRun());
       $("flowReviseDetailMask").addEventListener("click", (ev) => {
@@ -8188,6 +9132,8 @@
         if (mask2 && mask2.classList.contains("show")) closeRunJsPreviewDialog(false);
         const mask3 = $("decisionMask");
         if (mask3 && mask3.classList.contains("show")) closeDecisionDialog("cancel");
+        const maskCloud = $("cloudFlowMask");
+        if (maskCloud && maskCloud.classList.contains("show")) closeCloudFlowDialog();
         const mask4 = $("flowReviseDetailMask");
         if (mask4 && mask4.classList.contains("show")) closeFlowReviseDetailDialog();
         const mask5 = $("stepReviseMask");
@@ -8255,6 +9201,36 @@
     $("ctxArgsBox").addEventListener("change", () => refreshContextJsonPreviewFromEditor());
     $("ctxVarsBox").addEventListener("input", () => refreshContextJsonPreviewFromEditor());
     $("ctxVarsBox").addEventListener("change", () => refreshContextJsonPreviewFromEditor());
+    $("ctxAddOptRowBtn").addEventListener("click", () => {
+      addEmptyContextOptRow();
+      refreshContextJsonPreviewFromEditor();
+    });
+    $("ctxParseOptsJsonBtn").addEventListener("click", () => {
+      try {
+        rebuildContextOptRowsFromJsonText();
+        refreshContextJsonPreviewFromEditor();
+        showButtonTip($("ctxParseOptsJsonBtn"), "已同步", "ok");
+      } catch (err) {
+        failUi(err);
+      }
+    });
+    $("ctxClearOptRowsBtn").addEventListener("click", () => {
+      state.contextOptRows = [];
+      $("mockOptsInput").value = "{}";
+      renderContextOptsEditorFromRows();
+      refreshContextJsonPreviewFromEditor();
+      showButtonTip($("ctxClearOptRowsBtn"), "已清空", "ok");
+    });
+    $("ctxOptsBox").addEventListener("input", () => {
+      refreshContextOptsJsonFromEditor();
+      refreshContextJsonPreviewFromEditor();
+    });
+    $("ctxOptsBox").addEventListener("change", () => {
+      refreshContextOptsJsonFromEditor();
+      refreshContextJsonPreviewFromEditor();
+    });
+    $("mockOptsInput").addEventListener("input", () => refreshContextJsonPreviewFromEditor());
+    $("mockOptsInput").addEventListener("change", () => refreshContextJsonPreviewFromEditor());
     $("mockLastResultInput").addEventListener("input", () => refreshContextJsonPreviewFromEditor());
     $("mockLastResultInput").addEventListener("change", () => refreshContextJsonPreviewFromEditor());
     const publishTabBtn = document.querySelector('.tabs[data-tab-group="right"] .tab[data-tab="right-publish"]');
@@ -8263,20 +9239,30 @@
         refreshPublishServerInfo().catch((err) => {
           setOutput({ ok: false, info: "publish.version.error", error: String(err?.message || err) });
         });
+        if (state.systemAuth?.loginDone) {
+          refreshFlowPublicKey({ silent: true }).catch(() => {});
+        }
       });
     }
     $("sysLoginBtn").addEventListener("click", () => systemLogin().catch(failUi));
     $("sysCheckBtn").addEventListener("click", () => systemCheckLogin().catch(failUi));
     $("sysLogoutBtn").addEventListener("click", () => systemLogout().catch(failUi));
     $("sysCallBtn").addEventListener("click", () => systemCall().catch(failUi));
+    $("refreshFlowPublicKeyBtn").addEventListener("click", () => refreshFlowPublicKey().catch(failUi));
+    $("saveFlowPublicKeyBtn").addEventListener("click", () => saveFlowPublicKey().catch(failUi));
+    $("clearFlowPublicKeyBtn").addEventListener("click", () => clearFlowPublicKey().catch(failUi));
+    $("flowPublicKeyFileInput").addEventListener("change", (ev) => loadFlowPublicKeyFromFile(ev).catch(failUi));
+    $("publishDevKeyFileInput").addEventListener("change", (ev) => loadPublishPrivateKeyFromFile(ev).catch(failUi));
     $("refreshPublishInfoBtn").addEventListener("click", () => refreshPublishServerInfo().catch(failUi));
     $("runPreAuditBtn").addEventListener("click", () => runPreAuditForPublish().catch(failUi));
     $("signFlowBtn").addEventListener("click", () => signFlowForPublish().catch(failUi));
     $("publishFlowBtn").addEventListener("click", () => publishFlowToServer().catch(failUi));
+    $("requestPublishFlowBtn").addEventListener("click", () => requestPublishFlow().catch(failUi));
 
     $("refreshFlowsBtn").addEventListener("click", () => refreshFlows().catch(failUi));
     $("openSkillToFlowBtn").addEventListener("click", () => openSkillToFlowDialog());
     $("openFlowReviseBtn").addEventListener("click", () => openFlowReviseDialog());
+    $("openCloudFlowBtn").addEventListener("click", () => openCloudFlowDialog());
     $("openFlowReviseBtnMid").addEventListener("click", () => openFlowReviseDialog());
     $("flowReviseEngineInput").addEventListener("change", () => {
       state.preferredFlowReviseEngine = String($("flowReviseEngineInput").value || "default");
@@ -8290,6 +9276,11 @@
     $("savedFlowSelect").addEventListener("change", () => {
       const path = String($("savedFlowSelect").value || "").trim();
       if (!path) return;
+      if (path.startsWith("__dir__:")) {
+        const dir = String(path.slice("__dir__:".length) || "");
+        refreshFlows(dir).catch(failUi);
+        return;
+      }
       loadFlow(path).catch(failUi);
     });
     $("newFlowBtn").addEventListener("click", () => { try { newFlow(); } catch (err) { failUi(err); } });
@@ -8401,6 +9392,7 @@
 
     renderSessionTag();
     renderSystemAuthTag();
+    renderFlowPublicKeyTag();
     renderContextTag();
     setFlow(getFlowFromTextarea());
     setActionFieldVisibility();

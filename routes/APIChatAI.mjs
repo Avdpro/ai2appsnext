@@ -27,6 +27,12 @@ const AIPlatforms={
 		"gpt-4":{model:"gpt-4",label:"GPT-4"},
 		"gpt-4-turbo":{model:"gpt-4-turbo",label:"GPT-4 Turbo"},
 	},
+	"OpenRouter":{
+		"openai/gpt-4o-mini":{model:"openai/gpt-4o-mini",label:"OpenAI GPT-4o-mini"},
+		"openai/gpt-4.1-mini":{model:"openai/gpt-4.1-mini",label:"OpenAI GPT-4.1 mini"},
+		"anthropic/claude-3.5-sonnet":{model:"anthropic/claude-3.5-sonnet",label:"Claude 3.5 Sonnet"},
+		"google/gemini-2.5-flash":{model:"google/gemini-2.5-flash",label:"Gemini 2.5 Flash"},
+	},
 	"Google":{
 		"gemini-2.5-pro":{model:"gemini-2.5-pro",label:"Gemini 2.5 Pro"},
 		"gemini-2.5-flash":{model:"gemini-2.5-flash",label:"Gemini 2.5 flash"},
@@ -48,12 +54,6 @@ const AIPlatforms={
 		"terrence/openbuddy":{model:"terrence/openbuddy",label:"LLAMA3 Chinese"},
 		"phi3":{model:"phi3",label:"Phi3"},
 		"moondream":{model:"moondream",label:"Moon Dream"},
-	},
-	"OpenRouter":{
-		"google/gemini-3-flash-preview":{model:"google/gemini-3-flash-preview",label:"Gemini 3 Flash Preview"},
-		"google/gemini-2.5-flash":{model:"google/gemini-2.5-flash",label:"Gemini 2.5 Flash"},
-		"anthropic/claude-3.5-sonnet":{model:"anthropic/claude-3.5-sonnet",label:"Claude 3.5 Sonnet"},
-		"openai/gpt-4o":{model:"openai/gpt-4o",label:"GPT-4O"},
 	}
 };
 
@@ -67,6 +67,30 @@ if(OPENAI_API_KEY && OPENAI_API_KEY!=="[YOUR OPENAI KEY]") {
 	});
 }else{
 	openAI=null;
+}
+
+//---------------------------------------------------------------------------
+//OpenRouter:
+const OPENROUTER_API_KEY=process.env.OPENROUTER_API_KEY;
+const OPENROUTER_BASE_URL=process.env.OPENROUTER_BASE_URL||"https://openrouter.ai/api/v1";
+const OPENROUTER_SITE_URL=process.env.OPENROUTER_SITE_URL||process.env.OPENROUTER_HTTP_REFERER;
+const OPENROUTER_APP_NAME=process.env.OPENROUTER_APP_NAME||process.env.OPENROUTER_X_TITLE;
+let openRouter;
+if(OPENROUTER_API_KEY && OPENROUTER_API_KEY!=="[YOUR OPENROUTER KEY]") {
+	let defaultHeaders={};
+	if(OPENROUTER_SITE_URL){
+		defaultHeaders["HTTP-Referer"]=OPENROUTER_SITE_URL;
+	}
+	if(OPENROUTER_APP_NAME){
+		defaultHeaders["X-Title"]=OPENROUTER_APP_NAME;
+	}
+	openRouter = new OpenAI({
+		apiKey:OPENROUTER_API_KEY,
+		baseURL:OPENROUTER_BASE_URL,
+		defaultHeaders:defaultHeaders,
+	});
+}else{
+	openRouter=null;
 }
 
 //---------------------------------------------------------------------------
@@ -87,26 +111,45 @@ if(GOOGLEAI_API_KEY) {
 	googleAI = new GoogleGenAI({apiKey: GOOGLEAI_API_KEY});
 }
 
-//---------------------------------------------------------------------------
-//OpenRouter (test):
-
-async function fetchWithRetry(url, opts, retries = 3, delay = 1000) {
-	const NO_RETRY = new Set([400, 401, 403, 404]);
-	for (let i = 0; i < retries; i++) {
-		try {
-			const res = await fetch(url, opts);
-			if (res.ok || NO_RETRY.has(res.status)) return res;
-			if (i < retries - 1) await new Promise(r => setTimeout(r, delay * (i + 1)));
-			else return res;
-		} catch (err) {
-			if (i === retries - 1) throw err;
-			await new Promise(r => setTimeout(r, delay * (i + 1)));
-		}
-	}
-}
-
 const DAYTIME=24*3600*1000;
 const USERINFO_PROJECTION={rank:1,rankExpire:1,points:1,coins:1,token:1,tokenExpire:1,lastLogin:1,tokens:1,AIUsage:1};
+const OPENROUTER_MODEL_MAP={
+	"Claude":{
+		"claude-3-7-sonnet-latest":"anthropic/claude-3.7-sonnet",
+		"claude-3-5-sonnet-latest":"anthropic/claude-3.5-sonnet",
+		"claude-3-5-sonnet-20240620":"anthropic/claude-3.5-sonnet",
+		"claude-3-sonnet-20240229":"anthropic/claude-3-sonnet",
+		"claude-3-opus-20240229":"anthropic/claude-3-opus",
+	},
+	"Google":{
+		"gemini-2.5-pro":"google/gemini-2.5-pro",
+		"gemini-2.5-flash":"google/gemini-2.5-flash",
+		"gemini-2.5-flash-lite":"google/gemini-2.5-flash-lite",
+		"gemini-pro":"google/gemini-pro",
+	}
+};
+let toOpenRouterModel=function(sourcePlatform,model){
+	if(model && model.includes("/")){
+		return model;
+	}
+	switch(sourcePlatform){
+		case "OpenAI":
+			return model?`openai/${model}`:"openai/gpt-4o-mini";
+		case "Claude":
+			if(model && OPENROUTER_MODEL_MAP.Claude[model]){
+				return OPENROUTER_MODEL_MAP.Claude[model];
+			}
+			return model?`anthropic/${model}`:"anthropic/claude-3.5-sonnet";
+		case "Google":
+			if(model && OPENROUTER_MODEL_MAP.Google[model]){
+				return OPENROUTER_MODEL_MAP.Google[model];
+			}
+			return model?`google/${model}`:"google/gemini-2.5-flash";
+		case "OpenRouter":
+		default:
+			return model||"openai/gpt-4o-mini";
+	}
+};
 
 //***************************************************************************
 //Stream utils:
@@ -186,7 +229,8 @@ export default async function(app,router,apiMap) {
 					res.json({ code: 403, info: "UserId/Token invalid." });
 					return;
 				}
-				userInfo = await getUserInfo(req, userId, token, USERINFO_PROJECTION);
+				//userInfo = await getUserInfo(req, userId, token, USERINFO_PROJECTION);
+				userInfo=await dbUser.findOne({_id:userId},{points:1});
 				if (!userInfo) {
 					userInfo = await getPVUserInfo(req, USERINFO_PROJECTION);
 					if (!userInfo) {
@@ -228,21 +272,29 @@ export default async function(app,router,apiMap) {
 				textGot = streamVO.content;
 			}
 			textRead = streamVO.textRead;
-			if(streamVO.closed && streamVO.error){
-				console.log(`[DBG] readAIChatStream returning 500, error=${streamVO.error}`);
-				res.json({ code: 500, info: streamVO.error });
-				return;
-			}else if(streamVO.closed && streamVO.refusal){
-				streamVO.textRead = textGot;
-				res.json({ code: 500, info:`AI refused: ${streamVO.refusal}`});
-				return;
-			}else if (textRead !== textGot || streamVO.closed) {
-				if(functionCall){
-					res.json({ code: 200, message: textGot, closed: streamVO.closed, functionCall: functionCall,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens});
-				}else if(toolCalls){
-					res.json({ code: 200, message: textGot, closed: streamVO.closed, toolCalls: toolCalls,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens});
-				}else {
-					res.json({ code: 200, message: textGot, closed: streamVO.closed ,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens});
+				if(streamVO.closed && streamVO.refusal){
+					streamVO.textRead = textGot;
+					res.json({ code: 500, info:`AI refused: ${streamVO.refusal}`});
+					return;
+				}else if (textRead !== textGot || streamVO.closed) {
+					if(functionCall){
+						let resVO={ code: 200, message: textGot, closed: streamVO.closed, functionCall: functionCall,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens,actualPlatform:streamVO.actualPlatform};
+						if(streamVO.cost!==undefined){
+							resVO.cost=streamVO.cost;
+						}
+						res.json(resVO);
+					}else if(toolCalls){
+						let resVO={ code: 200, message: textGot, closed: streamVO.closed, toolCalls: toolCalls,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens,actualPlatform:streamVO.actualPlatform};
+						if(streamVO.cost!==undefined){
+							resVO.cost=streamVO.cost;
+						}
+						res.json(resVO);
+					}else {
+						let resVO={ code: 200, message: textGot, closed: streamVO.closed ,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens,actualPlatform:streamVO.actualPlatform};
+						if(streamVO.cost!==undefined){
+							resVO.cost=streamVO.cost;
+						}
+						res.json(resVO);
 				}
 				streamVO.textRead = textGot;
 				return;
@@ -253,13 +305,15 @@ export default async function(app,router,apiMap) {
 				streamVO.errorFunc = reject;
 			})
 			await pms;
-			if(streamVO.error){
-				res.json({ code: 500, info: streamVO.error });
-				return;
-			}
 			textGot = streamVO.content;
 			streamVO.textRead = textGot;
-			res.json({ code: 200, message: textGot, closed: streamVO.closed,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens });
+			{
+				let resVO={ code: 200, message: textGot, closed: streamVO.closed,inputTokens:streamVO.inputTokens,outputTokens:streamVO.outputTokens,actualPlatform:streamVO.actualPlatform };
+				if(streamVO.cost!==undefined){
+					resVO.cost=streamVO.cost;
+				}
+				res.json(resVO);
+			}
 		};
 
 		//-------------------------------------------------------------------
@@ -318,10 +372,48 @@ export default async function(app,router,apiMap) {
 			}
 
 			platform = reqVO.platform || "OpenAI";//Only OpenAI supported by now.
+			let callByOpenRouter=async function(sourcePlatform){
+				let usage,usageCost,content;
+				if(!openRouter){
+					return false;
+				}
+				callVO = callAIObj.buildCallVO(reqVO,"OpenRouter");
+				callVO.model = toOpenRouterModel(sourcePlatform,reqVO.model);
+				callVO.usage={include:true};
+				resVO = await checkAITokenCall(userInfo, "OpenRouter", callVO.model);
+				if (resVO.code !== 200) {
+					res.json(resVO);
+					return true;
+				}
+				try{
+					rawResVO = await openRouter.chat.completions.create(callVO, {});
+				}catch(error){
+					if (error instanceof OpenAI.APIError) {
+						res.json({code: error.status,info:`Error ${error.code}(error.type): ${error.message}`});
+					} else {
+						res.json({code: 500,info:`openRouter.chat.completions.create error: ${""+error}`});
+					}
+					return true;
+				}
+				content=rawResVO.choices[0].message;
+				usage=rawResVO.usage;
+				usageCost=usage&&usage.cost;
+				resVO = { code: 200,message:content.content||content,cost:usageCost,routedBy:"OpenRouter",actualPlatform:"OpenRouter"};
+				res.json(resVO);
+				if(usage && usage.prompt_tokens>=0 && usage.completion_tokens>=0){
+					chargePointsByUsage(userInfo,usage.prompt_tokens,usage.completion_tokens,"OpenRouter",callVO.model,usageCost);
+				}else {
+					chargePointsByChat(userInfo, callVO.messages, content, "OpenRouter", callVO.model);
+				}
+				return true;
+			};
 			//Make AI-Call:
 			switch (platform) {
 				case "Claude":{
 					if(!anthropic){
+						if(await callByOpenRouter("Claude")){
+							return;
+						}
 						await proxyCall(req,res,next);
 						return;
 					}
@@ -374,7 +466,7 @@ export default async function(app,router,apiMap) {
 							return;
 						}
 						content=rawResVO.content[0];
-						resVO = { code: 200,message:content.text||content};
+						resVO = { code: 200,message:content.text||content,actualPlatform:"Claude"};
 						res.json(resVO);
 
 						//Charge user token:
@@ -384,15 +476,25 @@ export default async function(app,router,apiMap) {
 					}
 					return;
 				}
-				case "OpenAI": {
-					if(!openAI){
+				case "OpenAI":
+				case "OpenRouter": {
+					let aiClient,apiName;
+					let targetPlatform=platform;
+					if(platform==="OpenAI" && !openAI && openRouter){
+						if(await callByOpenRouter("OpenAI")){
+							return;
+						}
+					}
+					aiClient=targetPlatform==="OpenRouter"?openRouter:openAI;
+					apiName=targetPlatform==="OpenRouter"?"openRouter":"openAI";
+					if(!aiClient){
 						await proxyCall(req,res,next);
 						return;
 					}
-					callVO = callAIObj.buildCallVO(reqVO);
+					callVO = callAIObj.buildCallVO(reqVO,targetPlatform);
 					//Check gas
 					{
-						resVO = await checkAITokenCall(userInfo, platform, callVO.model);
+						resVO = await checkAITokenCall(userInfo, targetPlatform, callVO.model);
 						if (resVO.code !== 200) {
 							res.json(resVO);
 							return;
@@ -401,8 +503,12 @@ export default async function(app,router,apiMap) {
 
 					try {
 						let content="";
+						let usage,usageCost;
+						if(targetPlatform==="OpenRouter"){
+							callVO.usage={include:true};
+						}
 						try {
-							rawResVO = await openAI.chat.completions.create(callVO, {});
+							rawResVO = await aiClient.chat.completions.create(callVO, {});
 						}catch(error){
 							if (error instanceof OpenAI.APIError) {
 								console.error(error.status);  // e.g. 401
@@ -413,16 +519,26 @@ export default async function(app,router,apiMap) {
 							} else {
 								// Non-API error
 								console.log(error);
-								res.json({code: 500,info:`openAI.chat.completions.create error: ${""+error}`});
+								res.json({code: 500,info:`${apiName}.chat.completions.create error: ${""+error}`});
 							}
 							return;
 						}
 						content=rawResVO.choices[0].message;
-						resVO = { code: 200,message:content.content||content};
+						usage=rawResVO.usage;
+						usageCost=usage&&usage.cost;
+							resVO = { code: 200,message:content.content||content};
+							resVO.actualPlatform=targetPlatform;
+							if(targetPlatform==="OpenRouter" && usageCost!==undefined){
+								resVO.cost=usageCost;
+							}
 						res.json(resVO);
 
 						//Charge user token:
-						chargePointsByChat(userInfo, callVO.messages, content, platform, callVO.model);
+						if(usage && usage.prompt_tokens>=0 && usage.completion_tokens>=0){
+							chargePointsByUsage(userInfo,usage.prompt_tokens,usage.completion_tokens,targetPlatform,callVO.model,usageCost);
+						}else {
+							chargePointsByChat(userInfo, callVO.messages, content, targetPlatform, callVO.model);
+						}
 					} catch (err) {
 						console.log(err);
 					}
@@ -431,6 +547,9 @@ export default async function(app,router,apiMap) {
 				case "Google":{
 					let chat,modelName,messages,history,prompt,result,usage;
 					if(!googleAI){
+						if(await callByOpenRouter("Google")){
+							return;
+						}
 						await proxyCall(req,res,next);
 						return;
 					}
@@ -465,70 +584,13 @@ export default async function(app,router,apiMap) {
 					});
 
 					result=await chat.sendMessage({message:prompt});
-					resVO = { code: 200,message:result.text};
+					resVO = { code: 200,message:result.text,actualPlatform:"Google"};
 					res.json(resVO);
 					let tokenUsage=result.usageMetadata;
 					if(tokenUsage){
 						let inputTokens=tokenUsage.promptTokenCount;
 						let outputTokens=(tokenUsage.candidatesTokenCount||0)+(tokenUsage.thoughtsTokenCount||0);
 						chargePointsByUsage(userInfo,inputTokens,outputTokens,platform,modelName);
-					}
-					return;
-				}
-				case "OpenRouter": {
-					const API_URL = process.env.OPENROUTER_API_URL || "http://ec2-13-250-37-180.ap-southeast-1.compute.amazonaws.com:8050/v1/chat/completions";
-					const API_KEY = process.env.OPENROUTER_API_KEY || "";
-
-					try {
-						const callVO = {
-							model: reqVO.model || "google/gemini-3-flash-preview",
-							messages: reqVO.messages,
-							temperature: reqVO.temperature || 1,
-							// 添加身份验证信息
-							userId: reqVO.userId,
-							token: reqVO.token,
-						};
-
-						// 构建请求头
-						const headers = {
-							"Content-Type": "application/json",
-							'Connection': 'close'
-						};
-						if (API_KEY) {
-							headers["Authorization"] = `Bearer ${API_KEY}`;
-						}
-						console.log(JSON.stringify(callVO));
-						// 发送请求
-						const response = await fetchWithRetry(API_URL, {
-							method: "POST",
-							headers: headers,
-							body: JSON.stringify(callVO),
-						});
-						console.log(JSON.stringify(response));
-
-						if (!response.ok) {
-							const errorText = await response.text();
-							res.json({
-								code: response.status,
-								info: `OpenRouter API error: ${errorText}`
-							});
-							return;
-						}
-
-						const rawResVO = await response.json();
-						const message = rawResVO.choices?.[0]?.message || {};
-						let content = message?.content || "";
-						if (message.images) {
-							content = {content:content, images:message.images};
-						}
-						resVO = { code: 200, message: content };
-						res.json(resVO);
-					} catch (err) {
-						console.error("OpenRouter API error:", err.message, err.cause);
-						res.json({
-							code: 500,
-							info: `OpenRouter API call failed: ${err.message}`
-						});
 					}
 					return;
 				}
@@ -567,131 +629,203 @@ export default async function(app,router,apiMap) {
 			}
 
 			platform = reqVO.platform || "OpenAI";
-
-			//Make AI-Call:
-			switch (platform) {
-				case "Ollama":{
-					const OLLAMA_URL = process.env.OLLAMA_API_URL || "http://localhost:11434/v1/chat/completions";
-					callVO = callAIObj.buildCallVO(reqVO,platform);
-					callVO.stream = true;
-					callVO.messages = reqVO.messages;
-
-					let streamId, streamVO;
-					streamId = getStreamId();
+			let streamByOpenRouter=async function(sourcePlatform){
+				let streamId, streamVO, chatStream, func;
+				let inputTokens=0,outputTokens=0,cost;
+				if(!openRouter){
+					return false;
+				}
+				callVO = callAIObj.buildCallVO(reqVO,"OpenRouter");
+				callVO.model = toOpenRouterModel(sourcePlatform,reqVO.model);
+				resVO = await checkAITokenCall(userInfo, "OpenRouter", callVO.model);
+				if (resVO.code !== 200) {
+					res.json(resVO);
+					return true;
+				}
+				callVO.stream = true;
+				callVO.stream_options={include_usage:true};
+				callVO.usage={include:true};
+				try {
+					chatStream = await openRouter.chat.completions.create(callVO, { responseType: 'stream' });
+				}catch(error){
+					if (error instanceof OpenAI.APIError) {
+						res.json({code: error.status,info:`Error ${error.code}(error.type): ${error.message}`});
+					} else {
+						res.json({code: 500,info:`openRouter.chat.completions.create error: ${""+error}`});
+					}
+					return true;
+				}
+				streamId = getStreamId();
 					streamVO = {
 						streamId,
-						role: "",
+						role:"",
 						content: "",
 						textRead: "",
 						closed: false,
 						waitFunc: null,
 						errorFunc: null,
-						timer: null
-					};
-					streamMap.set(streamId, streamVO);
-					resVO = { code: 200, streamId: streamId };
-					res.json(resVO);
-
-					(async () => {
-						let func;
-						try {
-							const response = await fetch(OLLAMA_URL, {
-								method: 'POST',
-								headers: {
-									'Content-Type': 'application/json',
-									'Connection': 'close'
-								},
-								body: JSON.stringify(callVO),
-							});
-
-							if (!response.ok) {
-								const errorText = await response.text();
-								streamVO.error = `${response.status}: ${errorText}`;
-								streamVO.closed = true;
-								func = streamVO.waitFunc;
-								if (func) { streamVO.waitFunc = null; func(); }
-								return;
-							}
-
-							streamVO.timer = setTimeout(() => { shutdownStream(streamId) }, 60000);
-
-							const reader = response.body.getReader();
-							const decoder = new TextDecoder();
-							let buffer = "";
-
-							while (true) {
-								const { done, value } = await reader.read();
-								if (done) break;
-
-								buffer += decoder.decode(value, { stream: true });
-
-								const lines = buffer.split("\n");
-								buffer = lines.pop();
-
-								for (const line of lines) {
-									const trimmed = line.trim();
-									if (!trimmed || trimmed.startsWith(":")) continue;
-									if (trimmed === "data: [DONE]") continue;
-									if (!trimmed.startsWith("data: ")) continue;
-
-									try {
-										const json = JSON.parse(trimmed.slice(6));
-										const choice0 = json.choices?.[0];
-										if (choice0) {
-											const delta = choice0.delta;
-											if (delta) {
-												if (delta.role) {
-													streamVO.role = (streamVO.role || "") + delta.role;
-												}
-												if (delta.content) {
-													streamVO.content += delta.content;
-												}
-												// toolCalls support:
-												if (delta.tool_calls) {
-													let srcList, tgtList, i, n, idx, srcStub, tgtStub, srcFunc, tgtFunc;
-													srcList = delta.tool_calls;
-													tgtList = streamVO.toolCalls;
-													if (!tgtList) {
-														tgtList = streamVO.toolCalls = [];
-													}
-													n = srcList.length;
-													for (i = 0; i < n; i++) {
-														srcStub = srcList[i];
-														idx = srcStub.index >= 0 ? srcStub.index : i;
-														tgtStub = tgtList[idx];
-														if (!tgtStub) {
-															tgtStub = tgtList[idx] = {
-																index: idx, id: "", type: "function",
-																function: { name: "", arguments: "" }
-															};
-														}
-														if ("id" in srcStub) {
-															tgtStub.id += srcStub.id;
-														}
-														srcFunc = srcStub.function;
-														tgtFunc = tgtStub.function;
-														if (srcFunc) {
-															tgtFunc.name += srcFunc.name || "";
-															tgtFunc["arguments"] += srcFunc["arguments"] || "";
-														}
-													}
-												}
-											}
-										}
-										if (json.usage) {
-											streamVO.inputTokens = json.usage.prompt_tokens || 0;
-											streamVO.outputTokens = json.usage.completion_tokens || 0;
-										}
-									} catch (e) {
-										// ignore parse errors
+						timer: null,
+						routedBy:"OpenRouter",
+						actualPlatform:"OpenRouter"
+					}
+				streamVO.timer = setTimeout(() => {shutdownStream(streamId)}, 20000);
+				resVO = { code: 200, streamId: streamId, actualPlatform:"OpenRouter" };
+				streamMap.set(streamId, streamVO);
+				res.json(resVO);
+				{
+					let choice0,delta,content,funcCall,toolCalls,refusal;
+					for await (const part of chatStream) {
+						choice0=part.choices[0];
+						if (choice0) {
+							delta = choice0.delta;
+							if (delta) {
+								if (delta.role) {
+									streamVO.role = streamVO.role ? streamVO.role + delta.role : delta.role;
+								}
+								content = delta.content;
+								if (content) {
+									streamVO.content += content;
+								}
+								funcCall = delta.function_call;
+								if (funcCall) {
+									let stub, name, args;
+									stub = streamVO.functionCall;
+									if (!stub) {
+										stub = streamVO.functionCall = { name: "", arguments: "" };
+									}
+									name = funcCall.name;
+									args = funcCall['arguments'];
+									if (name) {
+										stub.name += funcCall.name;
+									}
+									if (args) {
+										stub["arguments"] += args;
 									}
 								}
-
-								if (streamVO.timer) {
-									clearTimeout(streamVO.timer);
-									streamVO.timer = setTimeout(() => { shutdownStream(streamId) }, 60000);
+								toolCalls = delta.tool_calls;
+								if (toolCalls) {
+									let srcList, tgtList, i, n, idx, srcStub, tgtStub, srcFunc, tgtFunc;
+									srcList = toolCalls;
+									tgtList = streamVO.toolCalls;
+									if (!tgtList) {
+										tgtList = streamVO.toolCalls = [];
+									}
+									n = srcList.length;
+									for (i = 0; i < n; i++) {
+										srcStub = srcList[i];
+										idx = srcStub.index >= 0 ? srcStub.index : i;
+										tgtStub = tgtList[idx];
+										if (!tgtStub) {
+											tgtStub = tgtList[idx] = {
+												index: idx, id: "", type: "function",
+												function: {
+													name: "", arguments: ""
+												}
+											};
+										}
+										if ("index" in srcStub) {
+											tgtStub.index = srcStub.index;
+										}
+										if ("id" in srcStub) {
+											tgtStub.id += srcStub.id;
+										}
+										if ("type" in srcStub) {
+											tgtStub.type = "function";
+										}
+										srcFunc = srcStub.function;
+										tgtFunc = tgtStub.function;
+										if (srcFunc) {
+											tgtFunc.name += srcFunc.name || "";
+											tgtFunc["arguments"] += srcFunc["arguments"] || "";
+										}
+									}
 								}
+								refusal=delta.refusal;
+								if(refusal){
+									streamVO.refusal=(streamVO.refusal||"")+refusal;
+								}
+							}
+						}else if(part.usage){
+							inputTokens=part.usage.prompt_tokens||0;
+							outputTokens=part.usage.completion_tokens||0;
+							if(part.usage.cost!==undefined){
+								cost=part.usage.cost;
+							}
+						}
+						if(streamVO.timer){
+							clearTimeout(streamVO.timer);
+							streamVO.timer = setTimeout(() => {shutdownStream(streamId)}, 20000);
+						}
+						if (streamVO.content !== streamVO.textRead) {
+							func = streamVO.waitFunc;
+							if (func) {
+								streamVO.waitFunc = null;
+								func();
+							}
+						}
+					}
+				}
+				streamVO.closed = true;
+				streamVO.inputTokens=inputTokens||0;
+				streamVO.outputTokens=outputTokens||0;
+				if(cost!==undefined){
+					streamVO.cost=cost;
+				}
+				func = streamVO.waitFunc;
+				if (func) {
+					streamVO.waitFunc = null;
+					func();
+				}
+				chargePointsByUsage(userInfo,inputTokens,outputTokens,"OpenRouter",callVO.model,cost);
+				return true;
+			};
 
+			//Make AI-Call:
+			switch (platform) {
+				case "Ollama":{
+					let streamId,streamVO,chatStream,func,messages;
+					callVO = callAIObj.buildCallVO(reqVO,platform);
+					callVO.stream=true;
+					try {
+						streamId = getStreamId();
+							streamVO = {
+								streamId,
+								role:"",
+								content: "",
+								textRead: "",
+								closed: false,
+								waitFunc: null,
+								errorFunc: null,
+								timer: null,
+								actualPlatform:"Ollama"
+							}
+						messages=reqVO.messages;
+						callVO.messages=messages;
+
+						try {
+							chatStream = await ollama.chat(callVO, { responseType: 'stream' });
+						}catch(error){
+							console.log(error);
+							res.json({code: 500,info:`Ollama chat error: ${""+error}`});
+							return;
+						}
+						streamVO.timer = setTimeout(() => {shutdownStream(streamId)}, 20000);
+
+						resVO = { code: 200, streamId: streamId, actualPlatform:"Ollama" };
+						streamMap.set(streamId, streamVO);
+						res.json(resVO);
+
+						{
+							let content;
+							for await (const part of chatStream) {
+								content = part.message.content;
+								if (content) {
+									streamVO.content += content;
+								}
+								if(streamVO.timer){
+									clearTimeout(streamVO.timer);
+									streamVO.timer = setTimeout(() => {shutdownStream(streamId)}, 20000);
+								}
 								if (streamVO.content !== streamVO.textRead) {
 									func = streamVO.waitFunc;
 									if (func) {
@@ -700,27 +834,27 @@ export default async function(app,router,apiMap) {
 									}
 								}
 							}
-
-							streamVO.closed = true;
-							func = streamVO.waitFunc;
-							if (func) {
-								streamVO.waitFunc = null;
-								func();
-							}
-						} catch (err) {
-							console.error("Ollama stream error:", err);
-							if (!streamVO.closed) {
-								streamVO.closed = true;
-								func = streamVO.waitFunc;
-								if (func) { streamVO.waitFunc = null; func(); }
-							}
 						}
-					})();
+						streamVO.closed = true;
+						func = streamVO.waitFunc;
+						if (func) {
+							streamVO.waitFunc = null;
+							func();
+						}
+					}catch(err){
+						console.error(err);
+						if(!res.headersSent) {
+							res.json({ code: 500, err: "" + err });
+						}
+					}
 					break;
 				}
 				case "Claude":{
 					let streamId,streamVO,stream,func,messages;
 					if(!anthropic){
+						if(await streamByOpenRouter("Claude")){
+							return;
+						}
 						await proxyCall(req,res,next);
 						return;
 					}
@@ -736,16 +870,17 @@ export default async function(app,router,apiMap) {
 					try {
 						let line;
 						streamId = getStreamId();
-						streamVO = {
-							streamId,
-							role:"",
-							content: "",
-							textRead: "",
-							closed: false,
-							waitFunc: null,
-							errorFunc: null,
-							timer: null
-						}
+							streamVO = {
+								streamId,
+								role:"",
+								content: "",
+								textRead: "",
+								closed: false,
+								waitFunc: null,
+								errorFunc: null,
+								timer: null,
+								actualPlatform:"Claude"
+							}
 						messages=reqVO.messages;
 						if(messages[0].role==="system"){
 							callVO.system=messages[0].content;
@@ -793,7 +928,7 @@ export default async function(app,router,apiMap) {
 							});
 						streamVO.timer = setTimeout(() => {shutdownStream(streamId)}, 20000);
 
-						resVO = { code: 200, streamId: streamId };
+						resVO = { code: 200, streamId: streamId, actualPlatform:"Claude" };
 						streamMap.set(streamId, streamVO);
 						res.json(resVO);
 
@@ -810,19 +945,29 @@ export default async function(app,router,apiMap) {
 					}catch(err){
 						console.error(err);
 						if(!res.headersSent) {
-							res.json({ code: 500, info: `Claude stream error: ${err.message || err}` });
+							res.json({ code: 500, err: "" + err });
 						}
 					}
 					break;
 				}
-				case "OpenAI": {
-					if(!openAI){
+				case "OpenAI":
+				case "OpenRouter": {
+					let aiClient,apiName;
+					let targetPlatform=platform;
+					if(platform==="OpenAI" && !openAI && openRouter){
+						if(await streamByOpenRouter("OpenAI")){
+							return;
+						}
+					}
+					aiClient=targetPlatform==="OpenRouter"?openRouter:openAI;
+					apiName=targetPlatform==="OpenRouter"?"openRouter":"openAI";
+					if(!aiClient){
 						await proxyCall(req,res,next);
 						return;
 					}
-					callVO = callAIObj.buildCallVO(reqVO,platform);
+					callVO = callAIObj.buildCallVO(reqVO,targetPlatform);
 					{
-						resVO = await checkAITokenCall(userInfo, platform, callVO.model);
+						resVO = await checkAITokenCall(userInfo, targetPlatform, callVO.model);
 						if (resVO.code !== 200) {
 							res.json(resVO);
 							return;
@@ -834,10 +979,13 @@ export default async function(app,router,apiMap) {
 						let dataLeft="";
 						callVO.stream = true;
 						callVO.stream_options={include_usage:true};
+						if(targetPlatform==="OpenRouter"){
+							callVO.usage={include:true};
+						}
 						//console.log("Call Code VO:");
 						//console.log(callVO);
 						try {
-							chatStream = await openAI.chat.completions.create(callVO, { responseType: 'stream' });
+							chatStream = await aiClient.chat.completions.create(callVO, { responseType: 'stream' });
 						}catch(error){
 							if (error instanceof OpenAI.APIError) {
 								console.error(error.status);  // e.g. 401
@@ -848,31 +996,32 @@ export default async function(app,router,apiMap) {
 							} else {
 								// Non-API error
 								console.log(error);
-								res.json({code: 500,info:`openAI.chat.completions.create error: ${""+error}`});
+								res.json({code: 500,info:`${apiName}.chat.completions.create error: ${""+error}`});
 							}
 							return;
 						}
 
 						streamId = getStreamId();
-						streamVO = {
-							streamId,
-							role:"",
-							content: "",
-							textRead: "",
-							closed: false,
-							waitFunc: null,
-							errorFunc: null,
-							timer: null
-						}
+							streamVO = {
+								streamId,
+								role:"",
+								content: "",
+								textRead: "",
+								closed: false,
+								waitFunc: null,
+								errorFunc: null,
+								timer: null,
+								actualPlatform:targetPlatform
+							}
 						streamVO.timer = setTimeout(() => {shutdownStream(streamId)}, 20000);
 
-						resVO = { code: 200, streamId: streamId };
+						resVO = { code: 200, streamId: streamId, actualPlatform:targetPlatform };
 						streamMap.set(streamId, streamVO);
 						res.json(resVO);
 
 						{
 							let choice0,delta,content,funcCall,toolCalls,func,refusal;
-							let inputTokens=0,outputTokens=0;
+							let inputTokens=0,outputTokens=0,cost;
 							for await (const part of chatStream) {
 								choice0=part.choices[0];
 								if (choice0) {
@@ -950,6 +1099,9 @@ export default async function(app,router,apiMap) {
 									if(part.usage){
 										inputTokens=part.usage.prompt_tokens||0;
 										outputTokens=part.usage.completion_tokens||0;
+										if(part.usage.cost!==undefined){
+											cost=part.usage.cost;
+										}
 									}
 								}
 
@@ -968,6 +1120,9 @@ export default async function(app,router,apiMap) {
 							streamVO.closed = true;
 							streamVO.inputTokens=inputTokens||0;
 							streamVO.outputTokens=outputTokens||0;
+							if(cost!==undefined){
+								streamVO.cost=cost;
+							}
 							func = streamVO.waitFunc;
 							if (func) {
 								streamVO.waitFunc = null;
@@ -975,11 +1130,13 @@ export default async function(app,router,apiMap) {
 							}
 							//console.log("Fin: "+streamVO.content);
 							//charge points by chat:
-							if(inputTokens>0){
-								chargePointsByUsage(userInfo,inputTokens,outputTokens,platform,callVO.model);
-							}else {
-								chargePointsByChat(userInfo, callVO.messages, streamVO.content, platform, callVO.model);
-							}
+								if(targetPlatform==="OpenRouter" && cost!==undefined){
+									chargePointsByUsage(userInfo,inputTokens,outputTokens,targetPlatform,callVO.model,cost);
+								}else if(inputTokens>0){
+									chargePointsByUsage(userInfo,inputTokens,outputTokens,targetPlatform,callVO.model,cost);
+								}else {
+									chargePointsByChat(userInfo, callVO.messages, streamVO.content, targetPlatform, callVO.model);
+								}
 						}
 					} catch (err) {
 						console.error(err);
@@ -994,6 +1151,9 @@ export default async function(app,router,apiMap) {
 					let streamId,streamVO,stream,func;
 					let tokenUsage,inputTokens,outputTokens;
 					if(!googleAI){
+						if(await streamByOpenRouter("Google")){
+							return;
+						}
 						await proxyCall(req,res,next);
 						return;
 					}
@@ -1032,9 +1192,10 @@ export default async function(app,router,apiMap) {
 							closed: false,
 							waitFunc: null,
 							errorFunc: null,
-							timer: null
+							timer: null,
+							actualPlatform:"Google"
 						}
-						resVO = { code: 200, streamId: streamId };
+						resVO = { code: 200, streamId: streamId, actualPlatform:"Google" };
 						streamMap.set(streamId, streamVO);
 						streamVO.timer = setTimeout(() => {shutdownStream(streamId)}, 20000);
 						res.json(resVO);
@@ -1074,151 +1235,19 @@ export default async function(app,router,apiMap) {
 					}catch(err){
 						console.error(err);
 						if(!res.headersSent) {
-							res.json({ code: 500, info: `Stream error: ${err.message || err}` });
+							res.json({ code: 500, err: "" + err });
 						}
 					}
-					break;
-				}
-				case "OpenRouter": {
-					const callVO = {
-						model: reqVO.model || "google/gemini-3-flash-preview",
-						messages: reqVO.messages,
-						temperature: reqVO.temperature || 1,
-						// 添加身份验证信息
-						userId: reqVO.userId,
-						token: reqVO.token,
-					};
-					callVO.stream = true;
-
-					let streamId, streamVO;
-					streamId = getStreamId();
-					streamVO = {
-						streamId,
-						role: "",
-						content: "",
-						textRead: "",
-						closed: false,
-						waitFunc: null,
-						errorFunc: null,
-						timer: null
-					};
-					streamMap.set(streamId, streamVO);
-					resVO = { code: 200, streamId: streamId };
-					res.json(resVO);
-
-					// 流式读取放在 fire-and-forget 异步函数里，不阻塞 handler 返回
-					// 这样 handleCallHub 能立刻把 streamId 发回给 agent，agent 才能开始轮询
-					(async () => {
-						let func;
-						try {
-							const API_URL_STREAM = process.env.OPENROUTER_API_URL || 'http://ec2-13-250-37-180.ap-southeast-1.compute.amazonaws.com:8050/v1/chat/completions';
-							const response = await fetchWithRetry(API_URL_STREAM, {
-								method: 'POST',
-								headers: {
-									'Content-Type': 'application/json',
-									'Authorization': 'Bearer EMPTY',
-									'Connection': 'close'
-								},
-								body: JSON.stringify(callVO),
-							});
-
-							if (!response.ok) {
-								const errorText = await response.text();
-								streamVO.error = `${response.status}: ${errorText}`;
-								streamVO.closed = true;
-								func = streamVO.waitFunc;
-								if (func) { streamVO.waitFunc = null; func(); }
-								return;
-							}
-
-							streamVO.timer = setTimeout(() => { shutdownStream(streamId) }, 60000);
-
-							const reader = response.body.getReader();
-							const decoder = new TextDecoder();
-							let buffer = "";
-
-							while (true) {
-								const { done, value } = await reader.read();
-								if (done) break;
-
-								buffer += decoder.decode(value, { stream: true });
-
-								const lines = buffer.split("\n");
-								buffer = lines.pop();
-
-								for (const line of lines) {
-									const trimmed = line.trim();
-									if (!trimmed || trimmed.startsWith(":")) continue;
-									if (trimmed === "data: [DONE]") continue;
-									if (!trimmed.startsWith("data: ")) continue;
-
-									try {
-										const json = JSON.parse(trimmed.slice(6));
-										const choice0 = json.choices?.[0];
-										if (choice0) {
-											const delta = choice0.delta;
-											if (delta) {
-												if (delta.role) {
-													streamVO.role = (streamVO.role || "") + delta.role;
-												}
-												if (delta.content) {
-													streamVO.content += delta.content;
-												}
-											}
-										}
-										if (json.usage) {
-											streamVO.inputTokens = json.usage.prompt_tokens || 0;
-											streamVO.outputTokens = json.usage.completion_tokens || 0;
-										}
-									} catch (e) {
-										// 忽略解析错误
-									}
-								}
-
-								if (streamVO.timer) {
-									clearTimeout(streamVO.timer);
-									streamVO.timer = setTimeout(() => { shutdownStream(streamId) }, 60000);
-								}
-
-								if (streamVO.content !== streamVO.textRead) {
-									func = streamVO.waitFunc;
-									if (func) {
-										streamVO.waitFunc = null;
-										func();
-									}
-								}
-							}
-
-							streamVO.closed = true;
-							func = streamVO.waitFunc;
-							if (func) {
-								streamVO.waitFunc = null;
-								func();
-							}
-							if (streamVO.inputTokens > 0) {
-								chargePointsByUsage(userInfo, streamVO.inputTokens, streamVO.outputTokens, platform, callVO.model);
-							}
-						} catch (err) {
-							console.error("OpenRouter test stream error:", err);
-							if (!streamVO.closed) {
-								streamVO.closed = true;
-								streamVO.error = `${err}`;
-								func = streamVO.waitFunc;
-								if (func) { streamVO.waitFunc = null; func(); }
-							}
-						}
-					})();
-					return;
 				}
 			}
 		};
-
+		
 		//-------------------------------------------------------------------
 		let plainCall = {
-			buildCallVO (reqVO,platform) {
-				switch(platform){
-					default:
-					case "OpenAI":{
+				buildCallVO (reqVO,platform) {
+					switch(platform){
+						default:
+						case "OpenAI":{
 						let callVO = {
 							model: reqVO.model || "gpt-3.5-turbo",
 							//temperature: reqVO.temperature || 0.7,
@@ -1259,10 +1288,48 @@ export default async function(app,router,apiMap) {
 								callVO.functions = reqVO.functions;
 								callVO.function_call = reqVO.function_call || "auto";
 							}
+							}
+							return callVO;
 						}
-						return callVO;
-					}
-					case "Claude":{
+						case "OpenRouter":{
+							let callVO = {
+								model: reqVO.model || "openai/gpt-4o-mini",
+								messages: reqVO.messages,
+							};
+							if(reqVO.response_format && reqVO.response_format!=="text"){
+								if(typeof(reqVO.response_format)==="object"){
+									callVO.response_format = reqVO.response_format;
+								}else{
+									callVO.response_format = { type: reqVO.response_format };
+								}
+							}
+							if(reqVO.seed!==undefined){
+								let seed=parseInt(reqVO.seed);
+								if(seed>=0) {
+									callVO.seed = seed;
+								}
+							}
+							if(reqVO.functions){
+								if(reqVO.parallelFunction){
+									let funcStub
+									let list=reqVO.functions;
+									let tools=[];
+									for(funcStub of list){
+										tools.push({
+											type:"function",
+											function:funcStub
+										});
+									}
+									callVO.tools = tools;
+									callVO.tool_choice = reqVO.function_call || "auto";
+								}else {
+									callVO.functions = reqVO.functions;
+									callVO.function_call = reqVO.function_call || "auto";
+								}
+							}
+							return callVO;
+						}
+						case "Claude":{
 						let callVO;
 						callVO={
 							model: reqVO.model || 'claude-3-sonnet-20240229',
@@ -1300,22 +1367,6 @@ export default async function(app,router,apiMap) {
 						};
 						if(reqVO.response_format && reqVO.response_format!=="text"){
 							callVO.format="json";
-						}
-						return callVO;
-					}
-					case "OpenRouter":{
-						let callVO = {
-							model: reqVO.model || "google/gemini-3-flash-preview",
-							messages: reqVO.messages,
-						};
-						if (reqVO.temperature !== undefined) {
-							callVO.temperature = reqVO.temperature;
-						}
-						if (reqVO.max_tokens) {
-							callVO.max_tokens = reqVO.max_tokens;
-						}
-						if (reqVO.top_p) {
-							callVO.top_p = reqVO.top_p;
 						}
 						return callVO;
 					}
@@ -1357,8 +1408,8 @@ export default async function(app,router,apiMap) {
 
 		//-------------------------------------------------------------------
 		apiMap['AIGetPlatforms'] = async function (req, res, next) {
-			res.json({code:200,platforms:["OpenAI","Claude","Google","Ollama","OpenRouter"]});
-
+			res.json({code:200,platforms:["OpenAI","OpenRouter","Claude","Google","Ollama"]});
+		
 		};
 
 		//-------------------------------------------------------------------

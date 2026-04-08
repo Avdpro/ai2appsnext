@@ -8,16 +8,69 @@ function groupFilterByKey(filterList) {
 	return m;
 }
 
+function normalizeDomainToken(raw) {
+	let s = String(raw ?? "").trim().toLowerCase();
+	if (!s) return "";
+	// Accept either plain host or URL-like text.
+	try {
+		if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+			const u = new URL(s);
+			s = String(u.hostname || "").trim().toLowerCase();
+		}
+	} catch (_) {
+	}
+	if (!s) return "";
+	// Strip leading dot, trailing dot and port part.
+	s = s.replace(/^\.+/, "").replace(/\.+$/, "");
+	s = s.replace(/:\d+$/, "");
+	return s;
+}
+
+function matchDomainLevel(entryValue, wantedValue) {
+	const e = normalizeDomainToken(entryValue);
+	const w = normalizeDomainToken(wantedValue);
+	if (!e || !w) return 0;
+	if (e === "*") return 1; // wildcard
+	if (e === w) return 3; // exact domain
+	// parent-domain match: request is subdomain of entry domain
+	if (w.endsWith(`.${e}`)) return 2;
+	return 0;
+}
+
+function domainLevelLabel(n) {
+	const v = Number(n || 0);
+	if (v >= 3) return "exact";
+	if (v >= 2) return "parent";
+	if (v >= 1) return "wildcard";
+	return "none";
+}
+
 function calcFilterMatch(entryFilters, reqFilters) {
-	if (!reqFilters || !reqFilters.length) return { ok: true, score: 0 };
+	if (!reqFilters || !reqFilters.length) return { ok: true, score: 0, domainScore: 0 };
 	const eMap = groupFilterByKey(entryFilters || []);
 	const rMap = groupFilterByKey(reqFilters || []);
 	let score = 0;
+	let domainScore = 0;
 	for (const [key, vals] of rMap.entries()) {
 		const entryVals = eMap.get(key) || [];
-		if (!entryVals.length) return { ok: false, score: 0 };
+		if (!entryVals.length) return { ok: false, score: 0, domainScore: 0 };
 		let matched = false;
 		let local = 0;
+		if (String(key || "").toLowerCase() === "domain") {
+			for (const want of vals) {
+				for (const ent of entryVals) {
+					const lv = matchDomainLevel(ent, want);
+					if (lv > 0) {
+						matched = true;
+						local = Math.max(local, lv); // exact(3) > parent(2) > wildcard(1)
+					}
+				}
+			}
+			if (!matched) return { ok: false, score: 0, domainScore: 0 };
+			domainScore += local;
+			score += local;
+			continue;
+		}
 		for (const want of vals) {
 			if (entryVals.includes(want)) {
 				matched = true;
@@ -28,10 +81,10 @@ function calcFilterMatch(entryFilters, reqFilters) {
 				local = Math.max(local, 1);
 			}
 		}
-		if (!matched) return { ok: false, score: 0 };
+		if (!matched) return { ok: false, score: 0, domainScore: 0 };
 		score += local;
 	}
-	return { ok: true, score };
+	return { ok: true, score, domainScore };
 }
 
 function compareRank(entryA, entryB, rankStr = "") {
@@ -73,12 +126,21 @@ function findBestFlowEntry(entries, findSpec) {
 		if (!fm.ok) continue;
 		let preferHits = 0;
 		for (const k of prefer) if (e.capSet?.has(k)) preferHits++;
-		candidates.push({ entry: e, preferHits, filterScore: fm.score });
+		candidates.push({
+			entry: e,
+			preferHits,
+			filterScore: fm.score,
+			domainScore: Number(fm.domainScore || 0),
+			domainLevel: domainLevelLabel(fm.domainScore),
+		});
 	}
 	if (!candidates.length) {
 		return { ok: false, reason: "no flow matched invoke.find" };
 	}
 	candidates.sort((a, b) => {
+		// Domain match specificity has higher priority than preferHits.
+		// exact(3) > parent(2) > wildcard(1)
+		if (a.domainScore !== b.domainScore) return b.domainScore - a.domainScore;
 		if (a.preferHits !== b.preferHits) return b.preferHits - a.preferHits;
 		if (a.filterScore !== b.filterScore) return b.filterScore - a.filterScore;
 		const rc = compareRank(a.entry, b.entry, rank);

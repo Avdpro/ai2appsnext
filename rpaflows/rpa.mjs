@@ -89,7 +89,7 @@ const rpaKind = {
         // search
         'search': {
             kind: 'cap',
-            desc: '支持搜索（返回搜索结果数组）',
+            desc: '支持搜索。默认返回 SERP 入口结果（url/title/summary 等列表）；若需要进一步打开结果页并生成总结，需显式传 search.summary=true。',
         },
         'search.query': {
             kind: 'arg',
@@ -117,6 +117,11 @@ const rpaKind = {
             kind: 'arg',
             type: 'number',
             desc: '尽量至少返回的结果数量（best-effort）。达到该数量或已无更多结果时停止。'
+        },
+        'search.summary': {
+            kind: 'arg',
+            type: 'boolean',
+            desc: '是否在搜索后进一步读取结果页面并做总结。true=执行 read.batch + run_ai 汇总；false/未传=仅返回 SERP 结果。'
         },
         //result:
         'search.result': {
@@ -175,11 +180,11 @@ const rpaKind = {
             argsByAction: {
                 article: { required: [], optional: ['read.fields', 'read.requireFields', 'read.output'] },
                 list: { required: [], optional: ['read.target', 'read.minItems', 'read.filter', 'read.sort', 'read.fields', 'read.requireFields', 'read.output'] },
-                detail: { required: [], optional: ['read.target', 'read.fields', 'read.requireFields', 'read.output'] },
+                detail: { required: [], optional: ['read.target', 'read.fields', 'read.requireFields', 'read.output', 'read.summaryMode', 'read.summaryModel', 'read.summaryQuery', 'read.allowExplore', 'read.exploreMaxSteps'] },
                 comments: { required: [], optional: ['read.target', 'read.minItems', 'read.filter', 'read.sort', 'read.fields', 'read.requireFields', 'read.output'] },
                 reactions: { required: [], optional: ['read.target', 'read.fields', 'read.requireFields', 'read.output'] },
                 profile: { required: [], optional: ['read.target', 'read.fields', 'read.requireFields', 'read.output'] },
-                batch: { required: [], optional: ['read.target', 'read.minItems', 'read.concurrency', 'read.filter', 'read.sort', 'read.fields', 'read.requireFields', 'read.output'] },
+                batch: { required: [], optional: ['read.target', 'read.minItems', 'read.concurrency', 'read.filter', 'read.sort', 'read.fields', 'read.requireFields', 'read.output', 'read.summaryMode', 'read.summaryModel', 'read.summaryQuery', 'read.allowExplore', 'read.exploreMaxSteps'] },
             }
         },
         'read.article': {
@@ -237,6 +242,32 @@ const rpaKind = {
             type: 'enum',
             values: ['raw', 'markdown', 'json', 'text'],
             desc: '输出格式偏好。仅允许：raw|markdown|json|text。raw=原始字段值；markdown=保留 markdown 结构（含图片/链接）；json=结构化输出（字段仍由 read.fields/requireFields 决定）；text=纯文本（去图片 markdown）。未指定时建议默认 markdown。'
+        },
+        'read.summaryMode': {
+            kind: 'arg',
+            type: 'enum',
+            values: ['ai', 'auto', 'rule'],
+            desc: 'summary 生成策略。ai=优先用 AI 生成/改写 summary（默认）；auto=按质量门限决定是否调用 AI；rule=仅用规则提取，不调用 AI。'
+        },
+        'read.summaryModel': {
+            kind: 'arg',
+            type: 'string',
+            desc: 'summary 生成使用的 AI 模型档位/名称。未指定时默认 fast（低成本模型）。'
+        },
+        'read.summaryQuery': {
+            kind: 'arg',
+            type: 'string',
+            desc: '可选。summary 的聚焦问题/目标。传入后，summary 会优先围绕该问题抽取与组织信息（例如价格、结论、对比点）。'
+        },
+        'read.allowExplore': {
+            kind: 'arg',
+            type: 'boolean',
+            desc: '是否允许在 read 过程中触发页面探索（find.until）以补全信息。默认 false。'
+        },
+        'read.exploreMaxSteps': {
+            kind: 'arg',
+            type: 'number',
+            desc: '探索模式下 find.until 的最大推进步数。默认 3，最大 5。'
         },
         'read.detail': {
             kind: 'arg',

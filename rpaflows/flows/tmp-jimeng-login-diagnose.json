@@ -1,0 +1,85 @@
+{
+  "flow": {
+    "id": "tmp_jimeng_login_diagnose",
+    "start": "open_home",
+    "vars": {
+      "pageDiag": {
+        "type": "any",
+        "desc": "页面登录相关可见证据"
+      },
+      "loginOut": {
+        "type": "any",
+        "desc": "login_check_ensure 返回"
+      }
+    },
+    "steps": [
+      {
+        "id": "open_home",
+        "action": {
+          "type": "goto",
+          "url": "https://jimeng.jianying.com/ai-tool/home"
+        },
+        "next": {
+          "done": "diag_page",
+          "failed": "abort_open"
+        }
+      },
+      {
+        "id": "diag_page",
+        "action": {
+          "type": "run_js",
+          "scope": "page",
+          "code": "function(){ function isVisible(el){ if(!el) return false; const st = window.getComputedStyle(el); if(!st) return false; if(st.display==='none' || st.visibility==='hidden' || Number(st.opacity||'1')<=0.02) return false; const r = el.getBoundingClientRect(); return r.width>2 && r.height>2; } function textOf(el){ if(!el) return ''; return String(el.innerText||el.textContent||'').replace(/\\s+/g,' ').trim(); } const include=/(登录|登錄|sign\\s*in|log\\s*in|signin|login|立即登录|去登录)/i; const exclude=/(退出|注销|登出|logout|sign\\s*out|log\\s*out)/i; const hrefRe=/(login|signin|sign-in|passport|auth|account\\/login|\\/user\\/login|openlogin|newlogin)/i; const cta=[]; const hrefHits=[]; const logoutHits=[]; let nodes=[]; try{ nodes=Array.from(document.querySelectorAll('a,button,[role=\"button\"],input[type=\"button\"],input[type=\"submit\"]')); }catch(_){ nodes=[]; } for(const el of nodes){ if(!isVisible(el)) continue; const label=[textOf(el), el.getAttribute&&el.getAttribute('aria-label'), el.getAttribute&&el.getAttribute('title')].filter(Boolean).join(' ').trim(); const href=String((el.getAttribute&&(el.getAttribute('href')||el.getAttribute('data-href')))||''); const onclick=String((el.getAttribute&&el.getAttribute('onclick'))||''); if(label && include.test(label) && !exclude.test(label)){ cta.push({tag:String(el.tagName||'').toLowerCase(), label:label.slice(0,160), href:href.slice(0,240)}); } if((href && hrefRe.test(href)) || (onclick && hrefRe.test(onclick))){ hrefHits.push({tag:String(el.tagName||'').toLowerCase(), label:label.slice(0,160), href:href.slice(0,240), onclick:onclick.slice(0,160)}); } if(label && exclude.test(label)){ logoutHits.push({tag:String(el.tagName||'').toLowerCase(), label:label.slice(0,160), href:href.slice(0,240)}); } if(cta.length>=10 && hrefHits.length>=10 && logoutHits.length>=10) break; } return { url:String(location.href||''), title:String(document.title||''), loginCtaCount:cta.length, loginHrefCount:hrefHits.length, logoutCount:logoutHits.length, loginCtas:cta.slice(0,8), loginHrefHits:hrefHits.slice(0,8), logoutHits:logoutHits.slice(0,8) }; }"
+        },
+        "saveAs": "pageDiag",
+        "next": "check_login"
+      },
+      {
+        "id": "check_login",
+        "action": {
+          "type": "invoke",
+          "target": "login_check_ensure",
+          "args": {
+            "login.ensure": false
+          }
+        },
+        "saveAs": "loginOut",
+        "next": {
+          "done": "done_out",
+          "failed": "abort_check"
+        }
+      },
+      {
+        "id": "done_out",
+        "action": {
+          "type": "done",
+          "reason": "jimeng login diagnose completed",
+          "conclusion": {
+            "status": "done",
+            "value": {
+              "pageDiag": "${vars.pageDiag}",
+              "loginOut": "${vars.loginOut}"
+            }
+          }
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_open",
+        "action": {
+          "type": "abort",
+          "reason": "open jimeng failed"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_check",
+        "action": {
+          "type": "abort",
+          "reason": "login check failed"
+        },
+        "next": {}
+      }
+    ]
+  }
+}

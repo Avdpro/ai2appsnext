@@ -83,7 +83,7 @@
         "desc": "readPage 失败时，使用 run_ai 从当前页面兜底提取文章信息",
         "action": {
           "type": "run_ai",
-          "model": "balanced",
+          "model": "${{ (args && args.read && args.read.summaryModel) || 'fast' }}",
           "prompt": "你是网页文章提取器。请基于输入的 page 上下文返回 JSON envelope：{status:'ok',result} 或 {status:'error',reason}。当 status='ok' 时，result 必须是对象：{url:string,title:string,content:string}。其中 content 应是可读正文（优先 markdown 风格，至少 120 字符；若页面不够长则尽量完整输出）。禁止返回除 JSON 外的任何文本。",
           "page": {
             "url": true,

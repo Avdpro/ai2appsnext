@@ -20,6 +20,23 @@ function resolvePathAgainstFlowsDir(inPath, flowsDir = DEFAULT_FLOWS_DIR) {
 	return pathLib.resolve(flowsDir, raw);
 }
 
+function resolveBrowseDir(inDir, flowsDir = DEFAULT_FLOWS_DIR) {
+	const raw = String(inDir || "").trim();
+	if (!raw || raw === "." || raw === "/") {
+		return { absDir: flowsDir, relDir: "" };
+	}
+	const absDir = resolvePathAgainstFlowsDir(raw, flowsDir);
+	const rel = pathLib.relative(flowsDir, absDir);
+	if (!rel || rel === ".") return { absDir: flowsDir, relDir: "" };
+	if (rel.startsWith("..") || pathLib.isAbsolute(rel)) {
+		throw new Error("invalid dir path");
+	}
+	return {
+		absDir,
+		relDir: rel.split(pathLib.sep).join("/"),
+	};
+}
+
 function parseObjectLike(raw, fallback = {}) {
 	if (!raw) return fallback;
 	if (typeof raw === "object" && !Array.isArray(raw)) return raw;
@@ -105,26 +122,52 @@ function sanitizeBuilderFlowObject(raw) {
 }
 
 async function listSavedBuilderFlows({ flowsDir = DEFAULT_FLOWS_DIR } = {}) {
-	let names = [];
+	const listJsonFilesRecursive = async (baseDir) => {
+		const out = [];
+		const walk = async (dir) => {
+			let entries = [];
+			try {
+				entries = await fsp.readdir(dir, { withFileTypes: true });
+			} catch (_) {
+				return;
+			}
+			for (const ent of entries) {
+				const name = String(ent?.name || "");
+				if (!name) continue;
+				const full = pathLib.join(dir, name);
+				if (ent.isDirectory()) {
+					await walk(full);
+					continue;
+				}
+				if (!ent.isFile()) continue;
+				if (!/\.json$/i.test(name)) continue;
+				out.push(full);
+			}
+		};
+		await walk(baseDir);
+		return out;
+	};
+
+	let files = [];
 	try {
-		names = await fsp.readdir(flowsDir);
+		files = await listJsonFilesRecursive(flowsDir);
 	} catch (_) {
 		return [];
 	}
 	const out = [];
-	for (const name of names) {
-		if (!/\.json$/i.test(String(name || ""))) continue;
-		const fullPath = pathLib.join(flowsDir, name);
+	for (const fullPath of files) {
 		try {
 			const text = await fsp.readFile(fullPath, "utf8");
 			const obj = parseObjectLike(text, {});
 			const flow = (obj?.flow && typeof obj.flow === "object") ? obj.flow : ((obj && typeof obj === "object") ? obj : null);
 			if (!flow || typeof flow !== "object") continue;
-			const id = String(flow.id || "").trim() || String(name || "").replace(/\.json$/i, "");
+			const rel = pathLib.relative(flowsDir, fullPath);
+			const shownFile = rel && rel !== "." ? rel : pathLib.basename(fullPath);
+			const id = String(flow.id || "").trim() || shownFile.replace(/\.json$/i, "");
 			out.push({
 				id,
 				path: fullPath,
-				file: String(name || ""),
+				file: shownFile,
 			});
 		} catch (_) {
 		}
@@ -139,6 +182,68 @@ async function listSavedBuilderFlows({ flowsDir = DEFAULT_FLOWS_DIR } = {}) {
 		return ai.localeCompare(bi, undefined, { numeric: true, sensitivity: "base" });
 	});
 	return out;
+}
+
+async function listBuilderFlowEntries({ flowsDir = DEFAULT_FLOWS_DIR, dir = "" } = {}) {
+	const { absDir, relDir } = resolveBrowseDir(dir, flowsDir);
+	let entries = [];
+	try {
+		entries = await fsp.readdir(absDir, { withFileTypes: true });
+	} catch (_) {
+		return {
+			currentDir: relDir,
+			parentDir: relDir ? relDir.split("/").slice(0, -1).join("/") : "",
+			dirs: [],
+			flows: [],
+		};
+	}
+	const dirs = [];
+	const flows = [];
+	for (const ent of entries) {
+		const name = String(ent?.name || "").trim();
+		if (!name) continue;
+		const full = pathLib.join(absDir, name);
+		const rel = pathLib.relative(flowsDir, full);
+		if (!rel || rel.startsWith("..") || pathLib.isAbsolute(rel)) continue;
+		const shownRel = rel.split(pathLib.sep).join("/");
+		if (ent.isDirectory()) {
+			dirs.push({
+				name,
+				dir: shownRel,
+			});
+			continue;
+		}
+		if (!ent.isFile() || !/\.json$/i.test(name)) continue;
+		try {
+			const text = await fsp.readFile(full, "utf8");
+			const obj = parseObjectLike(text, {});
+			const flow = (obj?.flow && typeof obj.flow === "object") ? obj.flow : ((obj && typeof obj === "object") ? obj : null);
+			if (!flow || typeof flow !== "object") continue;
+			const id = String(flow.id || "").trim() || name.replace(/\.json$/i, "");
+			flows.push({
+				id,
+				path: full,
+				file: shownRel,
+			});
+		} catch (_) {
+		}
+	}
+	dirs.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true, sensitivity: "base" }));
+	flows.sort((a, b) => {
+		const af = String(a.file || "").toLowerCase();
+		const bf = String(b.file || "").toLowerCase();
+		const byFile = af.localeCompare(bf, undefined, { numeric: true, sensitivity: "base" });
+		if (byFile !== 0) return byFile;
+		const ai = String(a.id || "").toLowerCase();
+		const bi = String(b.id || "").toLowerCase();
+		return ai.localeCompare(bi, undefined, { numeric: true, sensitivity: "base" });
+	});
+	return {
+		currentDir: relDir,
+		parentDir: relDir ? relDir.split("/").slice(0, -1).join("/") : "",
+		dirs,
+		flows,
+	};
 }
 
 async function loadSavedBuilderFlowFromPath(inPath) {
@@ -293,6 +398,8 @@ async function runBuilderStepOnce({ webRpa, page, session, step, args: inputArgs
 			mode: "single_step",
 			stepId,
 			actionType: String(action?.type || ""),
+			...(normalized?.meta && typeof normalized.meta === "object" ? normalized.meta : {}),
+			actionMeta: (normalized?.meta && typeof normalized.meta === "object") ? normalized.meta : null,
 		},
 	};
 }
@@ -302,6 +409,7 @@ export {
 	normalizeFlowIdHint,
 	sanitizeBuilderFlowObject,
 	listSavedBuilderFlows,
+	listBuilderFlowEntries,
 	loadSavedBuilderFlowFromPath,
 	saveBuilderFlowToFile,
 	buildSingleStepProbeFlow,

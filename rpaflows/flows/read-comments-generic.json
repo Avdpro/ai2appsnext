@@ -215,7 +215,7 @@
         "desc": "run_js 提取失败或质量不足时，使用 run_ai 兜底提取评论列表",
         "action": {
           "type": "run_ai",
-          "model": "advanced",
+          "model": "${{ (args && args.read && args.read.summaryModel) || 'fast' }}",
           "prompt": "你是网页评论提取器。请返回 JSON envelope。status='ok' 时 result 必须是对象：{action:'comments',items:Array,nextCursor:null,missingFields:Array}。items 每项必须包含 id,author,text,summary,time,url 六个字符串字段（缺失填空字符串）。最多返回 80 条。",
           "input": {
             "read": "${read}",

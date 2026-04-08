@@ -15,6 +15,28 @@ async function sleep(time){
 	return pms;
 }
 
+function normalizeOpenUrl(rawUrl,fallback="about:blank"){
+	const s=String(rawUrl==null?"":rawUrl).trim();
+	if(!s) return fallback;
+	const low=s.toLowerCase();
+	if(
+		low.startsWith("http://")
+		|| low.startsWith("https://")
+		|| low.startsWith("about:")
+		|| low.startsWith("data:")
+		|| low.startsWith("file:")
+		|| low.startsWith("ws://")
+		|| low.startsWith("wss://")
+		|| low.startsWith("chrome:")
+		|| low.startsWith("edge:")
+		|| low.startsWith("devtools:")
+	){
+		return s;
+	}
+	if(s.startsWith("//")) return `https:${s}`;
+	return `https://${s}`;
+}
+
 function wrapArgumentForBiDi(value) {
 	if(value && value.type){
 		return value;
@@ -246,6 +268,7 @@ aaWebDriveContext.sendCommand=async function(cmd,params,timeout){
 		let wait,timeout;
 		wait=opts?.wait||"complete";
 		timeout=opts?.timeout||0;
+		url=normalizeOpenUrl(url,"about:blank");
 		return await this.webDrive.goto(this.context, url, wait, timeout);
 	};//Tested, seg applied
 	

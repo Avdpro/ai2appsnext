@@ -1,0 +1,1602 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPA Runner</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --line: #c9d3e3;
+      --text: #0f172a;
+      --sub: #64748b;
+      --ok: #059669;
+      --warn: #b45309;
+      --err: #dc2626;
+      --btn: #2563eb;
+      --btn2: #64748b;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif; }
+    .page { max-width: 1440px; margin: 0 auto; height: 100vh; display: grid; grid-template-columns: 520px 1fr; gap: 12px; padding: 12px; overflow: hidden; }
+    .col { min-width: 0; min-height: 0; height: calc(100vh - 24px); overflow: auto; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+    h1 { margin: 0; font-size: 20px; }
+    h2 { margin: 0 0 8px; font-size: 16px; }
+    label { display: block; margin: 8px 0 4px; color: var(--sub); font-size: 13px; }
+    input, select, textarea, button { width: 100%; font-size: 14px; border-radius: 8px; border: 1px solid var(--line); padding: 8px 10px; }
+    textarea { min-height: 90px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .btn-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+    .btn-row2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+    .btn-row-center-2 { display:flex; justify-content:center; align-items:center; gap:12px; margin: 8px auto 0; }
+    .btn-row-center-2 button { width:auto; min-width:140px; padding:6px 14px; font-size:12px; border-radius:6px; }
+    button { cursor: pointer; background: var(--btn); color: #fff; border: 1px solid transparent; font-weight: 600; }
+    button.secondary { background: var(--btn2); }
+    button.ok { background: var(--ok); }
+    button.warn { background: var(--warn); }
+    button.err { background: var(--err); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .tag { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--sub); }
+    .info-grid { display:grid; grid-template-columns: 1fr; gap:8px; }
+    .info-grid-2 { display:grid; grid-template-columns: 1fr 2fr; gap:8px; }
+    .info-item { border:1px solid var(--line); border-radius:10px; background:#f8fbff; padding:8px 10px; min-height:44px; }
+    .info-label { color:#64748b; font-size:12px; margin-bottom:2px; }
+    .info-value { color:#0f172a; font-size:14px; font-weight:700; word-break:break-all; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre { margin: 0; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; padding: 8px; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.4; }
+    #historyPre { min-height: 260px; max-height: 52vh; overflow: auto; }
+    #summaryPre { min-height: 160px; max-height: 42vh; overflow: auto; }
+    .arg-box { border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: #f8fbff; }
+    .arg-item { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #fff; margin-bottom: 8px; }
+    .arg-item:last-child { margin-bottom: 0; }
+    .arg-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 4px; }
+    .arg-key { font-weight: 700; font-size: 13px; }
+    .arg-type { font-size: 12px; color: var(--sub); }
+    .arg-desc { font-size: 12px; color: var(--sub); margin: 0 0 6px; white-space: pre-wrap; }
+    .required { color: var(--err); font-weight: 700; }
+    .section-strong-title {
+      color: #0f172a;
+      font-size: 15px;
+      font-weight: 800;
+      margin-top: 10px;
+      margin-bottom: 6px;
+    }
+    .checkline { display:flex; align-items:center; gap:8px; margin-top:8px; color:#334155; font-size:13px; font-weight:700; }
+    .checkline input[type="checkbox"] { width:16px; height:16px; accent-color:#2563eb; cursor:pointer; }
+    .opt-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .opt-row > * { min-width: 0; }
+    .opt-row:last-child { margin-bottom: 0; }
+    .opt-row textarea { min-height: 40px; max-height: 120px; }
+    .opt-row button { width:44px; min-width:44px; padding:0; }
+    .empty-note {
+      border: 1px dashed #c8d4e3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #64748b;
+      background: #f8fbff;
+      line-height: 1.4;
+    }
+    .upload-list { margin-top:8px; border:1px solid var(--line); border-radius:10px; background:#f8fbff; padding:8px; font-size:12px; color:#334155; }
+    .upload-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 0; border-bottom:1px dashed #d7e0ee; }
+    .upload-row:last-child { border-bottom:none; }
+    .upload-row .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%; }
+    .upload-row .size { color:#64748b; white-space:nowrap; }
+    .upload-row .del { width:auto; border:none; background:#64748b; color:#fff; border-radius:6px; padding:2px 8px; font-size:12px; cursor:pointer; }
+    .busy-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.28);
+      backdrop-filter: blur(1px);
+    }
+    .busy-mask.show { display: flex; }
+    .busy-card {
+      min-width: 260px;
+      max-width: min(92vw, 560px);
+      border-radius: 12px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      box-shadow: 0 14px 40px rgba(15, 23, 42, 0.2);
+      padding: 16px 18px;
+    }
+    .busy-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .busy-text {
+      color: #334155;
+      font-size: 13px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    @media (max-width: 1180px) {
+      html, body { overflow: auto; }
+      .page { height: auto; min-height: 100vh; grid-template-columns: 1fr; overflow: visible; }
+      .col { height: auto; overflow: visible; }
+      .opt-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="col">
+      <div class="card">
+        <h1>RPA Runner</h1>
+        <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <span id="statusTag" class="tag">Ready</span>
+          <span id="sessionTag" class="tag">session: -</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Session</h2>
+        <label>alias</label>
+        <input id="aliasInput" value="flow_runner">
+        <div class="row">
+          <div>
+            <label>launchMode</label>
+            <input id="launchModeInput" value="direct">
+          </div>
+          <div>
+            <label>startUrl</label>
+            <input id="startUrlInput" value="about:blank">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="startSessionBtn" class="ok" type="button">启动</button>
+          <button id="refreshSessionBtn" class="secondary" type="button">刷新</button>
+          <button id="closeSessionBtn" class="err" type="button">关闭</button>
+        </div>
+
+        <label>active context</label>
+        <select id="contextSelect"></select>
+        <div class="row">
+          <div>
+            <label>open url</label>
+            <input id="openUrlInput" value="about:blank">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button id="openPageBtn" class="secondary" type="button">新开并激活</button>
+          </div>
+        </div>
+        <div class="btn-row2">
+          <button id="refreshContextsBtn" class="secondary" type="button">刷新页面</button>
+          <button id="selectContextBtn" class="secondary" type="button">切到选中</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>系统连接（可选）</h2>
+        <div id="loginLoggedOutPanel">
+          <div style="color:#64748b;font-size:13px;margin-bottom:6px;">登录后可使用系统侧 AI 与云能力</div>
+          <div class="row">
+            <input id="loginEmailInput" placeholder="邮箱（例如 you@example.com）">
+            <input id="loginPwdInput" type="password" placeholder="密码">
+          </div>
+          <div class="btn-row2" style="margin-top:8px;">
+            <button id="loginBtn" class="ok" type="button">登录系统</button>
+            <button id="checkLoginBtn" class="secondary" type="button">检查登录</button>
+          </div>
+        </div>
+        <div id="loginLoggedInPanel" style="display:none;">
+          <div style="color:#64748b;font-size:13px;margin-bottom:6px;">已连接系统能力</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Email</div>
+              <div id="loginUserEmailView" class="info-value">-</div>
+            </div>
+            <div class="info-grid-2">
+              <div class="info-item">
+                <div class="info-label">User ID</div>
+                <div id="loginUserIdView" class="info-value">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">余额</div>
+                <div id="loginCoinsPointsView" class="info-value">-</div>
+              </div>
+            </div>
+          </div>
+          <div class="btn-row-center-2">
+            <button id="checkLoginBtn2" class="secondary" type="button">刷新状态</button>
+            <button id="logoutBtn" class="secondary" type="button">登出</button>
+          </div>
+        </div>
+        <div id="systemLoginText" style="margin-top:6px;color:#64748b;font-size:13px;">未登录</div>
+      </div>
+
+      <div class="card">
+        <h2>Run Mode</h2>
+        <label>模式</label>
+        <select id="runModeInput">
+          <option value="flow" selected>Flow（按选定 flow 执行）</option>
+          <option value="goal">Goal（AI 动态生成步骤）</option>
+        </select>
+      </div>
+
+      <div class="card" id="flowCard">
+        <h2>Flow</h2>
+        <div class="row" style="align-items:end;">
+          <div>
+            <label>已保存 Flow（本地）</label>
+            <select id="flowSelect"></select>
+          </div>
+          <div>
+            <button id="refreshFlowsBtn" class="secondary" type="button">刷新列表</button>
+          </div>
+        </div>
+        <div class="btn-row2">
+          <button id="loadFlowBtn" class="secondary" type="button">加载所选 Flow</button>
+          <button id="runFlowBtn" class="ok" type="button">执行 Flow</button>
+        </div>
+        <label>当前 Flow</label>
+        <pre id="flowInfoPre">未加载</pre>
+
+        <label class="section-strong-title">Args（按 flow.args 定义）</label>
+        <div id="argEditorBox" class="arg-box">请先加载 flow</div>
+
+        <label>args(JSON 预览/可手工改)</label>
+        <textarea id="argsInput" class="mono">{}</textarea>
+        <label class="section-strong-title">文件附件（可选）</label>
+        <label>写入 args 键（支持点号嵌套）</label>
+        <input id="attachArgKeyInput" class="mono" value="attachments" placeholder="例如 compose.post.files">
+        <input id="attachFilesInput" type="file" multiple>
+        <div class="btn-row2">
+          <button id="uploadFilesBtn" class="secondary" type="button">上传并写入 args</button>
+          <button id="clearUploadedBtn" class="secondary" type="button">清空附件</button>
+        </div>
+        <div id="attachmentsBox" class="upload-list">暂无附件</div>
+
+        <label class="section-strong-title">Opts（逐项编辑，支持点号嵌套键）</label>
+        <div class="btn-row" style="margin-top:0;">
+          <button id="addOptRowBtn" class="secondary" type="button">+ 添加项</button>
+          <button id="parseOptsJsonBtn" class="secondary" type="button">从JSON解析</button>
+          <button id="clearOptRowsBtn" class="secondary" type="button">清空项</button>
+        </div>
+        <div id="optsEditorBox" class="arg-box" style="margin-top:8px;overflow-x:hidden;">暂无 opts 项，可点击“+ 添加项”</div>
+
+        <label>opts(JSON 预览/高级编辑)</label>
+        <textarea id="optsInput" class="mono">{}</textarea>
+      </div>
+
+      <div class="card" id="goalCard" style="display:none;">
+        <h2>Goal</h2>
+        <label>goal</label>
+        <textarea id="goalInput" placeholder="例如：打开 Google，搜索 OpenAI，然后读取前3条结果标题"></textarea>
+
+        <label>notes（可选）</label>
+        <textarea id="notesInput" placeholder="补充约束，例如：优先使用 invoke + find.must"></textarea>
+
+        <div class="row3">
+          <div>
+            <label>model</label>
+            <select id="modelInput">
+              <option value="advanced" selected>advanced</option>
+              <option value="quality">quality</option>
+              <option value="balanced">balanced</option>
+              <option value="fast">fast</option>
+            </select>
+          </div>
+          <div>
+            <label>maxSteps</label>
+            <input id="maxStepsInput" type="number" min="1" max="200" value="20">
+          </div>
+          <div>
+            <label>aiTimeoutMs</label>
+            <input id="aiTimeoutInput" type="number" min="3000" max="180000" value="60000">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>actionScope（逗号分隔，空=all）</label>
+            <input id="actionScopeInput" class="mono" placeholder="goto,click,input,invoke,run_js,done,abort">
+          </div>
+          <div>
+            <label>invokeScope（cap 前缀，逗号分隔，空=all）</label>
+            <input id="invokeScopeInput" class="mono" placeholder="search,read,login">
+          </div>
+        </div>
+        <label class="checkline"><input id="allowScriptActionsInput" type="checkbox">允许脚本动作（run_js / run_ai）</label>
+        <div class="btn-row2">
+          <button id="startGoalRunBtn" class="ok" type="button">执行 Goal</button>
+          <button id="refreshRunBtn" class="secondary" type="button">刷新状态</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2>Run Status</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <span id="runTag" class="tag">run: -</span>
+          <span id="phaseTag" class="tag">phase: -</span>
+          <span id="stepTag" class="tag">step: -</span>
+        </div>
+        <pre id="summaryPre">暂无执行结果</pre>
+      </div>
+
+      <div class="card">
+        <h2>History</h2>
+        <pre id="historyPre">暂无历史</pre>
+      </div>
+    </div>
+  </div>
+  <datalist id="optsKeyOptions"></datalist>
+  <div id="busyMask" class="busy-mask" aria-live="polite" aria-busy="false">
+    <div class="busy-card">
+      <div class="busy-title">请稍候</div>
+      <div id="busyText" class="busy-text">正在处理...</div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const RUNNER_LOGIN_KEY = "rpaflows.runner.login.v1";
+    const state = {
+      sessionId: "",
+      runId: "",
+      runMode: "flow",
+      pollTimer: 0,
+      loadedFlow: null,
+      loadedFlowPath: "",
+      flowsBaseDir: "",
+      flowsBrowseDir: "",
+      argRows: [],
+      optRows: [],
+      lastStatusMode: "flow",
+      busyCount: 0,
+      loginDone: false,
+      localLogin: null,
+      autoLoginTried: false,
+      loginView: null,
+      uploadedFiles: [],
+    };
+
+    const OPT_KEY_SUGGESTIONS = [
+      "silent",
+      "continueOnError",
+      "maxSteps",
+      "stepTimeoutMs",
+      "actionTimeoutMs",
+      "riskControl.mode",
+      "riskControl.maxLevel",
+      "riskControl.askEnabled",
+      "riskControl.allowOnceUntil",
+      "riskControl.allow24hUntil",
+      "riskControl.allowForever",
+      "flowSourcePolicy",
+      "ai.provider",
+      "ai.model",
+      "ai.timeoutMs",
+      "ai.temperature",
+      "systemAuth.userId",
+      "systemAuth.token",
+      "systemAuth.apiPath",
+      "systemAuth.rank",
+      "queryCache.enabled",
+      "queryCache.maxEntries",
+    ];
+    const OPT_VALUE_SUGGESTIONS = {
+      flowsourcepolicy: ["prefer_local", "prefer_cloud", "local", "cloud", "merge"],
+      "riskcontrol.mode": ["warn", "ask", "block", "off"],
+      "riskcontrol.onaskunavailable": ["block", "warn", "allow"],
+      "riskcontrol.enabled": ["true", "false"],
+      "riskcontrol.askenabled": ["true", "false"],
+      "querycache.enabled": ["true", "false"],
+      "invokecloud.enabled": ["true", "false"],
+      invokealignargs: ["true", "false"],
+      invokefallbackonnoargs: ["true", "false"],
+      preferinvoke: ["true", "false"],
+      silent: ["true", "false"],
+      continueonerror: ["true", "false"],
+    };
+    const OPT_VALUE_DEFAULTS = {
+      flowsourcepolicy: "prefer_local",
+    };
+
+    function setStatus(text) {
+      $("statusTag").textContent = String(text || "-");
+    }
+
+    function updateSessionTag() {
+      $("sessionTag").textContent = `session: ${state.sessionId || "-"}`;
+      $("startSessionBtn").disabled = !!state.sessionId;
+      $("closeSessionBtn").disabled = !state.sessionId;
+      $("refreshSessionBtn").disabled = !state.sessionId;
+      $("refreshContextsBtn").disabled = !state.sessionId;
+      $("selectContextBtn").disabled = !state.sessionId;
+      $("openPageBtn").disabled = !state.sessionId;
+      // 运行按钮不依赖预先启动 Session：执行时会自动创建/复用 Session
+      $("runFlowBtn").disabled = false;
+      $("startGoalRunBtn").disabled = false;
+      $("refreshRunBtn").disabled = !state.sessionId;
+    }
+
+    function parseJson(text, fallback = {}) {
+      const raw = String(text || "").trim();
+      if (!raw) return fallback;
+      return JSON.parse(raw);
+    }
+    function normalizePathForUi(raw) {
+      return String(raw || "").replace(/\\/g, "/").trim();
+    }
+    function toDisplayFlowPathUi(rawPath) {
+      const p = normalizePathForUi(rawPath);
+      if (!p) return "";
+      const base = normalizePathForUi(state.flowsBaseDir || "");
+      if (!base) return p;
+      const withSlash = base.endsWith("/") ? base : `${base}/`;
+      if (p === base) return "";
+      if (p.startsWith(withSlash)) return p.slice(withSlash.length);
+      return p;
+    }
+    function asText(v) {
+      return String(v == null ? "" : v).trim();
+    }
+    function formatBytes(v) {
+      const n = Number(v || 0);
+      if (!Number.isFinite(n) || n <= 0) return "0B";
+      if (n < 1024) return `${Math.round(n)}B`;
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
+      if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+      return `${(n / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+    }
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        try {
+          const fr = new FileReader();
+          fr.onerror = () => reject(new Error("读取文件失败"));
+          fr.onload = () => resolve(String(fr.result || ""));
+          fr.readAsDataURL(file);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }
+    function renderUploadedFiles() {
+      const box = $("attachmentsBox");
+      if (!box) return;
+      const rows = Array.isArray(state.uploadedFiles) ? state.uploadedFiles : [];
+      if (!rows.length) {
+        box.textContent = "暂无附件";
+        return;
+      }
+      box.innerHTML = rows.map((one, idx) => {
+        const name = asText(one?.name || `file_${idx + 1}`);
+        const size = formatBytes(one?.size || 0);
+        return `<div class="upload-row"><span class="name">${name}</span><span class="size">${size}</span><button class="del" data-del-upload="${idx}" type="button">删</button></div>`;
+      }).join("");
+    }
+
+    function showBusy(text) {
+      state.busyCount += 1;
+      const el = $("busyMask");
+      const msg = $("busyText");
+      if (msg) msg.textContent = String(text || "正在处理...");
+      if (el) {
+        el.classList.add("show");
+        el.setAttribute("aria-busy", "true");
+      }
+    }
+
+    function hideBusy() {
+      state.busyCount = Math.max(0, Number(state.busyCount || 0) - 1);
+      if (state.busyCount > 0) return;
+      const el = $("busyMask");
+      if (!el) return;
+      el.classList.remove("show");
+      el.setAttribute("aria-busy", "false");
+    }
+
+    async function withBusy(text, fn) {
+      showBusy(text);
+      try {
+        return await fn();
+      } finally {
+        hideBusy();
+      }
+    }
+
+    async function api(method, path, body) {
+      const init = { method, headers: { "content-type": "application/json" } };
+      if (body !== undefined) init.body = JSON.stringify(body);
+      const res = await fetch(path, init);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.reason || `HTTP ${res.status}`);
+      return data.data;
+    }
+
+    function parseCommaList(text) {
+      return String(text || "").split(",").map((x) => String(x || "").trim()).filter(Boolean);
+    }
+
+    function setSystemLoginText(text, ok = false) {
+      const el = $("systemLoginText");
+      if (!el) return;
+      el.textContent = String(text || "系统登录状态：未检查");
+      el.style.color = ok ? "#059669" : "#475569";
+    }
+
+    function applyLoginUi(view) {
+      const v = (view && typeof view === "object") ? view : { done: false };
+      const done = !!v.done;
+      $("loginLoggedOutPanel").style.display = done ? "none" : "";
+      $("loginLoggedInPanel").style.display = done ? "" : "none";
+      if (done) {
+        $("loginUserEmailView").textContent = asText(v.email || "-");
+        $("loginUserIdView").textContent = asText(v.userId || "-");
+        const coins = Number(v.coins || 0);
+        const points = Number(v.points || 0);
+        $("loginCoinsPointsView").textContent = `coins=${coins} / points=${points}`;
+      }
+    }
+
+    function normalizeLocalLoginVO(obj, keyName = "") {
+      if (!obj || typeof obj !== "object") return null;
+      const userId = asText(obj.userId || obj.userid || "");
+      const token = asText(obj.token || "");
+      if (!userId || !token) return null;
+      return {
+        sourceKey: asText(keyName || ""),
+        userId,
+        token,
+        email: asText(obj.email || ""),
+        name: asText(obj.name || obj.nick || ""),
+        apiPath: asText(obj.apiPath || ""),
+        tokenExpire: Number(obj.tokenExpire || obj.tokenExipre || 0),
+      };
+    }
+
+    function readLocalLoginInfoCompat() {
+      const keys = ["LoginVO", "login-Info", "loginInfo", "login_vo", RUNNER_LOGIN_KEY];
+      for (const key of keys) {
+        let raw = "";
+        try { raw = String(localStorage.getItem(key) || "").trim(); } catch (_) { raw = ""; }
+        if (!raw) continue;
+        try {
+          const obj = JSON.parse(raw);
+          const norm = normalizeLocalLoginVO(obj, key);
+          if (norm) return norm;
+        } catch (_) {
+        }
+      }
+      return null;
+    }
+
+    function saveLocalLoginInfoCompat(vo) {
+      const norm = normalizeLocalLoginVO(vo || {}, "LoginVO");
+      if (!norm) return;
+      const payload = {
+        code: 200,
+        userId: norm.userId,
+        userid: norm.userId,
+        token: norm.token,
+        email: asText(vo?.email || norm.email || ""),
+        name: asText(vo?.name || vo?.nick || norm.name || ""),
+        apiPath: asText(vo?.apiPath || norm.apiPath || "/ws/"),
+        tokenExpire: Number(vo?.tokenExpire || vo?.tokenExipre || 0),
+        tokenExipre: Number(vo?.tokenExpire || vo?.tokenExipre || 0),
+        points: Number(vo?.points || 0),
+        coins: Number(vo?.coins || 0),
+        rank: asText(vo?.rank || ""),
+      };
+      const text = JSON.stringify(payload);
+      try { localStorage.setItem("LoginVO", text); } catch (_) {}
+      try { localStorage.setItem("login-Info", text); } catch (_) {}
+      try { localStorage.setItem("loginInfo", text); } catch (_) {}
+      try { localStorage.setItem(RUNNER_LOGIN_KEY, text); } catch (_) {}
+      if (payload.email) {
+        try { localStorage.setItem("LastAccount", payload.email); } catch (_) {}
+      }
+    }
+
+    function clearLocalLoginInfoCompat() {
+      for (const k of ["LoginVO", "login-Info", "loginInfo", "login_vo", RUNNER_LOGIN_KEY]) {
+        try { localStorage.removeItem(k); } catch (_) {}
+      }
+    }
+
+    function formatSystemLoginText(payload) {
+      const p = (payload && typeof payload === "object") ? payload : {};
+      const done = !!(p.loginDone || p?.systemAuth?.loginDone);
+      const info = asText(p.info || "");
+      const vo = (p.systemAuth && p.systemAuth.loginVO && typeof p.systemAuth.loginVO === "object")
+        ? p.systemAuth.loginVO
+        : null;
+      const userId = asText(vo?.userId || vo?.userid || "");
+      const email = asText(vo?.email || "");
+      const coins = Number(vo?.coins || 0);
+      const points = Number(vo?.points || 0);
+      const tail = [];
+      if (Number.isFinite(coins) && coins > 0) tail.push(`coins=${coins}`);
+      if (Number.isFinite(points) && points > 0) tail.push(`points=${points}`);
+      const extra = tail.length ? `，${tail.join("，")}` : "";
+      return {
+        done,
+        text: `${done ? "已登录" : "未登录"}${info ? `（${info}）` : ""}${extra}`,
+        userId,
+        email,
+        coins,
+        points,
+      };
+    }
+
+    function stopPolling() {
+      if (state.pollTimer) {
+        clearInterval(state.pollTimer);
+        state.pollTimer = 0;
+      }
+    }
+
+    function getByPath(obj, dottedPath) {
+      const root = (obj && typeof obj === "object") ? obj : {};
+      const keys = String(dottedPath || "").split(".").map((x) => String(x || "").trim()).filter(Boolean);
+      let cur = root;
+      for (const k of keys) {
+        if (!cur || typeof cur !== "object" || !(k in cur)) return undefined;
+        cur = cur[k];
+      }
+      return cur;
+    }
+
+    function setByPath(obj, dottedPath, value) {
+      const keys = String(dottedPath || "").split(".").map((x) => String(x || "").trim()).filter(Boolean);
+      if (!keys.length) return;
+      let cur = obj;
+      for (let i = 0; i < keys.length - 1; i += 1) {
+        const k = keys[i];
+        if (!cur[k] || typeof cur[k] !== "object" || Array.isArray(cur[k])) cur[k] = {};
+        cur = cur[k];
+      }
+      cur[keys[keys.length - 1]] = value;
+    }
+
+    function flattenObjectToRows(input, prefix = "", out = []) {
+      const src = (input && typeof input === "object" && !Array.isArray(input)) ? input : {};
+      const keys = Object.keys(src);
+      for (const key of keys) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        const val = src[key];
+        if (val && typeof val === "object" && !Array.isArray(val)) {
+          flattenObjectToRows(val, path, out);
+          continue;
+        }
+        let text = "";
+        if (val === null) {
+          text = "null";
+        } else if (typeof val === "boolean") {
+          text = val ? "true" : "false";
+        } else if (typeof val === "number") {
+          text = String(val);
+        } else if (typeof val === "string") {
+          text = String(val);
+        } else {
+          text = JSON.stringify(val);
+        }
+        out.push({ key: path, value: text });
+      }
+      return out;
+    }
+
+    function normalizeOptKey(key) {
+      return String(key || "").trim().replace(/\s+/g, "");
+    }
+
+    function normalizeSuggestedOptValue(text) {
+      const raw = String(text == null ? "" : text).trim();
+      if (!raw) return "";
+      if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+        try {
+          const parsed = JSON.parse(raw.replace(/^'/, '"').replace(/'$/, '"'));
+          if (typeof parsed === "string") return parsed;
+        } catch (_) {}
+      }
+      return raw;
+    }
+
+    function getOptValueSuggestionsByKey(key) {
+      const k = normalizeOptKey(key || "").toLowerCase();
+      return Array.isArray(OPT_VALUE_SUGGESTIONS[k]) ? OPT_VALUE_SUGGESTIONS[k] : null;
+    }
+    function getOptDefaultValueByKey(key, suggestions = null) {
+      const k = normalizeOptKey(key || "").toLowerCase();
+      const explicit = String(OPT_VALUE_DEFAULTS[k] || "").trim();
+      if (explicit) return explicit;
+      if (Array.isArray(suggestions) && suggestions.length) return String(suggestions[0] || "").trim();
+      return "";
+    }
+
+    function renderOptsKeyDatalist() {
+      const dl = $("optsKeyOptions");
+      if (!dl) return;
+      dl.innerHTML = "";
+      const set = new Set(OPT_KEY_SUGGESTIONS);
+      for (const one of state.optRows) {
+        const k = normalizeOptKey(one?.key || "");
+        if (k) set.add(k);
+      }
+      document.querySelectorAll("[data-opt-key-idx]").forEach((el) => {
+        const k = normalizeOptKey(el?.value || "");
+        if (k) set.add(k);
+      });
+      for (const key of Array.from(set).sort((a, b) => a.localeCompare(b))) {
+        const op = document.createElement("option");
+        op.value = key;
+        dl.appendChild(op);
+      }
+    }
+
+    function parseOptValue(text) {
+      const raw = String(text == null ? "" : text);
+      const s = raw.trim();
+      if (!s) return "";
+      try {
+        return JSON.parse(s);
+      } catch (_) {
+      }
+      // JSON 解析失败时，按普通字符串处理（避免强制输入引号）。
+      return raw;
+    }
+
+    function collectOptsFromEditor() {
+      const out = {};
+      const keyEls = Array.from(document.querySelectorAll("[data-opt-key-idx]"));
+      for (let i = 0; i < keyEls.length; i += 1) {
+        const keyEl = document.querySelector(`[data-opt-key-idx="${i}"]`);
+        const valEl = document.querySelector(`[data-opt-value-idx="${i}"]`);
+        const key = normalizeOptKey(keyEl?.value || "");
+        if (!key) continue;
+        const valueText = String(valEl?.value || "");
+        const value = parseOptValue(valueText);
+        setByPath(out, key, value);
+      }
+      return out;
+    }
+
+    function syncOptRowsStateFromDom() {
+      const nextRows = [];
+      const keyEls = Array.from(document.querySelectorAll("[data-opt-key-idx]"));
+      for (let i = 0; i < keyEls.length; i += 1) {
+        const keyEl = document.querySelector(`[data-opt-key-idx="${i}"]`);
+        const valEl = document.querySelector(`[data-opt-value-idx="${i}"]`);
+        const key = normalizeOptKey(keyEl?.value || "");
+        const value = String(valEl?.value || "");
+        if (!key && !value.trim()) continue;
+        nextRows.push({ key, value });
+      }
+      state.optRows = nextRows;
+    }
+
+    function refreshOptsJsonFromEditor() {
+      try {
+        const opts = collectOptsFromEditor();
+        $("optsInput").value = JSON.stringify(opts, null, 2);
+        renderOptsKeyDatalist();
+      } catch (_) {
+      }
+    }
+
+    function renderOptsEditorFromRows() {
+      const box = $("optsEditorBox");
+      if (!box) return;
+      box.innerHTML = "";
+      if (!state.optRows.length) {
+        box.innerHTML = '<div class="empty-note">暂无 opts 项，可点击“+ 添加项”</div>';
+        renderOptsKeyDatalist();
+        return;
+      }
+      state.optRows.forEach((row, idx) => {
+        const wrap = document.createElement("div");
+        wrap.className = "opt-row";
+
+        const keyInput = document.createElement("input");
+        keyInput.className = "mono";
+        keyInput.placeholder = "key，例如 riskControl.mode";
+        keyInput.value = String(row?.key || "");
+        keyInput.setAttribute("list", "optsKeyOptions");
+        keyInput.dataset.optKeyIdx = String(idx);
+        const valueSuggestions = getOptValueSuggestionsByKey(keyInput.value);
+        const rowValueText = String(row?.value || "");
+        const normalizedValueText = normalizeSuggestedOptValue(rowValueText);
+        keyInput.addEventListener("input", () => {
+          const oldHasSuggest = !!getOptValueSuggestionsByKey(row?.key || "");
+          row.key = String(keyInput.value || "");
+          const newHasSuggest = !!getOptValueSuggestionsByKey(keyInput.value);
+          if (oldHasSuggest !== newHasSuggest) {
+            syncOptRowsStateFromDom();
+            renderOptsEditorFromRows();
+          }
+          refreshOptsJsonFromEditor();
+        });
+        wrap.appendChild(keyInput);
+
+        let valInput = null;
+        if (valueSuggestions && valueSuggestions.length) {
+          const sel = document.createElement("select");
+          sel.className = "mono";
+          const defaultValue = getOptDefaultValueByKey(keyInput.value, valueSuggestions);
+          const placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent = "请选择（可留空）";
+          sel.appendChild(placeholder);
+          for (const one of valueSuggestions) {
+            const op = document.createElement("option");
+            op.value = String(one);
+            op.textContent = String(one) === defaultValue ? `${String(one)}（默认）` : String(one);
+            sel.appendChild(op);
+          }
+          if (normalizedValueText && !valueSuggestions.includes(normalizedValueText)) {
+            const custom = document.createElement("option");
+            custom.value = normalizedValueText;
+            custom.textContent = `${normalizedValueText}（custom）`;
+            sel.appendChild(custom);
+          }
+          sel.value = normalizedValueText;
+          sel.dataset.optValueIdx = String(idx);
+          sel.addEventListener("input", () => refreshOptsJsonFromEditor());
+          sel.addEventListener("change", () => refreshOptsJsonFromEditor());
+          valInput = sel;
+        } else {
+          const ta = document.createElement("textarea");
+          ta.className = "mono";
+          ta.placeholder = "value（JSON 或文本）";
+          ta.value = rowValueText;
+          ta.dataset.optValueIdx = String(idx);
+          ta.addEventListener("input", () => refreshOptsJsonFromEditor());
+          valInput = ta;
+        }
+        wrap.appendChild(valInput);
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "secondary";
+        delBtn.textContent = "删";
+        delBtn.addEventListener("click", () => {
+          syncOptRowsStateFromDom();
+          state.optRows.splice(idx, 1);
+          renderOptsEditorFromRows();
+          refreshOptsJsonFromEditor();
+        });
+        wrap.appendChild(delBtn);
+
+        box.appendChild(wrap);
+      });
+      renderOptsKeyDatalist();
+    }
+
+    function addEmptyOptRow() {
+      syncOptRowsStateFromDom();
+      state.optRows.push({ key: "", value: "" });
+      renderOptsEditorFromRows();
+      refreshOptsJsonFromEditor();
+    }
+
+    function rebuildOptRowsFromJsonText() {
+      const obj = parseJson($("optsInput").value, {});
+      const rows = flattenObjectToRows(obj, "", []);
+      state.optRows = rows;
+      renderOptsEditorFromRows();
+      refreshOptsJsonFromEditor();
+    }
+
+    function buildOptsForRun() {
+      const hasRow = state.optRows.some((r) => normalizeOptKey(r?.key || ""));
+      if (!hasRow) return parseJson($("optsInput").value, {});
+      const opts = collectOptsFromEditor();
+      $("optsInput").value = JSON.stringify(opts, null, 2);
+      return opts;
+    }
+
+    function normalizeArgDef(def) {
+      if (def && typeof def === "object" && !Array.isArray(def)) {
+        return {
+          type: String(def.type || "").trim(),
+          required: def.required === true,
+          desc: String(def.desc || "").trim(),
+          default: Object.prototype.hasOwnProperty.call(def, "default") ? def.default : undefined,
+        };
+      }
+      return { type: "", required: false, desc: "", default: undefined };
+    }
+
+    function castArgValueByType(raw, typeText) {
+      const t = String(typeText || "").trim().toLowerCase();
+      const text = String(raw == null ? "" : raw);
+      if (!text.trim()) return undefined;
+      if (t === "number" || t === "int" || t === "float") {
+        const n = Number(text);
+        if (!Number.isFinite(n)) throw new Error(`参数值不是数字: ${text}`);
+        return n;
+      }
+      if (t === "boolean" || t === "bool") {
+        const s = text.trim().toLowerCase();
+        if (["1", "true", "yes", "on"].includes(s)) return true;
+        if (["0", "false", "no", "off"].includes(s)) return false;
+        throw new Error(`参数值不是布尔值: ${text}`);
+      }
+      if (t === "object" || t === "json" || t === "array") {
+        return JSON.parse(text);
+      }
+      return text;
+    }
+
+    function collectArgsFromEditor() {
+      const out = {};
+      for (const one of state.argRows) {
+        const key = String(one?.key || "").trim();
+        if (!key) continue;
+        const el = document.querySelector(`[data-arg-key="${CSS.escape(key)}"]`);
+        const text = String(el?.value || "");
+        const def = one.def || { type: "", required: false, default: undefined };
+        const casted = castArgValueByType(text, def.type);
+        if (casted === undefined) {
+          if (def.required) throw new Error(`缺少必填参数: ${key}`);
+          continue;
+        }
+        setByPath(out, key, casted);
+      }
+      return out;
+    }
+
+    function refreshArgsJsonFromEditor() {
+      try {
+        const args = collectArgsFromEditor();
+        $("argsInput").value = JSON.stringify(args, null, 2);
+      } catch (_) {
+      }
+    }
+    function applyUploadedFilesToArgs(baseArgs = null) {
+      const out = (baseArgs && typeof baseArgs === "object" && !Array.isArray(baseArgs))
+        ? JSON.parse(JSON.stringify(baseArgs))
+        : parseJson($("argsInput").value, {});
+      const key = asText($("attachArgKeyInput")?.value || "attachments") || "attachments";
+      const paths = (Array.isArray(state.uploadedFiles) ? state.uploadedFiles : [])
+        .map((x) => asText(x?.path || ""))
+        .filter(Boolean);
+      if (paths.length) {
+        setByPath(out, key, paths);
+      }
+      $("argsInput").value = JSON.stringify(out, null, 2);
+      if (state.loadedFlow) renderArgEditor(state.loadedFlow);
+      return out;
+    }
+    async function uploadSelectedFiles() {
+      const input = $("attachFilesInput");
+      const files = Array.from(input?.files || []);
+      if (!files.length) throw new Error("请先选择文件");
+      await ensureSession();
+      const payloadFiles = [];
+      for (const f of files) {
+        const data = await fileToDataUrl(f);
+        payloadFiles.push({
+          name: asText(f?.name || "file.bin"),
+          mime: asText(f?.type || "application/octet-stream"),
+          data,
+        });
+      }
+      const ret = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/uploads`, {
+        files: payloadFiles,
+      });
+      const items = Array.isArray(ret?.items) ? ret.items : [];
+      const merged = [];
+      const seen = new Set();
+      for (const one of [...state.uploadedFiles, ...items]) {
+        const p = asText(one?.path || "");
+        if (!p || seen.has(p)) continue;
+        seen.add(p);
+        merged.push(one);
+      }
+      state.uploadedFiles = merged;
+      renderUploadedFiles();
+      applyUploadedFilesToArgs();
+      if (input) input.value = "";
+      setStatus(`已上传 ${items.length} 个文件`);
+    }
+    function clearUploadedFiles() {
+      state.uploadedFiles = [];
+      renderUploadedFiles();
+      const input = $("attachFilesInput");
+      if (input) input.value = "";
+      applyUploadedFilesToArgs();
+      setStatus("已清空附件");
+    }
+    function removeUploadedFileAt(idx) {
+      const i = Number(idx);
+      if (!Number.isFinite(i) || i < 0) return;
+      const rows = Array.isArray(state.uploadedFiles) ? state.uploadedFiles : [];
+      if (i >= rows.length) return;
+      rows.splice(i, 1);
+      state.uploadedFiles = rows;
+      renderUploadedFiles();
+      applyUploadedFilesToArgs();
+      setStatus(`已移除 1 个附件（剩余 ${rows.length}）`);
+    }
+
+    function renderArgEditor(flow) {
+      const box = $("argEditorBox");
+      const argDefs = (flow && flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {};
+      const keys = Object.keys(argDefs);
+      state.argRows = keys.map((k) => ({ key: k, def: normalizeArgDef(argDefs[k]) }));
+      box.innerHTML = "";
+      if (!keys.length) {
+        box.textContent = "当前 flow 没有声明 args，可直接在 args(JSON) 里手填。";
+        return;
+      }
+      const currentArgs = parseJson($("argsInput").value, {});
+      for (const one of state.argRows) {
+        const key = one.key;
+        const def = one.def || {};
+        const item = document.createElement("div");
+        item.className = "arg-item";
+        const head = document.createElement("div");
+        head.className = "arg-head";
+        const k = document.createElement("div");
+        k.className = "arg-key mono";
+        k.innerHTML = `${key}${def.required ? ' <span class="required">*</span>' : ""}`;
+        const t = document.createElement("div");
+        t.className = "arg-type mono";
+        t.textContent = def.type || "string";
+        head.appendChild(k);
+        head.appendChild(t);
+        item.appendChild(head);
+        if (def.desc) {
+          const d = document.createElement("div");
+          d.className = "arg-desc";
+          d.textContent = def.desc;
+          item.appendChild(d);
+        }
+        const input = document.createElement("textarea");
+        input.className = "mono";
+        input.style.minHeight = "56px";
+        input.dataset.argKey = key;
+        let initVal = getByPath(currentArgs, key);
+        if (initVal === undefined && def.default !== undefined) initVal = def.default;
+        input.placeholder = def.default !== undefined ? `default: ${JSON.stringify(def.default)}` : "输入参数值";
+        input.value = (initVal === undefined) ? "" : (typeof initVal === "string" ? initVal : JSON.stringify(initVal));
+        input.addEventListener("input", () => refreshArgsJsonFromEditor());
+        item.appendChild(input);
+        box.appendChild(item);
+      }
+      refreshArgsJsonFromEditor();
+    }
+
+    function renderFlowInfo(flow, path) {
+      if (!flow) {
+        $("flowInfoPre").textContent = "未加载";
+        return;
+      }
+      $("flowInfoPre").textContent = JSON.stringify({
+        id: String(flow.id || ""),
+        start: String(flow.start || ""),
+        path: String(path || ""),
+        stepCount: Array.isArray(flow.steps) ? flow.steps.length : 0,
+        argKeys: Object.keys((flow.args && typeof flow.args === "object" && !Array.isArray(flow.args)) ? flow.args : {}),
+      }, null, 2);
+    }
+
+    async function refreshFlows(dirIn = null) {
+      const nextDir = (dirIn === null || dirIn === undefined)
+        ? String(state.flowsBrowseDir || "")
+        : String(dirIn || "");
+      const qs = nextDir ? `?dir=${encodeURIComponent(nextDir)}` : "";
+      const data = await api("GET", `/rpaflows/api/builder/flows${qs}`);
+      state.flowsBaseDir = String(data.baseDir || state.flowsBaseDir || "");
+      state.flowsBrowseDir = String(data.currentDir || nextDir || "");
+      const sel = $("flowSelect");
+      const currentPath = toDisplayFlowPathUi(String($("flowSelect").value || state.loadedFlowPath || "").trim());
+      sel.innerHTML = "";
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = state.flowsBrowseDir
+        ? `📁 ${state.flowsBrowseDir}`
+        : "请选择 Flow 或目录（当前：根目录）...";
+      sel.appendChild(empty);
+      const parentDir = String(data.parentDir || "").trim();
+      if (state.flowsBrowseDir) {
+        const upOp = document.createElement("option");
+        upOp.value = `__dir__:${parentDir}`;
+        upOp.textContent = "📁 ../ (返回上级)";
+        sel.appendChild(upOp);
+      }
+      const dirs = Array.isArray(data.dirs) ? data.dirs : [];
+      for (const one of dirs) {
+        const dirPath = String(one.dir || "").trim();
+        if (!dirPath) continue;
+        const op = document.createElement("option");
+        op.value = `__dir__:${dirPath}`;
+        op.textContent = `📁 ${String(one.name || dirPath)}`;
+        sel.appendChild(op);
+      }
+      const rows = Array.isArray(data.flows) ? data.flows : [];
+      for (const one of rows) {
+        const rawPath = String(one.path || one.absPath || "");
+        const displayPath = toDisplayFlowPathUi(rawPath);
+        const op = document.createElement("option");
+        op.value = displayPath;
+        op.textContent = `${String(one.file || "")} | ${String(one.id || "")}`;
+        if (currentPath && op.value === currentPath) op.selected = true;
+        sel.appendChild(op);
+      }
+      setStatus(`目录 ${state.flowsBrowseDir || "/"}：${dirs.length} 个子目录，${rows.length} 个 Flow`);
+    }
+
+    async function loadSelectedFlow() {
+      const path = String($("flowSelect").value || "").trim();
+      if (!path) throw new Error("请先选择 Flow");
+      if (path.startsWith("__dir__:")) {
+        const dir = String(path.slice("__dir__:".length) || "");
+        await refreshFlows(dir);
+        return;
+      }
+      const data = await api("POST", "/rpaflows/api/builder/flows/load", { path });
+      const flow = (data && data.flow && typeof data.flow === "object") ? data.flow : null;
+      if (!flow) throw new Error("加载失败：flow 为空");
+      state.loadedFlow = flow;
+      state.loadedFlowPath = String(path || "");
+      renderFlowInfo(flow, state.loadedFlowPath);
+      renderArgEditor(flow);
+      rebuildOptRowsFromJsonText();
+      setStatus(`已加载 Flow: ${String(flow.id || "-")}`);
+    }
+
+    function ensureFlowReady() {
+      if (!state.loadedFlow || typeof state.loadedFlow !== "object") throw new Error("请先加载 Flow");
+      return state.loadedFlow;
+    }
+
+    function formatUsd(usd) {
+      const n = Number(usd);
+      if (!Number.isFinite(n) || n <= 0) return "";
+      if (n < 0.000001) return `$${n.toExponential(2)}`;
+      if (n < 0.01) return `$${n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+      return `$${n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`;
+    }
+
+    function detectAiProvider(summary = {}, optsHint = {}) {
+      const s = (summary && typeof summary === "object") ? summary : {};
+      const runMeta = (s.runMeta && typeof s.runMeta === "object") ? s.runMeta : {};
+      const ai = (s.ai && typeof s.ai === "object") ? s.ai : {};
+      const hint = (optsHint && typeof optsHint === "object") ? optsHint : {};
+      return asText(
+        ai.provider
+        || runMeta.aiProvider
+        || runMeta.provider
+        || runMeta?.ai?.provider
+        || hint?.ai?.provider
+        || ""
+      ).toLowerCase();
+    }
+
+    function buildAiUsageBanner(summary = {}, optsHint = {}) {
+      const s = (summary && typeof summary === "object") ? summary : {};
+      const ai = (s.ai && typeof s.ai === "object") ? s.ai : {};
+      const calls = Number(ai.calls || 0);
+      const promptTokens = Number(ai.promptTokens || 0);
+      const completionTokens = Number(ai.completionTokens || 0);
+      const totalTokens = Number(ai.totalTokens || 0);
+      const costUsd = Number(ai.costUsd || 0);
+      const provider = detectAiProvider(s, optsHint);
+      if (!(calls > 0 || promptTokens > 0 || completionTokens > 0 || totalTokens > 0 || costUsd > 0 || provider)) return "";
+
+      let primary = "";
+      if (provider === "openrouter" && costUsd > 0) primary = `cost=${formatUsd(costUsd)}`;
+      else if (costUsd > 0) primary = `cost=${formatUsd(costUsd)}`;
+      else if (totalTokens > 0) primary = `tokens=${Math.round(totalTokens)}`;
+      else if (calls > 0) primary = `calls=${Math.round(calls)}`;
+      else primary = "usage=unknown";
+
+      const extras = [];
+      if (calls > 0) extras.push(`calls=${Math.round(calls)}`);
+      if (promptTokens > 0) extras.push(`prompt=${Math.round(promptTokens)}`);
+      if (completionTokens > 0) extras.push(`completion=${Math.round(completionTokens)}`);
+      if (totalTokens > 0) extras.push(`total=${Math.round(totalTokens)}`);
+      if (provider) extras.push(`provider=${provider}`);
+      return `AI 统计: ${primary}${extras.length ? ` | ${extras.join(" | ")}` : ""}`;
+    }
+
+    function renderStatus(data, mode) {
+      const summary = data && typeof data.summary === "object" ? data.summary : {};
+      $("runTag").textContent = `run: ${String(data?.runId || "-")}`;
+      $("phaseTag").textContent = `phase: ${String(data?.currentPhase || "-")}`;
+      $("stepTag").textContent = `step: ${String(data?.currentStepId || "-")} (${String(data?.currentActionType || "-")})`;
+      let optsHint = {};
+      try { optsHint = parseJson($("optsInput")?.value || "{}", {}); } catch (_) { optsHint = {}; }
+      const aiBanner = buildAiUsageBanner(summary, optsHint);
+      const summaryJson = JSON.stringify(summary, null, 2);
+      $("summaryPre").textContent = aiBanner ? `${aiBanner}\n\n${summaryJson}` : summaryJson;
+
+      const lines = [];
+      if (mode === "goal") {
+        const history = Array.isArray(summary.history) ? summary.history : [];
+        if (!history.length) {
+          $("historyPre").textContent = "暂无历史";
+          return;
+        }
+        for (const one of history) {
+          lines.push(`#${Number(one?.index || 0)} ${String(one?.stepId || "-")} (${String(one?.actionType || "-")}) => ${String(one?.status || "-")}`);
+          if (one?.summary) lines.push(`  summary: ${String(one.summary)}`);
+          if (one?.decisionReason) lines.push(`  reason: ${String(one.decisionReason)}`);
+          if (one?.reason) lines.push(`  execReason: ${String(one.reason)}`);
+          lines.push("");
+        }
+      } else {
+        const steps = Array.isArray(summary.steps) ? summary.steps : [];
+        if (!steps.length) {
+          $("historyPre").textContent = "暂无历史";
+          return;
+        }
+        let idx = 0;
+        for (const one of steps) {
+          idx += 1;
+          lines.push(`#${idx} ${String(one?.stepId || "-")} (${String(one?.actionType || "-")}) => ${String(one?.status || "-")} (${Number(one?.elapsedMs || 0)}ms)`);
+          if (one?.reason) lines.push(`  reason: ${String(one.reason)}`);
+          lines.push("");
+        }
+      }
+      $("historyPre").textContent = lines.join("\n").trim();
+    }
+
+    async function refreshRunStatus() {
+      if (!state.sessionId || !state.runId) return;
+      let data = null;
+      if (state.lastStatusMode === "goal") {
+        data = await api("GET", `/rpaflows/api/runner/session/${encodeURIComponent(state.sessionId)}/status?runId=${encodeURIComponent(state.runId)}`);
+      } else {
+        data = await api("GET", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-flow/status?runId=${encodeURIComponent(state.runId)}`);
+      }
+      renderStatus(data, state.lastStatusMode);
+      setStatus(`run=${String(data.status || "-")} phase=${String(data.currentPhase || "-")}`);
+      if (!data.running) stopPolling();
+    }
+
+    function ensurePolling() {
+      stopPolling();
+      state.pollTimer = setInterval(() => {
+        refreshRunStatus().catch((err) => {
+          setStatus(`轮询失败: ${String(err?.message || err)}`);
+          stopPolling();
+        });
+      }, 1000);
+    }
+
+    async function startSession() {
+      const data = await api("POST", "/rpaflows/api/builder/session/start", {
+        alias: $("aliasInput").value,
+        launchMode: $("launchModeInput").value,
+        startUrl: $("startUrlInput").value,
+      });
+      state.sessionId = String(data.id || data.sessionId || "");
+      updateSessionTag();
+      setStatus(data?.reused ? "已复用 Session" : "Session 已启动");
+      await refreshContexts();
+      await tryAutoLoginFromLocal().catch(() => {});
+    }
+
+    async function ensureSession() {
+      if (state.sessionId) return;
+      await startSession();
+    }
+
+    async function loginSystem() {
+      await ensureSession();
+      const email = asText($("loginEmailInput").value);
+      const password = String($("loginPwdInput").value || "");
+      if (!email || !password) throw new Error("请填写邮箱和密码");
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/system/login`, {
+        email,
+        password,
+      });
+      const view = formatSystemLoginText(data);
+      state.loginView = view;
+      state.loginDone = view.done;
+      setSystemLoginText(view.text, view.done);
+      applyLoginUi(view);
+      if (data?.systemAuth?.loginVO) {
+        saveLocalLoginInfoCompat(data.systemAuth.loginVO);
+        state.localLogin = normalizeLocalLoginVO(data.systemAuth.loginVO, "LoginVO");
+      }
+      await checkSystemLogin();
+      setStatus("系统登录完成");
+    }
+
+    async function checkSystemLogin() {
+      await ensureSession();
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/system/check`, {
+        checkNT: true,
+      });
+      const view = formatSystemLoginText(data);
+      state.loginView = view;
+      state.loginDone = view.done;
+      setSystemLoginText(view.text, view.done);
+      applyLoginUi(view);
+      if (data?.loginDone && data?.systemAuth?.loginVO) {
+        saveLocalLoginInfoCompat(data.systemAuth.loginVO);
+        state.localLogin = normalizeLocalLoginVO(data.systemAuth.loginVO, "LoginVO");
+      }
+      setStatus("登录状态已更新");
+    }
+
+    async function logoutSystem() {
+      await ensureSession();
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/system/logout`, {});
+      state.loginDone = false;
+      state.loginView = { done: false };
+      state.localLogin = null;
+      clearLocalLoginInfoCompat();
+      applyLoginUi(state.loginView);
+      setSystemLoginText(`未登录${data?.info ? `（${asText(data.info)}）` : ""}`, false);
+      setStatus("已退出系统登录");
+    }
+
+    async function tryAutoLoginFromLocal() {
+      if (state.autoLoginTried) return false;
+      state.autoLoginTried = true;
+      const saved = readLocalLoginInfoCompat();
+      state.localLogin = saved;
+      if (!saved || !state.sessionId) return false;
+      if (saved.email) $("loginEmailInput").value = saved.email;
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/system/login`, {
+        userId: saved.userId,
+        token: saved.token,
+        apiPath: asText(saved.apiPath || "/ws/"),
+      });
+      const view = formatSystemLoginText(data);
+      state.loginView = view;
+      state.loginDone = view.done;
+      setSystemLoginText(view.text, view.done);
+      applyLoginUi(view);
+      if (data?.systemAuth?.loginVO) {
+        saveLocalLoginInfoCompat(data.systemAuth.loginVO);
+        state.localLogin = normalizeLocalLoginVO(data.systemAuth.loginVO, "LoginVO");
+      }
+      if (view.done) {
+        await checkSystemLogin();
+        setStatus("已自动恢复系统登录");
+      }
+      return view.done;
+    }
+
+    async function checkLocalLoginOnBoot() {
+      const saved = readLocalLoginInfoCompat();
+      state.localLogin = saved;
+      if (!saved) return false;
+      if (saved.email) $("loginEmailInput").value = saved.email;
+      const data = await api("POST", "/rpaflows/api/builder/system/check-local", {
+        userId: saved.userId,
+        token: saved.token,
+        apiPath: asText(saved.apiPath || ""),
+        email: asText(saved.email || ""),
+        checkNT: true,
+      });
+      const view = formatSystemLoginText(data);
+      state.loginView = view;
+      state.loginDone = view.done;
+      setSystemLoginText(view.text, view.done);
+      applyLoginUi(view);
+      if (view.done && data?.systemAuth?.loginVO) {
+        saveLocalLoginInfoCompat(data.systemAuth.loginVO);
+        state.localLogin = normalizeLocalLoginVO(data.systemAuth.loginVO, "LoginVO");
+      } else if (!view.done) {
+        clearLocalLoginInfoCompat();
+        state.localLogin = null;
+      }
+      return view.done;
+    }
+
+    async function refreshSession() {
+      if (!state.sessionId) throw new Error("请先启动 session");
+      const data = await api("GET", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}`);
+      setStatus(`session=${String(data.status || "-")}`);
+      await tryAutoLoginFromLocal().catch(() => {});
+    }
+
+    async function closeSession() {
+      if (!state.sessionId) return;
+      await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/close`, {});
+      state.sessionId = "";
+      state.runId = "";
+      stopPolling();
+      updateSessionTag();
+      $("contextSelect").innerHTML = "";
+      $("summaryPre").textContent = "暂无执行结果";
+      $("historyPre").textContent = "暂无历史";
+      state.loginDone = false;
+      state.loginView = { done: false };
+      applyLoginUi(state.loginView);
+      setSystemLoginText("未登录", false);
+      setStatus("Session 已关闭");
+    }
+
+    async function refreshContexts() {
+      if (!state.sessionId) return;
+      const data = await api("GET", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/contexts`);
+      const sel = $("contextSelect");
+      sel.innerHTML = "";
+      const rows = Array.isArray(data.contexts) ? data.contexts : [];
+      for (const one of rows) {
+        const op = document.createElement("option");
+        op.value = String(one.contextId || "");
+        op.textContent = `${String(one.contextId || "-")} | ${String(one.url || "")}`;
+        if (String(one.contextId || "") === String(data.activeContextId || "")) op.selected = true;
+        sel.appendChild(op);
+      }
+      setStatus(`contexts=${rows.length}`);
+    }
+
+    async function selectContext() {
+      if (!state.sessionId) throw new Error("请先启动 session");
+      const contextId = String($("contextSelect").value || "").trim();
+      if (!contextId) throw new Error("请先选择 context");
+      await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/contexts/select`, { contextId });
+      setStatus(`已切换 context=${contextId}`);
+      await refreshContexts();
+    }
+
+    async function openPage() {
+      if (!state.sessionId) throw new Error("请先启动 session");
+      await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/open`, {
+        url: $("openUrlInput").value,
+        setActive: true,
+      });
+      await refreshContexts();
+      setStatus("页面已打开并激活");
+    }
+
+    async function startFlowRun() {
+      await ensureSession();
+      const flow = ensureFlowReady();
+      const args = applyUploadedFilesToArgs();
+      const opts = buildOptsForRun();
+      const data = await api("POST", `/rpaflows/api/builder/session/${encodeURIComponent(state.sessionId)}/run-flow/start`, {
+        flow,
+        args,
+        opts,
+      });
+      state.runId = String(data.runId || "");
+      state.lastStatusMode = "flow";
+      $("runTag").textContent = `run: ${state.runId || "-"}`;
+      setStatus(`flow run started: ${state.runId}`);
+      ensurePolling();
+      await refreshRunStatus();
+    }
+
+    async function startGoalRun() {
+      await ensureSession();
+      const goal = String($("goalInput").value || "").trim();
+      if (!goal) throw new Error("请输入 goal");
+      const allowScriptActions = $("allowScriptActionsInput")?.checked === true;
+      const blockedScriptActions = new Set(["run_js", "run_ai"]);
+      let actionScopeList = parseCommaList($("actionScopeInput").value);
+      if (!allowScriptActions && actionScopeList.length) {
+        actionScopeList = actionScopeList.filter((x) => !blockedScriptActions.has(String(x || "").trim().toLowerCase()));
+      }
+      const invokeScopeList = parseCommaList($("invokeScopeInput").value);
+      const opts = buildOptsForRun();
+      const defaultActionScopeNoScript = ["goto", "click", "hover", "input", "press_key", "wait", "scroll", "readElement", "invoke", "ask_assist", "done", "abort"];
+      const body = {
+        goal,
+        notes: $("notesInput").value,
+        args: applyUploadedFilesToArgs(),
+        opts,
+        actionScope: actionScopeList.length ? actionScopeList : (allowScriptActions ? "all" : defaultActionScopeNoScript),
+        invokeScope: invokeScopeList.length ? invokeScopeList : "all",
+        maxSteps: Number($("maxStepsInput").value || 20),
+        maxConsecutiveFails: 3,
+        aiModel: String($("modelInput").value || "advanced"),
+        aiTimeoutMs: Number($("aiTimeoutInput").value || 60000),
+      };
+      const data = await api("POST", `/rpaflows/api/runner/session/${encodeURIComponent(state.sessionId)}/start`, body);
+      state.runId = String(data.runId || "");
+      state.lastStatusMode = "goal";
+      $("runTag").textContent = `run: ${state.runId || "-"}`;
+      setStatus(`goal run started: ${state.runId}`);
+      ensurePolling();
+      await refreshRunStatus();
+    }
+
+    function applyRunModeUi() {
+      state.runMode = String($("runModeInput").value || "flow");
+      $("flowCard").style.display = state.runMode === "flow" ? "" : "none";
+      $("goalCard").style.display = state.runMode === "goal" ? "" : "none";
+    }
+
+    $("startSessionBtn").addEventListener("click", () => withBusy("正在启动 Session...", () => startSession()).catch((e) => setStatus(String(e?.message || e))));
+    $("refreshSessionBtn").addEventListener("click", () => withBusy("正在刷新 Session 状态...", () => refreshSession()).catch((e) => setStatus(String(e?.message || e))));
+    $("closeSessionBtn").addEventListener("click", () => withBusy("正在关闭 Session...", () => closeSession()).catch((e) => setStatus(String(e?.message || e))));
+    $("refreshContextsBtn").addEventListener("click", () => withBusy("正在刷新页面列表...", () => refreshContexts()).catch((e) => setStatus(String(e?.message || e))));
+    $("selectContextBtn").addEventListener("click", () => withBusy("正在切换到选中页面...", () => selectContext()).catch((e) => setStatus(String(e?.message || e))));
+    $("openPageBtn").addEventListener("click", () => withBusy("正在打开并激活页面...", () => openPage()).catch((e) => setStatus(String(e?.message || e))));
+
+    $("runModeInput").addEventListener("change", () => applyRunModeUi());
+    $("refreshFlowsBtn").addEventListener("click", () => refreshFlows().catch((e) => setStatus(String(e?.message || e))));
+    $("loadFlowBtn").addEventListener("click", () => loadSelectedFlow().catch((e) => setStatus(String(e?.message || e))));
+    $("addOptRowBtn").addEventListener("click", () => addEmptyOptRow());
+    $("parseOptsJsonBtn").addEventListener("click", () => {
+      try {
+        rebuildOptRowsFromJsonText();
+        setStatus("已按 JSON 重建 opts 项");
+      } catch (e) {
+        setStatus(String(e?.message || e));
+      }
+    });
+    $("clearOptRowsBtn").addEventListener("click", () => {
+      state.optRows = [];
+      renderOptsEditorFromRows();
+      $("optsInput").value = "{}";
+      setStatus("已清空 opts 项");
+    });
+    $("flowSelect").addEventListener("change", () => {
+      const v = String($("flowSelect").value || "").trim();
+      if (!v) return;
+      if (v.startsWith("__dir__:")) {
+        const dir = String(v.slice("__dir__:".length) || "");
+        refreshFlows(dir).catch((e) => setStatus(String(e?.message || e)));
+        return;
+      }
+      loadSelectedFlow().catch((e) => setStatus(String(e?.message || e)));
+    });
+    $("runFlowBtn").addEventListener("click", () => withBusy("正在启动并执行 Flow...", () => startFlowRun()).catch((e) => setStatus(String(e?.message || e))));
+    $("startGoalRunBtn").addEventListener("click", () => withBusy("正在启动并执行 Goal...", () => startGoalRun()).catch((e) => setStatus(String(e?.message || e))));
+    $("refreshRunBtn").addEventListener("click", () => refreshRunStatus().catch((e) => setStatus(String(e?.message || e))));
+    $("loginBtn").addEventListener("click", () => withBusy("正在登录系统...", () => loginSystem()).catch((e) => setStatus(String(e?.message || e))));
+    $("checkLoginBtn").addEventListener("click", () => withBusy("正在检查系统登录状态...", () => checkSystemLogin()).catch((e) => setStatus(String(e?.message || e))));
+    $("checkLoginBtn2").addEventListener("click", () => withBusy("正在检查系统登录状态...", () => checkSystemLogin()).catch((e) => setStatus(String(e?.message || e))));
+    $("logoutBtn").addEventListener("click", () => withBusy("正在退出系统登录...", () => logoutSystem()).catch((e) => setStatus(String(e?.message || e))));
+    $("uploadFilesBtn").addEventListener("click", () => withBusy("正在上传文件...", () => uploadSelectedFiles()).catch((e) => setStatus(String(e?.message || e))));
+    $("clearUploadedBtn").addEventListener("click", () => clearUploadedFiles());
+    $("attachmentsBox").addEventListener("click", (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest("[data-del-upload]") : null;
+      if (!btn) return;
+      removeUploadedFileAt(btn.getAttribute("data-del-upload"));
+    });
+    $("attachArgKeyInput").addEventListener("change", () => {
+      try { applyUploadedFilesToArgs(); } catch (_) {}
+    });
+
+    $("argsInput").addEventListener("input", () => {
+      try {
+        parseJson($("argsInput").value, {});
+        if (state.loadedFlow) renderArgEditor(state.loadedFlow);
+      } catch (_) {
+      }
+    });
+
+    window.addEventListener("beforeunload", () => stopPolling());
+
+    updateSessionTag();
+    applyLoginUi({ done: false });
+    setSystemLoginText("未登录", false);
+    applyRunModeUi();
+    renderFlowInfo(null, "");
+    renderOptsEditorFromRows();
+    renderUploadedFiles();
+    refreshFlows().catch((e) => setStatus(String(e?.message || e)));
+    const localLogin = readLocalLoginInfoCompat();
+    if (localLogin?.email) {
+      $("loginEmailInput").value = localLogin.email;
+    }
+    withBusy("正在检查本地登录状态...", async () => {
+      try { await checkLocalLoginOnBoot(); } catch (_) {}
+    }).catch(() => {});
+    setStatus("Ready");
+  </script>
+</body>
+</html>

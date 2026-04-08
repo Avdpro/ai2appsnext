@@ -298,7 +298,7 @@
         "id": "ai_fallback",
         "action": {
           "type": "run_ai",
-          "model": "balanced",
+          "model": "${{ (args && args.read && args.read.summaryModel) || 'fast' }}",
           "prompt": "你是网页互动数据提取器。请返回结构化对象：{likes:string,comments:string,shares:string,favorites:string,views:string,upvotes:string,downvotes:string,pageUrl:string}。缺失字段返回空字符串，不要 null。",
           "input": {
             "read": "${read}",

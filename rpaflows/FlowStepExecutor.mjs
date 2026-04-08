@@ -42,6 +42,12 @@ function parseFlowBool(raw, fallback = false) {
 	return !!fallback;
 }
 
+function parsePositiveInt(raw, fallback, min = 1, max = 200000) {
+	const n = Number(raw);
+	if (!Number.isFinite(n)) return fallback;
+	return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
 function parseSelectorReviewResult(ret) {
 	const out = { action: "abort", feedback: "" };
 	if (!Array.isArray(ret)) return out;
@@ -811,7 +817,13 @@ async function executeStepAction(runtime) {
 				const useNewPage = parseFlowBool(newPageRaw, false);
 				const timeoutMs = Number(action.timeoutMs || 0);
 				const retryOnAbort = Math.max(0, Number(action.retryOnAbort ?? 1));
-				const postWaitMs = Math.max(0, Number(action.postWaitMs || 0));
+				const hasPostWait = Object.prototype.hasOwnProperty.call(action || {}, "postWaitMs");
+				const postWaitRaw = hasPostWait
+					? parseFlowVal(action.postWaitMs, args, opts, vars, lastResult)
+					: 1000;
+				const postWaitMs = Number.isFinite(Number(postWaitRaw))
+					? Math.max(0, Math.floor(Number(postWaitRaw)))
+					: 0;
 				const stableMs = Math.max(0, Number(action.stableMs ?? 600));
 				const settleTimeoutMs = Math.max(0, Number(action.settleTimeoutMs ?? 6000));
 				const settlePollMs = Math.max(50, Number(action.settlePollMs ?? 120));
@@ -1284,6 +1296,65 @@ async function executeStepAction(runtime) {
 					if ((action.scope || "page") !== "agent" && !activePage) {
 						return { status: "failed", reason: "run_js(page): no active page" };
 					}
+					const resolvedLogHtmlFlag = action.logHtml !== undefined
+						? parseFlowVal(action.logHtml, args, opts, vars, lastResult)
+						: (opts?.debug?.runJsHtml ?? process.env.FLOW_LOG_RUN_JS_HTML);
+					const shouldLogRunJsHtml = parseFlowBool(resolvedLogHtmlFlag, false);
+					const resolvedMaxCharsRaw = action.logHtmlMaxChars !== undefined
+						? parseFlowVal(action.logHtmlMaxChars, args, opts, vars, lastResult)
+						: (opts?.debug?.runJsHtmlMaxChars ?? process.env.FLOW_LOG_RUN_JS_HTML_MAX_CHARS);
+					const runJsHtmlMaxChars = parsePositiveInt(resolvedMaxCharsRaw, 12000, 200, 2000000);
+					if (shouldLogRunJsHtml && (action.scope || "page") !== "agent" && activePage) {
+						try {
+							let url = "";
+							let title = "";
+							let html = "";
+							let snapshotError = "";
+							let snapshotSource = "unknown";
+							try { url = String(await activePage.url() || ""); } catch (_) {}
+							try { title = String(await activePage.title() || ""); } catch (_) {}
+							try {
+								if (webRpa && typeof webRpa.readInnerHTML === "function") {
+									// Prefer WebRpa cleaned HTML snapshot (same mechanism used by resolver/readPage).
+									html = String(await webRpa.readInnerHTML(activePage, null, { removeHidden: true }) || "");
+									snapshotSource = "webrpa.readInnerHTML(removeHidden=true)";
+								}
+							} catch (e) {
+								snapshotError = String(e?.message || "readInnerHTML failed");
+							}
+							if (!html) {
+								const fallback = await activePage.callFunction(
+									function () {
+										try {
+											return String(document.documentElement?.outerHTML || document.body?.outerHTML || "");
+										} catch (_) {
+											return "";
+										}
+									},
+									[],
+									{ awaitPromise: true }
+								);
+								html = String(fallback || "");
+								snapshotSource = "page.outerHTML";
+							}
+							await logger?.debug("run_js.html_snapshot", {
+								stepId,
+								scope: action.scope || "page",
+								url,
+								title: title.slice(0, 200),
+								htmlLength: Number(html.length || 0),
+								htmlTruncated: html.length > runJsHtmlMaxChars,
+								html: html.slice(0, runJsHtmlMaxChars),
+								snapshotSource,
+								snapshotError,
+							});
+						} catch (e) {
+							await logger?.warn("run_js.html_snapshot_failed", {
+								stepId,
+								reason: String(e?.message || "snapshot failed"),
+							});
+						}
+					}
 					let runJsAction = action;
 					if ((!action.code || !String(action.code).trim()) && action.query) {
 						const { resolveRunJsCode } = await import("./FlowRunJsResolver.mjs");
@@ -1310,11 +1381,11 @@ async function executeStepAction(runtime) {
 						code: codeResolved.value.code,
 					};
 				}
-				return execRunJsAction(runJsAction, {
-					args,
-					opts,
-					vars,
-					result: lastResult,
+					return execRunJsAction(runJsAction, {
+						args,
+						opts,
+						vars,
+						result: lastResult,
 					parseVal: parseFlowVal,
 					pageEval: async (code, callArgs) => {
 						return activePage.callFunction(code, callArgs, { awaitPromise: true });
@@ -1381,7 +1452,8 @@ async function executeStepAction(runtime) {
 					: (modal ? "rgba(0,0,0,0.20)" : false);
 				const okText = String(parseFlowVal(action.okText || "已处理，继续", args, opts, vars, lastResult) || "已处理，继续");
 				const cancelText = String(parseFlowVal(action.cancelText || "无法处理", args, opts, vars, lastResult) || "无法处理");
-				const maxRetry = Math.max(1, Number(action.maxRetry || 6));
+				// Default to single prompt attempt. If a flow needs auto re-prompt, set action.maxRetry > 1 explicitly.
+				const maxRetry = Math.max(1, Number(action.maxRetry || 1));
 				const persistAcrossNav = ("persistAcrossNav" in action)
 					? !!parseFlowVal(action.persistAcrossNav, args, opts, vars, lastResult)
 					: true;

@@ -9,6 +9,28 @@ function asText(v) {
 	return String(v == null ? "" : v).trim();
 }
 
+function normalizePageUrl(rawUrl, fallback = "about:blank") {
+	const s = asText(rawUrl);
+	if (!s) return fallback;
+	const low = s.toLowerCase();
+	if (
+		low.startsWith("http://")
+		|| low.startsWith("https://")
+		|| low.startsWith("about:")
+		|| low.startsWith("data:")
+		|| low.startsWith("file:")
+		|| low.startsWith("ws://")
+		|| low.startsWith("wss://")
+		|| low.startsWith("chrome:")
+		|| low.startsWith("edge:")
+		|| low.startsWith("devtools:")
+	) {
+		return s;
+	}
+	if (s.startsWith("//")) return `https:${s}`;
+	return `https://${s}`;
+}
+
 function asPosInt(v, fallback, min = 1) {
 	const n = Number(v);
 	if (!Number.isFinite(n)) return fallback;
@@ -147,7 +169,7 @@ class FlowBuilderSessionManager {
 	async startSession({ alias = "", launchMode = "", startUrl = "" } = {}) {
 		const useAlias = asText(alias) || this.options.defaultAlias;
 		const useLaunchMode = asText(launchMode) || this.options.defaultLaunchMode;
-		const useStartUrl = asText(startUrl) || this.options.defaultStartUrl;
+		const useStartUrl = normalizePageUrl(startUrl, this.options.defaultStartUrl || "about:blank");
 
 		// Default behavior: reuse an existing ready/starting session with the same alias.
 		// This avoids creating duplicate builder sessions on refresh or repeated clicks.
@@ -303,7 +325,7 @@ class FlowBuilderSessionManager {
 		}
 		const webRpa = session.webRpa;
 		const page = await webRpa.openPage(session.browser);
-		const targetUrl = asText(url) || "about:blank";
+		const targetUrl = normalizePageUrl(url, "about:blank");
 		try {
 			await page.goto(targetUrl);
 		} catch (_) {

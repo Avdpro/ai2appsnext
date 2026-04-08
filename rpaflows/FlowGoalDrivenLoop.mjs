@@ -41,6 +41,14 @@ function normalizeInvokeScope(invokeScope) {
 	return tokens;
 }
 
+function normalizeInvokeStrategy(input) {
+	const s = String(input || "auto").trim().toLowerCase();
+	if (s === "preferinvoke" || s === "prefer_invoke") return "preferInvoke";
+	if (s === "invokeonly" || s === "invoke_only") return "invokeOnly";
+	if (s === "noinvoke" || s === "no_invoke" || s === "forbidinvoke" || s === "disableinvoke") return "noInvoke";
+	return "auto";
+}
+
 function capAllowed(cap, tokens) {
 	const c = String(cap || "").trim();
 	if (!c) return false;
@@ -74,6 +82,31 @@ function coerceStepId(id, idx) {
 	return s;
 }
 
+function parseMissingRequiredArgsFromReason(reasonText) {
+	const s = String(reasonText || "");
+	const m = s.match(/missing required flow args:\s*([^\n]+)/i);
+	if (!m) return [];
+	return String(m[1] || "")
+		.split(",")
+		.map((x) => String(x || "").trim())
+		.filter(Boolean);
+}
+
+function parseInvokeArgErrorFromReason(reasonText) {
+	const text = String(reasonText || "").trim();
+	if (!text) return { hasArgError: false, missing: [], detail: "" };
+	const missing = parseMissingRequiredArgsFromReason(text);
+	const hasArgErrorTag = /arg_error\s*:/i.test(text);
+	const hasArgHint = /missing required flow args/i.test(text)
+		|| /invoke arg/i.test(text)
+		|| /required flow args/i.test(text);
+	const hasArgError = hasArgErrorTag || hasArgHint || missing.length > 0;
+	let detail = "";
+	const m = text.match(/arg_error\s*:\s*(\{[\s\S]*\})/i);
+	if (m && m[1]) detail = String(m[1]).trim();
+	return { hasArgError, missing, detail };
+}
+
 function extractDecisionResult(aiRet) {
 	if (!aiRet?.ok) return { ok: false, reason: aiRet?.reason || "ai request failed" };
 	const env = aiRet.envelope;
@@ -89,11 +122,15 @@ function extractDecisionResult(aiRet) {
 	return { ok: false, reason: "invalid ai decision result" };
 }
 
-function validateDecisionStep(decision, { index, actionAllowSet, invokeScopeTokens }) {
+function validateDecisionStep(decision, { index, actionAllowSet, invokeScopeTokens, invokeStrategy = "auto" }) {
 	if (!isPlainObject(decision)) return { ok: false, reason: "decision must be object" };
 	if (!isPlainObject(decision.action)) return { ok: false, reason: "decision.action must be object" };
 	const actionType = String(decision.action.type || "").trim();
 	if (!actionType) return { ok: false, reason: "action.type is required" };
+	const strategy = normalizeInvokeStrategy(invokeStrategy);
+	if (strategy === "noInvoke" && (actionType === "invoke" || actionType === "run_js" || actionType === "run_ai")) {
+		return { ok: false, reason: `${actionType} is forbidden by invokeStrategy=noInvoke` };
+	}
 	if (actionAllowSet && !actionAllowSet.has(actionType)) {
 		return { ok: false, reason: `action.type not allowed: ${actionType}` };
 	}
@@ -168,6 +205,7 @@ async function runGoalDrivenLoop({
 	notes = "",
 	actionScope = "all",
 	invokeScope = "all",
+	invokeStrategy = "auto",
 	maxSteps = 20,
 	maxConsecutiveFails = 3,
 	aiModel = "advanced",
@@ -176,26 +214,49 @@ async function runGoalDrivenLoop({
 	onStep = null,
 	onBeforeAI = null,
 	onAfterAI = null,
+	shouldStop = null,
+	getStopReason = null,
 } = {}) {
 	if (!goal || !String(goal).trim()) throw new Error("runGoalDrivenLoop: goal is required");
 	if (!webRpa) throw new Error("runGoalDrivenLoop: webRpa is required");
 	const flowId = `goal_loop_${Date.now()}`;
 	const actionAllowSet = normalizeActionScope(actionScope);
 	const invokeScopeTokens = normalizeInvokeScope(invokeScope);
+	const invokeStrategyNorm = normalizeInvokeStrategy(
+		invokeStrategy || (isPlainObject(opts) ? opts.invokeStrategy : "")
+	);
+	const invokeArgRetryMax = Math.max(0, Math.min(6, Number(opts?.invokeArgRetryMax ?? 2)));
+	let invokeArgRetryCount = 0;
+	let invokeArgRetryHint = "";
 	let ctx = null;
 	let lastResult = null;
 	let consecutiveFails = 0;
 
 	for (let i = 1; i <= Math.max(1, Number(maxSteps || 20)); i += 1) {
+		if (typeof shouldStop === "function" && shouldStop()) {
+			return {
+				status: "aborted",
+				reason: String((typeof getStopReason === "function" ? getStopReason() : "") || "stopped by user"),
+				stepsUsed: i - 1,
+				ctx,
+				lastResult,
+				history: Array.isArray(ctx?.history) ? ctx.history : [],
+			};
+		}
 		const activePage = webRpa?.currentPage || page || null;
 		const pageState = await collectPageState(webRpa, activePage);
+		const promptNotes = [
+			String(notes || ""),
+			String(invokeArgRetryHint || ""),
+		].filter((x) => String(x || "").trim()).join("\n\n");
 		const prompt = buildNextActionDeciderPromptV053({
 			goal: String(goal || ""),
-			notes: String(notes || ""),
+			notes: promptNotes,
 			pageState,
 			ctx,
 			actionScope,
 			invokeScope,
+			invokeStrategy: invokeStrategyNorm,
 		});
 		await onBeforeAI?.({ index: i, ctx, pageState, prompt });
 		await logger?.info?.("goal_loop.decide.start", { flowId, index: i });
@@ -214,6 +275,16 @@ async function runGoalDrivenLoop({
 			logger,
 		}), aiTimeoutMs, "goal_loop ai timeout");
 		await onAfterAI?.({ index: i, aiRet });
+		if (typeof shouldStop === "function" && shouldStop()) {
+			return {
+				status: "aborted",
+				reason: String((typeof getStopReason === "function" ? getStopReason() : "") || "stopped by user"),
+				stepsUsed: i - 1,
+				ctx,
+				lastResult,
+				history: Array.isArray(ctx?.history) ? ctx.history : [],
+			};
+		}
 		const extracted = extractDecisionResult(aiRet);
 		if (!extracted.ok) {
 			return {
@@ -225,7 +296,12 @@ async function runGoalDrivenLoop({
 				history: Array.isArray(ctx?.history) ? ctx.history : [],
 			};
 		}
-		const valid = validateDecisionStep(extracted.result, { index: i, actionAllowSet, invokeScopeTokens });
+		const valid = validateDecisionStep(extracted.result, {
+			index: i,
+			actionAllowSet,
+			invokeScopeTokens,
+			invokeStrategy: invokeStrategyNorm,
+		});
 		if (!valid.ok) {
 			return {
 				status: "failed",
@@ -253,6 +329,50 @@ async function runGoalDrivenLoop({
 			logger,
 		});
 		lastResult = stepResult;
+		const stepStatus = String(stepResult?.status || "failed").toLowerCase();
+		const stepReason = String(stepResult?.reason || "");
+		await logger?.info?.("goal_loop.step.result", {
+			flowId,
+			index: i,
+			stepId: step?.id || "",
+			actionType: step?.action?.type || "",
+			status: stepStatus,
+			reason: stepReason,
+		});
+		const stepActionType = String(step?.action?.type || "").toLowerCase();
+		let handledInvokeArgRetry = false;
+		if (stepStatus === "failed" && stepActionType === "invoke") {
+			const argError = parseInvokeArgErrorFromReason(stepReason);
+			if (argError.hasArgError && invokeArgRetryCount < invokeArgRetryMax) {
+				invokeArgRetryCount += 1;
+				const missLine = argError.missing.length
+					? `缺失参数: ${argError.missing.join(", ")}`
+					: "未通过参数校验（可能是类型不匹配或点号路径参数不完整）";
+				const detailLine = argError.detail ? `arg_error详情: ${argError.detail}` : "";
+				invokeArgRetryHint = [
+					"[参数修正重试提示]",
+					`上一轮 invoke 因参数错误失败：${stepReason}`,
+					missLine,
+					detailLine,
+					`请下一步优先继续使用 invoke，并修正 args（第 ${invokeArgRetryCount}/${invokeArgRetryMax} 次修正重试）。`,
+					"若无法修正，请输出 failed，并明确说明哪个参数无法对齐及原因。",
+				].join("\n");
+				await logger?.warn?.("goal_loop.invoke_arg_retry", {
+					flowId,
+					index: i,
+					stepId: step?.id || "",
+					reason: stepReason,
+					missing: argError.missing,
+					hasArgError: argError.hasArgError,
+					retryCount: invokeArgRetryCount,
+					retryMax: invokeArgRetryMax,
+				});
+				handledInvokeArgRetry = true;
+			}
+		} else if (stepStatus === "done") {
+			invokeArgRetryHint = "";
+			invokeArgRetryCount = 0;
+		}
 		ctx = updateNextActionDecisionCtx({
 			ctx,
 			step,
@@ -267,6 +387,7 @@ async function runGoalDrivenLoop({
 			consecutiveFails = 0;
 		} else {
 			consecutiveFails += 1;
+			if (handledInvokeArgRetry) consecutiveFails = 0;
 		}
 
 		if (step.action?.type === "done" && status === "done") {

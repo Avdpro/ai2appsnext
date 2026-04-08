@@ -9,6 +9,7 @@ const __dirname = pathLib.dirname(__filename);
 const PROJECT_ROOT = pathLib.resolve(__dirname, "..");
 const FLOWS_ROOT = pathLib.join(PROJECT_ROOT, "rpaflows", "flows");
 const AUDIT_PAGE_PATH = pathLib.join(PROJECT_ROOT, "public", "rpaflows", "audit.html");
+const REVIEW_PAGE_PATH = pathLib.join(PROJECT_ROOT, "public", "rpaflows", "review.html");
 const RPA_ENV_PATH = pathLib.join(PROJECT_ROOT, "rpaflows", ".env");
 
 // Load rpaflows/.env so tier/provider/model routing for audit can work in web mode.
@@ -110,9 +111,63 @@ function extractFlowObject(raw) {
 	return null;
 }
 
+function normalizeRiskLevelText(raw) {
+	const s = asText(raw).toLowerCase();
+	if (["critical", "high", "medium", "low", "info"].includes(s)) return s;
+	return "info";
+}
+
+function riskLevelToNumber(raw) {
+	const lv = normalizeRiskLevelText(raw);
+	if (lv === "critical") return 5;
+	if (lv === "high") return 4;
+	if (lv === "medium") return 3;
+	if (lv === "low") return 2;
+	return 1;
+}
+
+function buildRiskSummaryFromAuditResult(result) {
+	const findings = Array.isArray(result?.findings) ? result.findings : [];
+	const overviewLv = normalizeRiskLevelText(result?.overview?.maxRiskLevel || "info");
+	let riskNum = riskLevelToNumber(overviewLv);
+	const highCount = findings.filter((f) => normalizeRiskLevelText(f?.riskLevel) === "high").length;
+	const criticalCount = findings.filter((f) => normalizeRiskLevelText(f?.riskLevel) === "critical").length;
+	if (criticalCount >= 2) riskNum = Math.min(5, Math.max(riskNum, 5));
+	else if (highCount >= 4) riskNum = Math.min(5, Math.max(riskNum, 5));
+	else if (highCount >= 2) riskNum = Math.min(5, Math.max(riskNum, 4));
+
+	const top = findings
+		.slice()
+		.sort((a, b) => riskLevelToNumber(b?.riskLevel) - riskLevelToNumber(a?.riskLevel))
+		.slice(0, 3)
+		.map((f) => ({
+			stepId: asText(f?.stepId || ""),
+			actionType: asText(f?.actionType || ""),
+			riskLevel: normalizeRiskLevelText(f?.riskLevel || "info"),
+			title: asText(f?.title || f?.code || ""),
+		}));
+
+	const desc = top.length
+		? `审计最高风险=${overviewLv}, 建议等级=${riskNum}; 关键问题: ${top.map((x) => `${x.stepId || "?"}/${x.actionType || "?"}:${x.title || x.riskLevel}`).join(" | ")}`
+		: `审计未发现明显高危项，建议等级=${riskNum}`;
+
+	return {
+		suggestedRiskLevel: riskNum,
+		riskDescription: desc,
+		riskDetails: {
+			overviewLevel: overviewLv,
+			findings: top,
+			counts: result?.overview?.counts || {},
+		},
+	};
+}
+
 export default function setupRpaFlowAuditRoutes(app, router) {
 	router.get("/audit", async (req, res) => {
 		res.sendFile(AUDIT_PAGE_PATH);
+	});
+	router.get("/review", async (req, res) => {
+		res.sendFile(REVIEW_PAGE_PATH);
 	});
 
 	router.get("/api/flows", async (req, res) => {
@@ -178,6 +233,7 @@ export default function setupRpaFlowAuditRoutes(app, router) {
 					stepCount: flow.steps.length,
 					policy,
 					result,
+					...buildRiskSummaryFromAuditResult(result),
 				},
 			});
 		} catch (err) {

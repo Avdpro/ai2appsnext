@@ -422,6 +422,7 @@ function buildNextActionDeciderPromptV053({
 	ctx = null,
 	actionScope = null,
 	invokeScope = null,
+	invokeStrategy = "auto",
 } = {}) {
 	if (typeof goal !== "string" || !goal.trim()) {
 		throw new Error("buildNextActionDeciderPromptV053: goal must be non-empty string");
@@ -431,6 +432,16 @@ function buildNextActionDeciderPromptV053({
 	const notesText = String(notes || "").trim() || "暂无。";
 	const invokeInfo = resolveInvokeScope(invokeScope);
 	const hasInvoke = allowActions.includes("invoke");
+	const strategy = String(invokeStrategy || "auto").trim().toLowerCase();
+	const strategyText = (
+		strategy === "invokeonly" || strategy === "invoke_only"
+			? "invokeOnly：除 goto/done/abort/ask_assist/wait 外，应优先且基本只使用 invoke。"
+			: (strategy === "noinvoke" || strategy === "no_invoke"
+				? "noInvoke：禁止使用 invoke/run_js/run_ai，只能使用原子动作（如 goto/click/input/wait/scroll/readElement 等）。"
+				: (strategy === "preferinvoke" || strategy === "prefer_invoke"
+				? "preferInvoke：在能力可覆盖时优先使用 invoke；只有 invoke 明显不适配时才用原子动作。"
+				: "auto：默认策略，但仍应先考虑 invoke；当 invoke 不适配或风险更高时再退回原子动作。"))
+	);
 	return `
 Next Action Decision (RPA single-step decider, spec v${FLOW_PROMPT_SPEC_VERSION})
 
@@ -452,6 +463,10 @@ ${buildNextActionCtxBlock(ctx)}
 
 ────────────────────────────────────────────────────────
 ${hasInvoke ? buildInvokeScopeBlock(invokeInfo) : "【invoke 范围】\n- 本轮不允许 invoke。"}
+
+────────────────────────────────────────────────────────
+【本轮 invoke 策略】
+- ${strategyText}
 
 ────────────────────────────────────────────────────────
 【硬性规则】
@@ -480,6 +495,7 @@ ${hasInvoke ? buildInvokeScopeBlock(invokeInfo) : "【invoke 范围】\n- 本轮
 15) 参数最小化：不要输出未被 action 使用的 args；不要同时输出同义别名（如 minItems + min_items）。
 16) 对 loadMore 相关 invoke.args，仅使用 loadMore.target/loadMore.maxTries/loadMore.minNewItems；不要编造 loadMore.scrollRounds/loadMore.waitAfter 这类键。
 17) 不要定义“兼容参数/alias/fallback alias”这类 flow.args；每个语义只保留一个 canonical 参数。
+18) 当 invoke 可用且能覆盖目标时，优先选择 invoke；不要先写长链路 click/input/press_key 再 done。
 
 ────────────────────────────────────────────────────────
 【Action Union】

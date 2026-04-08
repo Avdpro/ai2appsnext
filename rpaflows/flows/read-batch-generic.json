@@ -174,7 +174,12 @@
               "action": "detail",
               "fields": "${read.fields}",
               "requireFields": "${read.requireFields}",
-              "output": "${read.output}"
+              "output": "${read.output}",
+              "summaryMode": "${read.summaryMode}",
+              "summaryModel": "${read.summaryModel}",
+              "summaryQuery": "${read.summaryQuery}",
+              "allowExplore": "${read.allowExplore}",
+              "exploreMaxSteps": "${read.exploreMaxSteps}"
             },
             "query": "${query}"
           }

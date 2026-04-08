@@ -1,0 +1,38 @@
+{
+  "flow": {
+    "id": "flow_builder_demo",
+    "start": "step_1",
+    "args": {},
+    "vars": {},
+    "steps": [
+      {
+        "id": "step_1",
+        "action": {
+          "type": "goto",
+          "url": "https://www.google.com",
+          "newPage": true
+        },
+        "next": {
+          "done": "done_1",
+          "failed": "abort_1"
+        }
+      },
+      {
+        "id": "done_1",
+        "action": {
+          "type": "done",
+          "conclusion": "ok"
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_1",
+        "action": {
+          "type": "abort",
+          "reason": "failed"
+        },
+        "next": {}
+      }
+    ]
+  }
+}

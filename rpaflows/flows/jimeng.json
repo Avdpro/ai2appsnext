@@ -1,0 +1,74 @@
+{
+  "flow": {
+    "id": "flow_builder_mn8d8mh7",
+    "start": "step_1",
+    "args": {},
+    "vars": {
+      "login.result": {
+        "type": "any",
+        "desc": "invoke确保当前已登录的结果",
+        "from": ""
+      }
+    },
+    "steps": [
+      {
+        "id": "step_1",
+        "action": {
+          "type": "goto",
+          "url": "https://jimeng.jianying.com/ai-tool/home",
+          "postWaitMs": 2000
+        },
+        "next": {
+          "done": "step_2",
+          "failed": "abort_1"
+        }
+      },
+      {
+        "id": "step_2",
+        "action": {
+          "type": "invoke",
+          "find": {
+            "kind": "rpa",
+            "must": [
+              "login.check",
+              "login.interactive",
+              "login.ensure"
+            ],
+            "prefer": [
+              "blockers.check"
+            ]
+          },
+          "args": {
+            "ensure": true,
+            "login.ensure": true
+          }
+        },
+        "next": {
+          "done": "done_1",
+          "failed": "abort_1"
+        },
+        "saveAs": "login.result"
+      },
+      {
+        "id": "done_1",
+        "action": {
+          "type": "done",
+          "reason": "已打开网页并通过invoke确保当前已登录",
+          "conclusion": {
+            "status": "done",
+            "value": "${vars.login.result}"
+          }
+        },
+        "next": {}
+      },
+      {
+        "id": "abort_1",
+        "action": {
+          "type": "abort",
+          "reason": "打开网页或登录确认失败"
+        },
+        "next": {}
+      }
+    ]
+  }
+}

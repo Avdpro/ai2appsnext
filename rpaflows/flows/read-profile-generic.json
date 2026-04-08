@@ -191,7 +191,7 @@
         "id": "ai_fallback",
         "action": {
           "type": "run_ai",
-          "model": "balanced",
+          "model": "${{ (args && args.read && args.read.summaryModel) || 'fast' }}",
           "prompt": "你是网页 profile 提取器。请返回 JSON envelope。status='ok' 时 result 必须是对象：{name:string,bio:string,followers:string,following:string,posts:string,likes:string,verified:boolean,profileUrl:string,avatarUrl:string}。缺失字段返回空字符串，verified 用布尔值。",
           "input": {
             "read": "${read}",
