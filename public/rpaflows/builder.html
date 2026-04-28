@@ -6333,8 +6333,8 @@
       }
       if (t === "ask_assist") {
         const text = String($("fText").value || "").trim();
-        if (strict && !text) throw new Error("ask_assist 需要 text");
-        if (text) action.text = text;
+        if(strict && !text) throw new Error("ask_assist 需要 reason");
+        if(text) action.reason = text;
       }
       if (t === "done") {
         const conclusion = String($("fText").value || "").trim();
