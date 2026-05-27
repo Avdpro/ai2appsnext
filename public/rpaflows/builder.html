@@ -1179,6 +1179,67 @@
                 <button class="btn secondary" id="genByFromQueryBtn" type="button">AI 生成 by</button>
               </div>
             </div>
+            <div class="field-row" id="queryModeRow" data-types="click,input,hover">
+              <label>query.mode</label>
+              <select id="fQueryMode">
+                <option value="">text（默认）</option>
+                <option value="image">image（query.kind=image）</option>
+              </select>
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.image（模板图路径 / dataURL）</label>
+              <input id="fQueryImageTemplate" placeholder="/abs/path/template.png 或 data:image/png;base64,...">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.mode</label>
+              <select id="fQueryImageMode">
+                <option value="">locate_one（默认）</option>
+                <option value="detect_many">detect_many</option>
+              </select>
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.region.grid（可选）</label>
+              <input id="fQueryImageGrid" placeholder="例如：3x3">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.region.blockId（可选）</label>
+              <input id="fQueryImageBlockId" placeholder="例如：3">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.threshold（可选）</label>
+              <input id="fQueryImageThreshold" placeholder="例如：0.98">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.scale（可选）</label>
+              <input id="fQueryImageScale" placeholder="例如：0.5">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.topK（可选）</label>
+              <input id="fQueryImageTopK" placeholder="例如：10">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.radius（可选）</label>
+              <input id="fQueryImageRadius" placeholder="例如：4">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.maxHits（detect_many 可选）</label>
+              <input id="fQueryImageMaxHits" placeholder="例如：10">
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.pickPolicy（可选）</label>
+              <select id="fQueryImagePickPolicy">
+                <option value="">best_diff（默认）</option>
+                <option value="min_y">min_y</option>
+                <option value="max_y">max_y</option>
+                <option value="min_x">min_x</option>
+                <option value="max_x">max_x</option>
+                <option value="nth_by_y">nth_by_y</option>
+              </select>
+            </div>
+            <div class="field-row query-image-row hidden" data-types="click,input,hover">
+              <label>query.image.pickIndex（可选）</label>
+              <input id="fQueryImagePickIndex" placeholder="当 pickPolicy=nth_by_y 时，例如：1">
+            </div>
             <div class="field-row" data-types="goto"><label>url</label><input id="fUrl" placeholder="https://..."></div>
             <div class="field-row" data-types="goto">
               <label class="checkbox-inline"><input id="fGotoNewPage" type="checkbox"><span>newPage（先新开 tab 再导航）</span></label>
@@ -2454,7 +2515,7 @@
       });
     }
     const STEP_EDITOR_DRAFT_FIELDS = [
-      "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fUploadFiles","fUploadMode","fUploadTimeout","fUploadSetFilesFallback","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
+      "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fQueryMode","fQueryImageTemplate","fQueryImageMode","fQueryImageGrid","fQueryImageBlockId","fQueryImageThreshold","fQueryImageScale","fQueryImageTopK","fQueryImageRadius","fQueryImageMaxHits","fQueryImagePickPolicy","fQueryImagePickIndex","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fUploadFiles","fUploadMode","fUploadTimeout","fUploadSetFilesFallback","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
       "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
       "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
       "fBranchDefault","fBranchCases","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput","nextJsonInput","actionJsonInput",
@@ -5362,20 +5423,31 @@
     function buildActionSummaryForNode(step) {
       const action = (step && step.action && typeof step.action === "object") ? step.action : {};
       const t = String(action.type || "").trim().toLowerCase();
+      const querySummary = (q) => {
+        if (q && typeof q === "object" && !Array.isArray(q)) {
+          if (String(q.kind || "").toLowerCase() === "image") {
+            const img = (q.image && typeof q.image === "object" && !Array.isArray(q.image)) ? q.image : {};
+            const tpl = shortText(img.image || "", 36);
+            return tpl ? `image:${tpl}` : "image";
+          }
+          return shortText(JSON.stringify(q), 36);
+        }
+        return shortText(q || "");
+      };
       if (!t) return "";
       if (t === "goto") return action.url ? `url: ${shortText(action.url, 64)}` : "";
       if (t === "click") {
-        const q = shortText(action.query || "");
+        const q = querySummary(action.query);
         const by = shortText(action.by || "");
         return [q ? `query: ${q}` : "", by ? `by: ${by}` : ""].filter(Boolean).join(" | ");
       }
       if (t === "hover") {
-        const q = shortText(action.query || "");
+        const q = querySummary(action.query);
         const by = shortText(action.by || "");
         return [q ? `query: ${q}` : "", by ? `by: ${by}` : ""].filter(Boolean).join(" | ");
       }
       if (t === "input") {
-        const q = shortText(action.query || "");
+        const q = querySummary(action.query);
         const by = shortText(action.by || "");
         const txt = shortText(action.text || "", 34);
         return [q ? `query: ${q}` : "", by ? `by: ${by}` : "", txt ? `text: ${txt}` : ""].filter(Boolean).join(" | ");
@@ -5422,7 +5494,7 @@
         ].filter(Boolean).join(" | ");
       }
       if (t === "uploadfile") {
-        const q = shortText(action.query || "");
+        const q = querySummary(action.query);
         const by = shortText(action.by || "");
         const files = Array.isArray(action.files) ? action.files.length : 0;
         const mode = shortText(action.uploadMode || action.mode || "");
@@ -6047,6 +6119,15 @@
       rowUrl.classList.toggle("hidden", target !== "urlmatch");
     }
 
+    function updateQueryImageFieldVisibility() {
+      const t = String($("actionTypeSelect")?.value || "").toLowerCase();
+      const mode = String($("fQueryMode")?.value || "").trim().toLowerCase();
+      const show = (t === "click" || t === "hover" || t === "input") && mode === "image";
+      document.querySelectorAll(".query-image-row").forEach((row) => {
+        row.classList.toggle("hidden", !show);
+      });
+    }
+
     function setActionFieldVisibility() {
       const t = String($("actionTypeSelect").value || "").toLowerCase();
       let shown = 0;
@@ -6067,6 +6148,7 @@
         $("nextJsonInput").value = "{}";
       }
       updateClosePageFieldVisibility();
+      updateQueryImageFieldVisibility();
     }
 
     function applyActionToFields(action) {
@@ -6074,7 +6156,38 @@
       const t = String(a.type || "goto").toLowerCase();
       $("actionTypeSelect").value = actionTypes.includes(t) ? t : "goto";
       $("fBy").value = String(a.by || "");
-      $("fQuery").value = String(a.query || "");
+      const queryObj = (a.query && typeof a.query === "object" && !Array.isArray(a.query)) ? a.query : null;
+      if (queryObj && String(queryObj.kind || "").toLowerCase() === "image") {
+        $("fQueryMode").value = "image";
+        $("fQuery").value = String(queryObj.text || "");
+        const image = (queryObj.image && typeof queryObj.image === "object" && !Array.isArray(queryObj.image)) ? queryObj.image : {};
+        $("fQueryImageTemplate").value = String(image.image || "");
+        $("fQueryImageMode").value = String(image.mode || "");
+        const region = (image.region && typeof image.region === "object" && !Array.isArray(image.region)) ? image.region : {};
+        $("fQueryImageGrid").value = String(region.grid || "");
+        $("fQueryImageBlockId").value = (region.blockId == null) ? "" : String(region.blockId);
+        $("fQueryImageThreshold").value = (image.threshold == null) ? "" : String(image.threshold);
+        $("fQueryImageScale").value = (image.scale == null) ? "" : String(image.scale);
+        $("fQueryImageTopK").value = (image.topK == null) ? "" : String(image.topK);
+        $("fQueryImageRadius").value = (image.radius == null) ? "" : String(image.radius);
+        $("fQueryImageMaxHits").value = (image.maxHits == null) ? "" : String(image.maxHits);
+        $("fQueryImagePickPolicy").value = String(image.pickPolicy || "");
+        $("fQueryImagePickIndex").value = (image.pickIndex == null) ? "" : String(image.pickIndex);
+      } else {
+        $("fQueryMode").value = "";
+        $("fQuery").value = String(a.query || "");
+        $("fQueryImageTemplate").value = "";
+        $("fQueryImageMode").value = "";
+        $("fQueryImageGrid").value = "";
+        $("fQueryImageBlockId").value = "";
+        $("fQueryImageThreshold").value = "";
+        $("fQueryImageScale").value = "";
+        $("fQueryImageTopK").value = "";
+        $("fQueryImageRadius").value = "";
+        $("fQueryImageMaxHits").value = "";
+        $("fQueryImagePickPolicy").value = "";
+        $("fQueryImagePickIndex").value = "";
+      }
       $("fUrl").value = String(a.url || "");
       $("fGotoNewPage").checked = a.newPage === true;
       $("fCloseTarget").value = ["active", "flow", "contextId", "urlMatch"].includes(String(a.target || ""))
@@ -6147,6 +6260,38 @@
       const action = { type: t };
       const by = String($("fBy").value || "").trim();
       const query = String($("fQuery").value || "").trim();
+      const queryMode = String($("fQueryMode").value || "").trim().toLowerCase();
+      const buildImageQuery = () => {
+        const image = {};
+        const imageTemplate = String($("fQueryImageTemplate").value || "").trim();
+        if (imageTemplate) image.image = imageTemplate;
+        const imageMode = String($("fQueryImageMode").value || "").trim();
+        if (imageMode) image.mode = imageMode;
+        const region = {};
+        const grid = String($("fQueryImageGrid").value || "").trim();
+        if (grid) region.grid = grid;
+        const blockId = Number($("fQueryImageBlockId").value || 0);
+        if (Number.isFinite(blockId) && blockId > 0) region.blockId = Math.floor(blockId);
+        if (Object.keys(region).length) image.region = region;
+        const threshold = Number($("fQueryImageThreshold").value || NaN);
+        if (Number.isFinite(threshold) && threshold > 0) image.threshold = threshold;
+        const scale = Number($("fQueryImageScale").value || NaN);
+        if (Number.isFinite(scale) && scale > 0) image.scale = scale;
+        const topK = Number($("fQueryImageTopK").value || NaN);
+        if (Number.isFinite(topK) && topK > 0) image.topK = Math.floor(topK);
+        const radius = Number($("fQueryImageRadius").value || NaN);
+        if (Number.isFinite(radius) && radius >= 0) image.radius = Math.floor(radius);
+        const maxHits = Number($("fQueryImageMaxHits").value || NaN);
+        if (Number.isFinite(maxHits) && maxHits > 0) image.maxHits = Math.floor(maxHits);
+        const pickPolicy = String($("fQueryImagePickPolicy").value || "").trim();
+        if (pickPolicy) image.pickPolicy = pickPolicy;
+        const pickIndex = Number($("fQueryImagePickIndex").value || NaN);
+        if (Number.isFinite(pickIndex) && pickIndex >= 0) image.pickIndex = Math.floor(pickIndex);
+        if (strict && !image.image) throw new Error("image query 需要 query.image.image（模板图）");
+        const out = { kind: "image", image };
+        if (query) out.text = query;
+        return out;
+      };
       if (t === "goto") {
         const url = String($("fUrl").value || "").trim();
         if (strict && !url) throw new Error("goto 需要 url");
@@ -6209,17 +6354,20 @@
       }
       if (t === "click") {
         if (by) action.by = by;
-        if (query) action.query = query;
+        if (queryMode === "image") action.query = buildImageQuery();
+        else if (query) action.query = query;
         const timeoutMs = Number($("fTimeout").value || 0);
         if (timeoutMs > 0) action.timeoutMs = timeoutMs;
       }
       if (t === "hover") {
         if (by) action.by = by;
-        if (query) action.query = query;
+        if (queryMode === "image") action.query = buildImageQuery();
+        else if (query) action.query = query;
       }
       if (t === "input") {
         if (by) action.by = by;
-        if (query) action.query = query;
+        if (queryMode === "image") action.query = buildImageQuery();
+        else if (query) action.query = query;
         const text = String($("fText").value || "");
         if (strict && !text) throw new Error("input 需要 text");
         if (text) action.text = text;
@@ -8924,7 +9072,7 @@
 
     function bindActionEditorEvents() {
       [
-        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fUploadFiles","fUploadMode","fUploadTimeout","fUploadSetFilesFallback","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
+        "stepIdInput","stepDescInput","stepSaveAsInput","actionTypeSelect","fBy","fQuery","fQueryMode","fQueryImageTemplate","fQueryImageMode","fQueryImageGrid","fQueryImageBlockId","fQueryImageThreshold","fQueryImageScale","fQueryImageTopK","fQueryImageRadius","fQueryImageMaxHits","fQueryImagePickPolicy","fQueryImagePickIndex","fUrl","fGotoNewPage","fCloseTarget","fCloseContextId","fCloseMatchUrl","fCloseIfLast","fCloseActivateAfter","fUploadFiles","fUploadMode","fUploadTimeout","fUploadSetFilesFallback","fPostWaitMs","fText","fKey","fModifiers","fTimes","fTimeout",
         "fDeltaX","fDeltaY","fBehavior","fTarget","fInvokeFind","fInvokeArgs","fRunJsCode","fRunJsQuery","fRunJsArgs",
         "fRunJsScope","fRunJsCache","fRunAiPrompt","fRunAiInput","fRunAiSchema","fRunAiModel","fRunAiPageUrl","fRunAiPageHtml","fRunAiPageScreenshot","fRunAiPageArticle",
         "fBranchDefault","nextDoneInput","nextFailedInput","nextSkippedInput","nextTimeoutInput","nextDefaultInput",
@@ -8939,6 +9087,9 @@
           }
           if (id === "fCloseTarget") {
             updateClosePageFieldVisibility();
+          }
+          if (id === "fQueryMode") {
+            updateQueryImageFieldVisibility();
           }
           if (id === "nextDoneInput" || id === "nextFailedInput" || id === "nextSkippedInput" || id === "nextTimeoutInput" || id === "nextDefaultInput") {
             syncNextJsonFromFields();
