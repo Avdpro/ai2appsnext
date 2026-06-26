@@ -1258,7 +1258,7 @@ WebAPI.fetch=async function(url,options){
 		body:text
 	})
 };
-WebAPI.fetch;
+const webFetch=WebAPI.fetch;
 
 //CokeCodes could API helper:
 let CokeNT=function(){
@@ -1268,6 +1268,8 @@ let CokeNT=function(){
 	this.loginPreview=false;		//Is logined as a preview user?
 	this.previewVO=null;			//Preview login-info
 	this.checkLoginTimer=null;		//Timer to check login
+	this.modelHuntKey=null;			//ModelHunt API key
+	this.modelHuntKeyExpiresAt=null;	//Expiry timestamp (ISO string)
 };
 let cokeNT=CokeNT.prototype={};
 
@@ -1334,6 +1336,7 @@ cokeNT.login=async function(callVO){
 			this.loginDone=1;
 			this.loginVO=vo;
 			this.userId=vo.userid;
+			this.refreshModelHuntKey();
 			this.emitNotify("Online");
 			if(tabOS){
 				tabOS.emitGlobalNotify("Online");
@@ -1362,9 +1365,15 @@ cokeNT.logout=async function(){
 	if(this.loginDone){
 		localStorage.setItem("LastAccount",this.loginVO.email);
 	}
+	
+	localStorage.removeItem("LoginVO");
+	//延迟几秒
+	await new Promise(resolve => {
+		setTimeout(resolve,3000);
+	});
 	this.loginVO=null;
 	this.loginDone=0;
-	localStorage.removeItem("LoginVO");
+
 	this.emitNotify("Offline");
 	if(tabOS){
 		tabOS.emitGlobalNotify("Offline");
@@ -1433,6 +1442,7 @@ cokeNT.checkLogin=async function(readInfo=false,checkNT=false){
 	}
 	if(!this.loginDone){
 		this.loginDone=1;
+		this.getModelHuntKey();
 		this.emitNotify("Online");
 	}
 	return true;
@@ -1477,7 +1487,40 @@ cokeNT.saveLoginInfo=function(vo){
 	let voText;
 	this.loginVO=vo;
 	voText=JSON.stringify(vo);
-	localStorage.setItem("LoginVO",voText);
+	try{
+		localStorage.setItem("LoginVO",voText);
+	}catch(e){
+		this.cleanupDbgLogs();
+		try{localStorage.setItem("LoginVO",voText);}catch(e2){}
+	}
+};
+
+//----------------------------------------------------------------------------
+//清理过大的 dbgLogs:* 条目，释放 localStorage 空间
+//按序列化后大小裁剪（上限 300KB），而非按条数
+cokeNT.cleanupDbgLogs=function(){
+	try{
+		const MAX_SIZE=300*1024;
+		let keys=Object.keys(localStorage);
+		for(let k of keys){
+			if(k.startsWith("dbgLogs:")){
+				try{
+					let raw=localStorage.getItem(k);
+					if(!raw || raw.length<MAX_SIZE) continue;
+					let arr=JSON.parse(raw);
+					let avg=Math.max(1,Math.floor(raw.length/arr.length));
+					let remove=Math.ceil((raw.length-MAX_SIZE)/avg)+5;
+					arr.splice(0,Math.min(remove,arr.length));
+					raw=JSON.stringify(arr);
+					while(arr.length>0 && raw.length>MAX_SIZE){
+						arr.shift();
+						raw=JSON.stringify(arr);
+					}
+					localStorage.setItem(k,raw);
+				}catch(e){}
+			}
+		}
+	}catch(e){}
 };
 
 //----------------------------------------------------------------------------
@@ -1506,6 +1549,7 @@ cokeNT.register=async function(regVO){
 		self.loginDone=1;
 		self.loginVO=vo;
 		self.userId=vo.userid;
+		self.refreshModelHuntKey();
 		self.emitNotify("Online");
 		if(tabOS){
 			tabOS.emitGlobalNotify("Online");
@@ -1539,6 +1583,89 @@ cokeNT.makeCall=async function(msg,vo,timeout=0){
 		}
 		throw e;*/
 	}
+};
+
+// ---- ModelHunt API Key（惰性刷新，保证永不过期）----
+
+cokeNT._storageKey = function() {
+	const uid = this.loginVO?.userId || 'default';
+	return `modelhunt_public_key_${uid}`;
+};
+
+cokeNT._isModelHuntKeyValid = function() {
+	if (!this.modelHuntKey || !this.modelHuntKeyExpiresAt) return false;
+	const expiresAt = new Date(this.modelHuntKeyExpiresAt).getTime();
+	const oneDay = 24 * 3600 * 1000;
+	return Date.now() < (expiresAt - oneDay);
+};
+
+cokeNT._loadModelHuntKeyFromStorage = function() {
+	try {
+		const raw = localStorage.getItem(this._storageKey());
+		if (!raw) return null;
+		const { apiKey, expiresAt } = JSON.parse(raw);
+		this.modelHuntKey = apiKey;
+		this.modelHuntKeyExpiresAt = expiresAt;
+		return apiKey;
+	} catch { return null; }
+};
+
+cokeNT._saveModelHuntKey = function(apiKey, expiresAt) {
+	this.modelHuntKey = apiKey;
+	this.modelHuntKeyExpiresAt = expiresAt;
+	try {
+		localStorage.setItem(this._storageKey(), JSON.stringify({ apiKey, expiresAt }));
+	} catch {}
+};
+
+cokeNT.refreshModelHuntKey = async function() {
+	try {
+		if (!this.loginVO?.userId || !this.loginVO?.token) return null;
+
+		let apiUrl = null;
+		try {
+			const envRes = await fetch('/api/env?keys=MODELHUNT_API_URL');
+			const envData = await envRes.json();
+			apiUrl = envData?.MODELHUNT_API_URL;
+		} catch (e) {
+			console.warn('[ModelHunt] failed to get API URL:', e.message);
+		}
+		if (!apiUrl) return null;
+
+		const rsp = await webFetch(
+			`${apiUrl.replace(/\/$/, '')}/api/public/v1/auth/token`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					userId: this.loginVO.userId,
+					token: this.loginVO.token
+				})
+			}
+		);
+
+		const data = rsp?.json ? await rsp.json() : (typeof rsp === 'string' ? JSON.parse(rsp) : rsp);
+		if (data && data.apiKey) {
+			this._saveModelHuntKey(data.apiKey, data.expiresAt || null);
+			return data.apiKey;
+		}
+		return null;
+	} catch (e) {
+		console.warn('[ModelHunt] refresh key failed:', e.message);
+		return null;
+	}
+};
+
+cokeNT.getModelHuntKey = async function() {
+	// ① 内存有效 → 直接返回
+	if (this._isModelHuntKeyValid()) return this.modelHuntKey;
+
+	// ② localStorage 有效 → 恢复并返回
+	const cached = this._loadModelHuntKeyFromStorage();
+	if (cached && this._isModelHuntKeyValid()) return cached;
+
+	// ③ 过期 / 不存在 → 调 auth API 刷新
+	return await this.refreshModelHuntKey();
 };
 
 let theCokeNT=new CokeNT(null);
@@ -15223,12 +15350,12 @@ VFACT.initApp=initApp;
 var diskInfo = [
 	{
 		"name": "coke",
-		"versionIdx": 479,
+		"versionIdx": 482,
 		"zip": "coke.zip"
 	},
 	{
 		"name": "-tabos",
-		"versionIdx": 228,
+		"versionIdx": 230,
 		"zip": "tabos.zip"
 	},
 	{
@@ -15263,12 +15390,12 @@ var diskInfo = [
 	},
 	{
 		"name": "-aichat",
-		"versionIdx": 165,
+		"versionIdx": 166,
 		"zip": "aichat.zip"
 	},
 	{
 		"name": "-aae",
-		"versionIdx": 209,
+		"versionIdx": 210,
 		"zip": "aae.zip"
 	},
 	{
@@ -15288,7 +15415,7 @@ var diskInfo = [
 	},
 	{
 		"name": "-AutoDeploy",
-		"versionIdx": 76,
+		"versionIdx": 77,
 		"zip": "AutoDeploy.zip"
 	},
 	{
@@ -15301,12 +15428,12 @@ var diskInfo = [
 var mobileDiskInfo = [
 	{
 		"name": "coke",
-		"versionIdx": 479,
+		"versionIdx": 482,
 		"zip": "coke.zip"
 	},
 	{
 		"name": "-tabos",
-		"versionIdx": 228,
+		"versionIdx": 230,
 		"zip": "tabos.zip"
 	},
 	{
@@ -15331,7 +15458,7 @@ var mobileDiskInfo = [
 	},
 	{
 		"name": "-aichat",
-		"versionIdx": 165,
+		"versionIdx": 166,
 		"zip": "aichat.zip"
 	},
 	{
@@ -15346,7 +15473,7 @@ var mobileDiskInfo = [
 	},
 	{
 		"name": "-aae",
-		"versionIdx": 209,
+		"versionIdx": 210,
 		"zip": "aae.zip"
 	},
 	{
@@ -15356,7 +15483,7 @@ var mobileDiskInfo = [
 	},
 	{
 		"name": "-AutoDeploy",
-		"versionIdx": 76,
+		"versionIdx": 77,
 		"zip": "AutoDeploy.zip"
 	},
 	{
@@ -15369,12 +15496,12 @@ var mobileDiskInfo = [
 var previewDiskInfo = [
 	{
 		"name": "coke",
-		"versionIdx": 479,
+		"versionIdx": 482,
 		"zip": "coke.zip"
 	},
 	{
 		"name": "-tabos",
-		"versionIdx": 228,
+		"versionIdx": 230,
 		"zip": "tabos.zip"
 	},
 	{
@@ -15384,7 +15511,7 @@ var previewDiskInfo = [
 	},
 	{
 		"name": "-aichat",
-		"versionIdx": 165,
+		"versionIdx": 166,
 		"zip": "aichat.zip"
 	},
 	{
@@ -15404,7 +15531,7 @@ var previewDiskInfo = [
 	},
 	{
 		"name": "-AutoDeploy",
-		"versionIdx": 76,
+		"versionIdx": 77,
 		"zip": "AutoDeploy.zip"
 	},
 	{
@@ -15417,12 +15544,12 @@ var previewDiskInfo = [
 var botnodeDiskInfo = [
 	{
 		"name": "coke",
-		"versionIdx": 479,
+		"versionIdx": 482,
 		"zip": "coke.zip"
 	},
 	{
 		"name": "-tabos",
-		"versionIdx": 228,
+		"versionIdx": 230,
 		"zip": "tabos.zip"
 	},
 	{
@@ -15432,7 +15559,7 @@ var botnodeDiskInfo = [
 	},
 	{
 		"name": "-aichat",
-		"versionIdx": 165,
+		"versionIdx": 166,
 		"zip": "aichat.zip"
 	},
 	{
@@ -15447,7 +15574,7 @@ var botnodeDiskInfo = [
 	},
 	{
 		"name": "-AutoDeploy",
-		"versionIdx": 76,
+		"versionIdx": 77,
 		"zip": "AutoDeploy.zip"
 	},
 	{
@@ -15457,12 +15584,12 @@ var botnodeDiskInfo = [
 	},
 	{
 		"name": "coke",
-		"versionIdx": 479,
+		"versionIdx": 482,
 		"zip": "coke.zip"
 	},
 	{
 		"name": "-tabos",
-		"versionIdx": 228,
+		"versionIdx": 230,
 		"zip": "tabos.zip"
 	},
 	{
@@ -15497,7 +15624,7 @@ var botnodeDiskInfo = [
 	},
 	{
 		"name": "-aichat",
-		"versionIdx": 165,
+		"versionIdx": 166,
 		"zip": "aichat.zip"
 	},
 	{
@@ -15512,7 +15639,7 @@ var botnodeDiskInfo = [
 	},
 	{
 		"name": "-aae",
-		"versionIdx": 209,
+		"versionIdx": 210,
 		"zip": "aae.zip"
 	},
 	{
@@ -15522,7 +15649,7 @@ var botnodeDiskInfo = [
 	},
 	{
 		"name": "-AutoDeploy",
-		"versionIdx": 76,
+		"versionIdx": 77,
 		"zip": "AutoDeploy.zip"
 	},
 	{
